@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FrenzyNets Status</title>
+  <style>
+    body { margin: 0; background: #070d1c; color: #e8f2ff; font-family: Segoe UI, Arial, sans-serif; }
+    .wrap { max-width: 980px; margin: 24px auto; padding: 0 14px; }
+    .card { border: 1px solid #2a4674; background: #101d38; border-radius: 12px; padding: 14px; margin-bottom: 10px; }
+    .ok { color: #72f5b8; }
+    .warn { color: #ffd166; }
+    .bad { color: #ff6f87; }
+    .muted { color: #9eb6dc; }
+    .list { max-height: 300px; overflow: auto; }
+    a { color: #38d8ff; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1 style="margin:0 0 8px">FrenzyNets Live Status</h1>
+      <div id="summary" class="muted">Checking API...</div>
+      <div style="margin-top:8px"><a href="/">Back to site</a></div>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">Incident Mode</h3>
+      <div id="incident" class="muted">None</div>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">Recent Activity</h3>
+      <div id="timeline" class="list muted"></div>
+    </div>
+  </div>
+  <script>
+    async function load() {
+      const endpoints = ['/api/public/status', '/api/frenzynet/api/public/status'];
+      let data = null;
+      for (const ep of endpoints) {
+        try {
+          const r = await fetch(ep, { cache: 'no-store' });
+          if (r.ok) {
+            data = await r.json();
+            break;
+          }
+        } catch (_) {}
+      }
+      const s = document.getElementById('summary');
+      const i = document.getElementById('incident');
+      const t = document.getElementById('timeline');
+      if (!data) {
+        s.textContent = 'API unreachable';
+        s.className = 'bad';
+        return;
+      }
+      s.innerHTML = `Service: <span class="${data.ok ? 'ok' : 'warn'}">${data.ok ? 'ONLINE' : 'DEGRADED'}</span> | Users: ${data.users || 0} | Active sessions: ${data.activeSessions || 0} | Updated: ${data.timestamp || 'n/a'}`;
+      const ws = data.siteConfig?.websiteSettings || {};
+      const mode = String(ws.incident?.mode || 'off').toLowerCase();
+      if (mode === 'off') {
+        i.textContent = 'No active incident.';
+      } else {
+        i.className = 'warn';
+        i.textContent = `${mode.toUpperCase()}: ${ws.incident?.text || 'Incident active'}`;
+      }
+      const rows = [];
+      rows.push(`Heartbeat: ${data.ok ? 'online' : 'degraded'} (${data.timestamp || 'n/a'})`);
+      if (ws.bannerSchedule && ws.bannerSchedule.length) rows.push(`Scheduled promos: ${ws.bannerSchedule.length}`);
+      if (ws.changeLog && ws.changeLog.length) {
+        ws.changeLog.slice(-20).reverse().forEach((r) => rows.push(`${r.at || ''} | ${r.action || ''} | ${r.actor || ''}`));
+      }
+      t.innerHTML = rows.map((r) => `<div style="padding:6px;border-bottom:1px solid #223f6b">${r}</div>`).join('') || '<div>No timeline entries.</div>';
+    }
+    load();
+    setInterval(load, 10000);
+  </script>
+</body>
+</html>

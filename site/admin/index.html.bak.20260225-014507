@@ -1,0 +1,491 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FrenzyNets Admin</title>
+  <style>
+    :root{--bg:#071022;--panel:#0f1d39;--line:#284a7d;--text:#e7f1ff;--muted:#9cb3d9;--brand:#2ad0ff;--ok:#74f5b6;--bad:#ff6e88}
+    *{box-sizing:border-box} body{margin:0;background:linear-gradient(165deg,#050913,#0b1731);color:var(--text);font-family:Segoe UI,Arial,sans-serif}
+    .wrap{max-width:1240px;margin:24px auto;padding:0 14px}.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
+    h1{margin:0 0 10px;color:#54d8ff} h3{margin:0 0 8px}.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    input,select,textarea{background:#081327;border:1px solid #2a4777;color:#e7f1ff;padding:10px 12px;border-radius:8px;min-width:180px}
+    textarea{min-height:72px;width:100%}
+    button,a.btn{background:var(--brand);color:#02111f;border:none;padding:10px 12px;border-radius:8px;font-weight:700;text-decoration:none;display:inline-block;cursor:pointer}
+    button.secondary,a.secondary{background:#112549;color:var(--text);border:1px solid #36598f} button.danger{background:#ff6e88;color:#1f0009}
+    .muted{color:var(--muted)} .status{margin:10px 0 0}.ok{color:var(--ok)}.bad{color:var(--bad)}
+    .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:12px}
+    .list{max-height:320px;overflow:auto;background:#09162d;border:1px solid #244574;border-radius:10px;padding:8px;font-size:14px}
+    .item{padding:6px 4px;border-bottom:1px solid #17345e}.tiny{font-size:12px}
+    .hidden{display:none}
+    #adminArea{display:none}
+    @media(max-width:980px){.grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>FrenzyNets Web Admin</h1>
+      <p class="muted">Single dropdown flow: select target, select action, execute.</p>
+      <div class="row">
+        <input id="u" placeholder="admin username" autocomplete="username" />
+        <input id="p" type="password" placeholder="password" autocomplete="current-password" />
+        <button id="login">Login</button>
+        <button id="refresh" class="secondary" disabled>Refresh Data</button>
+        <a class="btn secondary" href="/">Back to Site</a>
+      </div>
+      <div id="status" class="status muted">Not logged in.</div>
+    </div>
+
+    <div id="adminArea">
+    <div class="card" style="margin-top:12px">
+      <h3>Action Runner</h3>
+      <div class="row">
+        <select id="targetUser"><option value="">(select user)</option></select>
+        <select id="action">
+          <option value="create_user">Create User</option>
+          <option value="set_plan">Set User Plan</option>
+          <option value="set_password">Set Password</option>
+          <option value="toggle_admin">Toggle Admin</option>
+          <option value="set_channel">Set Channel</option>
+          <option value="set_profiles">Set Profiles</option>
+          <option value="set_profile_tier">Set Profile Tier</option>
+          <option value="set_profile_meta">Set Profile Region/Pool</option>
+          <option value="create_profile">Create Profile</option>
+          <option value="create_server">Create Server Node</option>
+          <option value="update_server">Update Server Node</option>
+          <option value="create_enroll_token">Create Enroll Token</option>
+          <option value="add_subscription_days">Add Subscription Days</option>
+          <option value="delete_user">Delete User</option>
+          <option value="force_reset">Force Password Reset</option>
+          <option value="lock_user">Lock User</option>
+          <option value="unlock_user">Unlock User</option>
+          <option value="revoke_access">Revoke All Sessions/Devices</option>
+          <option value="backup_now">Run Backup Now</option>
+          <option value="restore_latest">Restore Latest Backup</option>
+        </select>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <input id="f1" placeholder="field 1" />
+        <input id="f2" placeholder="field 2" />
+        <select id="f3" class="hidden"><option value="stable">stable</option><option value="beta">beta</option><option value="auto">auto</option></select>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <select id="createPreset" class="hidden"></select>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <select id="targetProfile"><option value="">(select profile)</option></select>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <select id="profilePreset">
+          <option value="none">Profile Preset: none</option>
+          <optgroup label="Call Of Duty">
+            <option value="cod">COD Core</option>
+            <option value="cod_ranked_advanced">COD Ranked Advanced</option>
+            <option value="cod_premium">COD Premium</option>
+            <option value="cod_ddos_premium">COD + DDoS Premium</option>
+            <option value="cod_ultra_elite">COD Ultra Elite (Premium+DDoS+Moba)</option>
+          </optgroup>
+          <optgroup label="Fortnite">
+            <option value="fortnite_ranked_standard">Fortnite Ranked Standard</option>
+            <option value="fortnite_ranked_premium">Fortnite Ranked Premium</option>
+          </optgroup>
+          <optgroup label="Apex Legends">
+            <option value="apex_ranked_standard">Apex Ranked Standard</option>
+            <option value="apex_ranked_premium">Apex Ranked Premium</option>
+          </optgroup>
+          <optgroup label="Valorant / CS2 / R6">
+            <option value="valorant_ranked_standard">Valorant Ranked Standard</option>
+            <option value="valorant_ranked_premium">Valorant Ranked Premium</option>
+            <option value="cs2_faceit_standard">CS2/Faceit Standard</option>
+            <option value="cs2_faceit_premium">CS2/Faceit Premium</option>
+            <option value="r6_ranked_standard">R6 Ranked Standard</option>
+            <option value="r6_ranked_premium">R6 Ranked Premium</option>
+          </optgroup>
+          <optgroup label="Other Competitive">
+            <option value="rocket_ranked_standard">Rocket League Ranked</option>
+            <option value="overwatch_ranked_standard">Overwatch Ranked</option>
+            <option value="lol_ranked_standard">League of Legends Ranked</option>
+            <option value="dota_ranked_standard">Dota 2 Ranked</option>
+            <option value="pubg_ranked_standard">PUBG Ranked</option>
+          </optgroup>
+          <optgroup label="General">
+            <option value="browsing">Browsing</option>
+            <option value="browsing_premium">Browsing Premium</option>
+            <option value="all_selected_user">All Profiles For Selected User</option>
+          </optgroup>
+        </select>
+        <button id="applyPreset" class="secondary">Apply Preset</button>
+      </div>
+      <div id="presetDescriptions" class="list tiny muted" style="margin-top:8px;max-height:170px"></div>
+      <div style="margin-top:10px">
+        <textarea id="notes" placeholder="profiles CSV, lock reason, or optional detail"></textarea>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button id="runAction">Run Action</button>
+        <button id="listBackups" class="secondary">List Backups</button>
+        <button id="exportAuditJson" class="secondary">Download Audit JSON</button>
+        <button id="exportAuditCsv" class="secondary">Download Audit CSV</button>
+      </div>
+      <div class="tiny muted" id="hint" style="margin-top:8px">Select an action to see required fields.</div>
+      <div id="backups" class="list muted" style="margin-top:10px;max-height:160px">Login first.</div>
+    </div>
+
+    <div class="card" style="margin-top:12px">
+      <h3>Server API Guide (For Future Nodes)</h3>
+      <div class="tiny muted">Use your admin token from web login and call these endpoints on this VPS control plane:</div>
+      <div class="list" style="max-height:220px;margin-top:8px">
+        <div class="item"><strong>Base:</strong> <code>https://frenzynets.com/api/frenzynet</code></div>
+        <div class="item"><strong>List servers:</strong> <code>GET /api/admin/servers</code></div>
+        <div class="item"><strong>Create server:</strong> <code>POST /api/admin/servers/create</code><br><span class="tiny muted">JSON: name, host, region, serverPool, status, tier, publicIp, notes</span></div>
+        <div class="item"><strong>Update server:</strong> <code>POST /api/admin/servers/update</code><br><span class="tiny muted">JSON: name + fields to update</span></div>
+        <div class="item"><strong>Set profile metadata:</strong> <code>POST /api/admin/profiles/set-meta</code><br><span class="tiny muted">JSON: profileName, region, serverPool</span></div>
+        <div class="item"><strong>Auth headers:</strong> <code>Authorization: Bearer &lt;token&gt;</code>, <code>X-FrenzyNets-Admin: 1</code></div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button id="quickEnrollToken" class="secondary">Generate 60m Enroll Token</button>
+      </div>
+      <textarea id="enrollOutput" class="hidden" readonly style="margin-top:8px"></textarea>
+    </div>
+
+    <div class="grid">
+      <div class="card"><h3>Users</h3><div id="users" class="list muted">Login first.</div></div>
+      <div class="card"><h3>Profiles</h3><div id="profiles" class="list muted">Login first.</div></div>
+      <div class="card"><h3>Servers</h3><div id="servers" class="list muted">Login first.</div></div>
+      <div class="card"><h3>Recent Audit</h3><div id="audit" class="list muted">Login first.</div></div>
+      <div class="card"><h3>Self-Heal Actions</h3><div id="heal" class="list muted">Login first.</div></div>
+    </div>
+    </div>
+  </div>
+
+  <script>
+    const s=document.getElementById('status'), usersEl=document.getElementById('users'), profilesEl=document.getElementById('profiles'), serversEl=document.getElementById('servers'), auditEl=document.getElementById('audit'), healEl=document.getElementById('heal'), backupsEl=document.getElementById('backups');
+    const refreshBtn=document.getElementById('refresh'), targetUser=document.getElementById('targetUser'), actionSel=document.getElementById('action');
+    const targetProfile=document.getElementById('targetProfile');
+    const adminArea=document.getElementById('adminArea');
+    const f1=document.getElementById('f1'), f2=document.getElementById('f2'), f3=document.getElementById('f3'), notes=document.getElementById('notes'), hint=document.getElementById('hint');
+    const presetSel=document.getElementById('profilePreset');
+    const createPreset=document.getElementById('createPreset');
+    const enrollOutput=document.getElementById('enrollOutput');
+    const presetDescriptions=document.getElementById('presetDescriptions');
+    let token='', usersCache=[], profilesCache=[], serversCache=[], auditCache=[];
+    function setStatus(msg,ok=true){s.className='status '+(ok?'ok':'bad');s.textContent=msg}
+    function esc(v){return String(v??'').replace(/[<>&]/g,m=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[m]))}
+    function parseCsv(txt){return String(txt||'').split(',').map(x=>x.trim()).filter(Boolean)}
+    function lower(v){return String(v||'').toLowerCase()}
+    function userPrefix(username){if(!username) return ''; const n=lower(username); return n.endsWith('s') ? `${n}-pc` : `${n}s-pc`;}
+    function isCodProfile(name){const n=lower(name); return n.includes('-bo7');}
+    function isAdvancedCodProfile(name){const n=lower(name); return n.includes('-bo7') && (n.includes('moba') || n.includes('xterm') || n.includes('advanced'));}
+    function isBrowsingProfile(name){const n=lower(name); return n.endsWith('.conf') && !n.includes('-bo7');}
+    function forUser(name, username){const p=userPrefix(username); if(!p) return true; return lower(name).startsWith(p);}
+    function renderList(el,rows,map){if(!rows?.length){el.innerHTML='<div class="item muted">No data</div>';return}el.innerHTML=rows.map(r=>'<div class="item">'+map(r)+'</div>').join('')}
+    const PRESET_INFO = {
+      cod: 'COD Core: standard BO7/COD tournament routing with balanced latency.',
+      cod_ranked_advanced: 'COD Ranked Advanced: prioritizes advanced/moba/xterm-tuned COD routes.',
+      cod_premium: 'COD Premium: premium COD routes only for reduced congestion.',
+      cod_ddos_premium: 'COD + DDoS Premium: premium COD routes with DDoS-tagged nodes.',
+      cod_ultra_elite: 'COD Ultra Elite: highest-tier COD routes (premium + ddos + advanced/moba).',
+      fortnite_ranked_standard: 'Fortnite Ranked Standard: standard Fortnite ranked profile set.',
+      fortnite_ranked_premium: 'Fortnite Ranked Premium: premium Fortnite routes.',
+      apex_ranked_standard: 'Apex Ranked Standard: standard Apex competitive routes.',
+      apex_ranked_premium: 'Apex Ranked Premium: premium Apex routes.',
+      valorant_ranked_standard: 'Valorant Ranked Standard: standard tactical FPS profile set.',
+      valorant_ranked_premium: 'Valorant Ranked Premium: premium tactical FPS routes.',
+      cs2_faceit_standard: 'CS2/Faceit Standard: standard CS2/Faceit profile paths.',
+      cs2_faceit_premium: 'CS2/Faceit Premium: premium CS2/Faceit routes.',
+      r6_ranked_standard: 'R6 Ranked Standard: standard Rainbow Six ranked routing.',
+      r6_ranked_premium: 'R6 Ranked Premium: premium Rainbow Six routes.',
+      rocket_ranked_standard: 'Rocket League Ranked: optimized standard low-jitter routes.',
+      overwatch_ranked_standard: 'Overwatch Ranked: standard profile for stable team-fight latency.',
+      lol_ranked_standard: 'League Ranked: standard MOBA profile set.',
+      dota_ranked_standard: 'Dota Ranked: standard Dota competitive profile set.',
+      pubg_ranked_standard: 'PUBG Ranked: standard BR profile with packet-loss control.',
+      browsing: 'Browsing: standard non-gaming routes for general usage.',
+      browsing_premium: 'Browsing Premium: premium non-gaming route set.',
+      all_selected_user: 'All Profiles For Selected User: assigns every active profile for the selected user.'
+    };
+    function showPresetDescriptions(){presetDescriptions.innerHTML=Object.entries(PRESET_INFO).map(([k,v])=>`<div class=\"item\"><strong>${esc(k)}</strong><br>${esc(v)}</div>`).join('')}
+    function fillCreatePreset(){
+      const tmp=document.createElement('select');
+      tmp.innerHTML=presetSel.innerHTML;
+      const opts=[...tmp.querySelectorAll('option')].filter(o=>o.value!=='none');
+      createPreset.innerHTML=opts.map(o=>`<option value="${esc(o.value)}">${esc(o.textContent||o.value)}</option>`).join('');
+      if(createPreset.options.length>0) createPreset.selectedIndex=0;
+    }
+    function selectedUsername(){return (targetUser.value||'').trim()}
+    function selectedCreatePreset(){return (createPreset.value||'none').trim()}
+    async function api(path,opts={}){const h=Object.assign({'Content-Type':'application/json','X-FrenzyNets-Admin':'1'},opts.headers||{});if(token)h['Authorization']='Bearer '+token;const r=await fetch('/api/frenzynet'+path,Object.assign({},opts,{headers:h,cache:'no-store'}));const t=await r.text();let d={};try{d=t?JSON.parse(t):{}}catch{}if(!r.ok)throw new Error((d&&d.error?d.error:r.status+' '+r.statusText));return d}
+    function isPremiumPreset(p){const v=lower(p); return v.includes('premium') || v.includes('ultra') || v.includes('ddos')}
+
+    function configureFields(){
+      const a=actionSel.value;
+      f1.classList.remove('hidden'); f2.classList.remove('hidden'); notes.classList.remove('hidden'); f3.classList.add('hidden'); targetProfile.classList.add('hidden'); createPreset.classList.add('hidden');
+      f1.value=''; f2.value=''; notes.value='';
+      if(a==='create_user'){f1.placeholder='new username';f2.placeholder='temporary password';f3.classList.remove('hidden');createPreset.classList.remove('hidden');hint.textContent='Target user ignored. Use Field1 username, Field2 password, Channel, Create Preset, and optional Notes CSV.';return}
+      if(a==='set_plan'){f1.classList.add('hidden');f2.classList.add('hidden');notes.classList.add('hidden');f3.classList.remove('hidden');f3.innerHTML='<option value=\"standard\">standard</option><option value=\"premium\">premium</option>';hint.textContent='Select target user and set plan tier.';return}
+      if(a==='set_password'){f1.placeholder='new password';f2.classList.add('hidden');hint.textContent='Select target user and enter new password in Field1.';return}
+      if(a==='toggle_admin'){f1.classList.add('hidden');f2.classList.add('hidden');notes.classList.add('hidden');hint.textContent='Select target user only.';return}
+      if(a==='set_channel'){f1.classList.add('hidden');f2.classList.add('hidden');f3.classList.remove('hidden');notes.classList.add('hidden');f3.innerHTML='<option value=\"stable\">stable</option><option value=\"beta\">beta</option><option value=\"auto\">auto</option>';hint.textContent='Select target user and channel.';return}
+      if(a==='set_profiles'){f1.classList.add('hidden');f2.classList.add('hidden');hint.textContent='Select target user and put profiles CSV in Notes.';return}
+      if(a==='set_profile_tier'){f1.classList.add('hidden');f2.classList.add('hidden');notes.classList.add('hidden');targetProfile.classList.remove('hidden');f3.classList.remove('hidden');f3.innerHTML='<option value=\"standard\">standard</option><option value=\"premium\">premium</option>';hint.textContent='Select profile and tier to mark as premium/standard.';return}
+      if(a==='set_profile_meta'){f1.placeholder='region (example: us-east)';f2.placeholder='server pool (example: ddos-shield)';notes.classList.add('hidden');targetProfile.classList.remove('hidden');f3.classList.add('hidden');hint.textContent='Select profile, then set region + server pool.';return}
+      if(a==='create_profile'){f1.placeholder='profile name (example: Dustins-pc-bo7-premium.conf)';f2.classList.add('hidden');targetProfile.classList.add('hidden');f3.classList.remove('hidden');f3.innerHTML='<option value=\"standard\">standard</option><option value=\"premium\">premium</option>';notes.placeholder='paste full WireGuard .conf content';hint.textContent='Create a new profile and set tier. Use premium for upsell profiles.';return}
+      if(a==='create_server'){f1.placeholder='server name (example: us-east-ddos-01)';f2.placeholder='host/domain (example: vpn-east.frenzynets.com)';targetProfile.classList.add('hidden');f3.classList.remove('hidden');f3.innerHTML='<option value=\"active\">active</option><option value=\"degraded\">degraded</option><option value=\"maintenance\">maintenance</option><option value=\"offline\">offline</option>';notes.placeholder='JSON: {\"region\":\"us-east\",\"serverPool\":\"ddos-shield\",\"tier\":\"premium\",\"publicIp\":\"1.2.3.4\",\"notes\":\"optional\"}';hint.textContent='Create server. Region/pool/tier/publicIp go in Notes JSON.';return}
+      if(a==='update_server'){f1.placeholder='server name to update';f2.placeholder='new host/domain (optional)';targetProfile.classList.add('hidden');f3.classList.remove('hidden');f3.innerHTML='<option value=\"active\">active</option><option value=\"degraded\">degraded</option><option value=\"maintenance\">maintenance</option><option value=\"offline\">offline</option>';notes.placeholder='JSON: {\"region\":\"us-east\",\"serverPool\":\"premium\",\"tier\":\"premium\",\"publicIp\":\"1.2.3.4\",\"notes\":\"optional\"}';hint.textContent='Update server by name. Status picker + Notes JSON for metadata.';return}
+      if(a==='create_enroll_token'){f1.placeholder='ttl minutes (default 60)';f2.classList.add('hidden');targetProfile.classList.add('hidden');f3.classList.remove('hidden');f3.innerHTML='<option value=\"global\">global region</option><option value=\"us-east\">us-east</option><option value=\"us-central\">us-central</option><option value=\"us-west\">us-west</option><option value=\"eu\">eu</option>';notes.placeholder='server pool (example: premium, ddos-shield)';hint.textContent='Creates one-time bootstrap token for new server installer.';return}
+      if(a==='add_subscription_days'){f1.placeholder='days to add (example: 30)';f2.classList.add('hidden');targetProfile.classList.add('hidden');f3.classList.add('hidden');notes.placeholder='payment note (optional)';hint.textContent='Select target user and add days after payment.';return}
+      if(a==='delete_user'){f1.classList.add('hidden');f2.classList.add('hidden');targetProfile.classList.add('hidden');f3.classList.add('hidden');notes.classList.add('hidden');hint.textContent='Select target user, then run action (cannot delete current admin).';return}
+      if(a==='force_reset'){f1.classList.add('hidden');f2.classList.add('hidden');notes.classList.add('hidden');hint.textContent='Select target user only.';return}
+      if(a==='lock_user'){f1.placeholder='minutes (default 60)';f2.classList.add('hidden');notes.placeholder='lock reason';hint.textContent='Select target user, set minutes in Field1, reason in Notes.';return}
+      if(a==='unlock_user'){f1.classList.add('hidden');f2.classList.add('hidden');notes.classList.add('hidden');hint.textContent='Select target user only.';return}
+      if(a==='revoke_access'){f1.classList.add('hidden');f2.classList.add('hidden');notes.classList.add('hidden');hint.textContent='Select target user only.';return}
+      if(a==='backup_now'){f1.classList.add('hidden');f2.classList.add('hidden');notes.classList.add('hidden');hint.textContent='No extra fields needed.';return}
+      if(a==='restore_latest'){f1.classList.add('hidden');f2.classList.add('hidden');notes.classList.add('hidden');hint.textContent='No extra fields needed. Will queue restore.';return}
+    }
+
+    async function login(){
+      try{const username=document.getElementById('u').value.trim(), password=document.getElementById('p').value; if(!username||!password){setStatus('Enter username and password.',false);return}
+        const d=await api('/api/auth/login',{method:'POST',body:JSON.stringify({username,password,deviceId:'web-admin'})}); token=d.token||''; refreshBtn.disabled=!token; adminArea.style.display=token?'block':'none'; setStatus('Logged in as '+(d.user?.username||username)); await refresh();
+      }catch(e){setStatus('Login failed: '+e.message,false)}
+    }
+
+    function fillUserSelect(){
+      const cur=targetUser.value;
+      targetUser.innerHTML='<option value="">(select user)</option>'+usersCache.map(u=>`<option value="${esc(u.username)}">${esc(u.username)} ${u.isAdmin?'[ADMIN]':''}</option>`).join('');
+      if(cur&&[...targetUser.options].some(o=>o.value===cur))targetUser.value=cur;
+      if(!targetUser.value&&targetUser.options.length>1)targetUser.selectedIndex=1;
+    }
+    function fillProfileSelect(){
+      const cur=targetProfile.value;
+      targetProfile.innerHTML='<option value=\"\">(select profile)</option>'+profilesCache.map(p=>`<option value=\"${esc(p.name)}\">${esc(p.name)} [${esc(p.tier||'standard')}]</option>`).join('');
+      if(cur&&[...targetProfile.options].some(o=>o.value===cur))targetProfile.value=cur;
+    }
+
+    async function refresh(){
+      if(!token)return;
+      try{
+        const [u,p,sv,a,h,b]=await Promise.all([
+          api('/api/admin/users'), api('/api/admin/profiles'), api('/api/admin/servers'), api('/api/admin/audit/recent'), api('/api/admin/self-heal/recent'), api('/api/admin/ops/backups')
+        ]);
+        usersCache=u.users||[]; profilesCache=p.profiles||[]; serversCache=sv.servers||[]; auditCache=(a.events||[]).slice(0,1000);
+        fillUserSelect();
+        fillProfileSelect();
+        renderList(usersEl,usersCache,x=>`<strong>${esc(x.username)}</strong> ${x.isAdmin?'[ADMIN]':''} <span class="muted">plan=${esc(x.plan||'standard')} ch=${esc(x.updateChannel||'stable')} devices=${esc(x.deviceCount??0)}</span><br><span class="tiny muted">sub=${esc(x.subscriptionExpiresAt||'none')} | profiles: ${esc((x.allowedProfiles||[]).join(', ')||'(none)')} | reset=${x.mustResetPassword?'yes':'no'} | lock=${esc(x.lockedUntil||'none')}</span>`);
+        renderList(profilesEl,profilesCache,x=>`<strong>${esc(x.name)}</strong> <span class=\"muted\">tier=${esc(x.tier||'standard')} region=${esc(x.region||'global')} pool=${esc(x.serverPool||'default')} active=${x.active?'yes':'no'}</span>`);
+        renderList(serversEl,serversCache,x=>`<strong>${esc(x.name)}</strong> <span class=\"muted\">${esc(x.host)} | ${esc(x.region)} | ${esc(x.serverPool)} | ${esc(x.status)} | ${esc(x.tier)}</span>`);
+        renderList(auditEl,(a.events||[]).slice(0,60),x=>`${esc(x.createdAt)} <strong>${esc(x.eventType)}</strong> <span class="muted">${esc(x.username||'')} ${esc(x.clientIp||'')}</span>`);
+        renderList(healEl,(h.actions||[]).slice(0,60),x=>`${esc(x.createdAt)} <strong>${esc(x.actionType)}</strong> <span class="muted">${esc(x.username||'')} ${esc(x.clientIp||'')}</span>`);
+        renderList(backupsEl,b.backups||[],x=>`${esc(x.modifiedAt)} <strong>${esc(x.name)}</strong> <span class="muted">${esc(x.size)} bytes</span>`);
+        setStatus('Data refreshed.');
+      }catch(e){setStatus('Refresh failed: '+e.message,false)}
+    }
+
+    function download(name, content, type){const blob=new Blob([content],{type});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
+
+    async function runAction(){
+      const action=actionSel.value;
+      const username=selectedUsername();
+      try{
+        if(action==='create_user'){
+          const newUser=(f1.value||'').trim().toLowerCase(), password=f2.value||'';
+          const presetName=selectedCreatePreset();
+          if(!presetName || presetName==='none'){setStatus('Create user requires selecting a preset.',false);return}
+          const fromPreset=(presetName && presetName!=='none') ? buildPresetProfiles(presetName, '') : [];
+          const fromNotes=parseCsv(notes.value);
+          const allowedProfiles=[...new Set([...fromPreset, ...fromNotes])];
+          const updateChannel=f3.value||'stable';
+          const plan=isPremiumPreset(presetName)?'premium':'standard';
+          if(!newUser||!password){setStatus('Create user needs username and password.',false);return}
+          await api('/api/admin/users/create',{method:'POST',body:JSON.stringify({username:newUser,password,isAdmin:false,role:'user',allowedProfiles,updateChannel,plan})});
+          setStatus(`User created: ${newUser} (${allowedProfiles.length} profiles)`);
+        } else if(action==='set_plan'){
+          if(!username){setStatus('Set plan needs target user.',false);return}
+          await api('/api/admin/users/set-plan',{method:'POST',body:JSON.stringify({username,plan:f3.value||'standard'})});
+          setStatus('Plan updated for '+username);
+        } else if(action==='set_password'){
+          if(!username||!f1.value){setStatus('Set password needs target user and Field1 password.',false);return}
+          await api('/api/admin/users/set-password',{method:'POST',body:JSON.stringify({username,password:f1.value})});
+          setStatus('Password updated for '+username);
+        } else if(action==='toggle_admin'){
+          const u=usersCache.find(x=>x.username===username); if(!u){setStatus('Select valid target user.',false);return}
+          await api('/api/admin/users/set-role',{method:'POST',body:JSON.stringify({username,isAdmin:!u.isAdmin,role:!u.isAdmin?'admin':'user'})});
+          setStatus('Role toggled for '+username);
+        } else if(action==='set_channel'){
+          if(!username){setStatus('Set channel needs target user.',false);return}
+          await api('/api/admin/users/set-channel',{method:'POST',body:JSON.stringify({username,updateChannel:f3.value})});
+          setStatus('Channel updated for '+username);
+        } else if(action==='set_profiles'){
+          if(!username){setStatus('Set profiles needs target user.',false);return}
+          const allowedProfiles=parseCsv(notes.value); const known=new Set((profilesCache||[]).filter(p=>p.active).map(p=>p.name)); const unknown=allowedProfiles.filter(p=>!known.has(p));
+          if(unknown.length){setStatus('Unknown profiles: '+unknown.join(', '),false);return}
+          await api('/api/admin/users/set-profiles',{method:'POST',body:JSON.stringify({username,allowedProfiles})});
+          setStatus('Profiles updated for '+username);
+        } else if(action==='set_profile_tier'){
+          const profileName=(targetProfile.value||'').trim();
+          if(!profileName){setStatus('Select a profile first.',false);return}
+          await api('/api/admin/profiles/set-tier',{method:'POST',body:JSON.stringify({profileName,tier:f3.value||'standard'})});
+          setStatus('Profile tier updated for '+profileName);
+        } else if(action==='set_profile_meta'){
+          const profileName=(targetProfile.value||'').trim();
+          const region=(f1.value||'').trim()||'global';
+          const serverPool=(f2.value||'').trim()||'default';
+          if(!profileName){setStatus('Select a profile first.',false);return}
+          await api('/api/admin/profiles/set-meta',{method:'POST',body:JSON.stringify({profileName,region,serverPool})});
+          setStatus('Profile metadata updated for '+profileName);
+        } else if(action==='create_profile'){
+          const name=(f1.value||'').trim();
+          const configText=notes.value||'';
+          if(!name||!configText){setStatus('Create profile needs name + config content.',false);return}
+          await api('/api/admin/profiles/create',{method:'POST',body:JSON.stringify({name,configText,tier:f3.value||'standard',region:'global',serverPool:'default'})});
+          setStatus('Profile created: '+name);
+        } else if(action==='create_server'){
+          const name=(f1.value||'').trim(), host=(f2.value||'').trim();
+          if(!name||!host){setStatus('Create server needs name + host.',false);return}
+          let meta={}; try{meta=notes.value?JSON.parse(notes.value):{}}catch{setStatus('Invalid Notes JSON.',false);return}
+          await api('/api/admin/servers/create',{method:'POST',body:JSON.stringify({name,host,status:f3.value||'active',region:meta.region||'global',serverPool:meta.serverPool||'default',tier:meta.tier||'standard',publicIp:meta.publicIp||'',notes:meta.notes||''})});
+          setStatus('Server created: '+name);
+        } else if(action==='update_server'){
+          const name=(f1.value||'').trim(), host=(f2.value||'').trim();
+          if(!name){setStatus('Update server needs name in Field1.',false);return}
+          let meta={}; try{meta=notes.value?JSON.parse(notes.value):{}}catch{setStatus('Invalid Notes JSON.',false);return}
+          await api('/api/admin/servers/update',{method:'POST',body:JSON.stringify({name,host,status:f3.value||'active',region:meta.region||'global',serverPool:meta.serverPool||'default',tier:meta.tier||'standard',publicIp:meta.publicIp||'',notes:meta.notes||''})});
+          setStatus('Server updated: '+name);
+        } else if(action==='create_enroll_token'){
+          const ttl=Math.max(5,Math.min(4320,parseInt(f1.value||'60',10)||60));
+          const defaultRegion=(f3.value||'global');
+          const defaultServerPool=(notes.value||'default').trim()||'default';
+          const r=await api('/api/admin/servers/enroll-token',{method:'POST',body:JSON.stringify({ttlMinutes:ttl,defaultRegion,defaultServerPool,defaultTier:'standard'})});
+          enrollOutput.classList.remove('hidden');
+          enrollOutput.value=`Enroll Token (expires ${r.expiresAt}):\\n${r.enrollToken}\\n\\nRun on new server:\\n${r.example || `curl -fsSL ${r.bootstrapScriptUrl} | sudo bash -s -- --enroll-token '${r.enrollToken}' --name 'new-node-01'`}`;
+          setStatus('Enroll token created.');
+        } else if(action==='add_subscription_days'){
+          if(!username){setStatus('Select target user first.',false);return}
+          const days=Math.max(1,Math.min(3650,parseInt(f1.value||'30',10)||30));
+          const r=await api('/api/admin/users/add-subscription-days',{method:'POST',body:JSON.stringify({username,days,subscriptionNote:notes.value||''})});
+          setStatus(`Subscription extended to ${r.subscriptionExpiresAt || 'set'}.`);
+        } else if(action==='delete_user'){
+          if(!username){setStatus('Select target user first.',false);return}
+          if(!confirm(`Delete user ${username}? This is permanent.`)) return;
+          await api('/api/admin/users/delete',{method:'POST',body:JSON.stringify({username})});
+          setStatus('User deleted: '+username);
+        } else if(action==='force_reset'){
+          if(!username){setStatus('Force reset needs target user.',false);return}
+          await api('/api/admin/users/set-reset-required',{method:'POST',body:JSON.stringify({username,required:true})});
+          setStatus('Password reset forced for '+username);
+        } else if(action==='lock_user'){
+          if(!username){setStatus('Lock user needs target user.',false);return}
+          const minutes=Math.max(1,Math.min(43200,parseInt(f1.value||'60',10)||60));
+          await api('/api/admin/users/lock',{method:'POST',body:JSON.stringify({username,minutes,reason:notes.value||''})});
+          setStatus('User locked: '+username+' for '+minutes+' minute(s).');
+        } else if(action==='unlock_user'){
+          if(!username){setStatus('Unlock user needs target user.',false);return}
+          await api('/api/admin/users/unlock',{method:'POST',body:JSON.stringify({username})});
+          setStatus('User unlocked: '+username);
+        } else if(action==='revoke_access'){
+          if(!username){setStatus('Revoke access needs target user.',false);return}
+          if(!confirm('Revoke all active sessions/devices for '+username+'?')) return;
+          await api('/api/admin/users/revoke-access',{method:'POST',body:JSON.stringify({username})});
+          setStatus('Access revoked for '+username);
+        } else if(action==='backup_now'){
+          const d=await api('/api/admin/ops/backup-now',{method:'POST',body:JSON.stringify({})});
+          setStatus('Backup complete: '+(d.detail||'ok'));
+        } else if(action==='restore_latest'){
+          if(!confirm('Restore latest backup now? This restarts API briefly.')) return;
+          const d=await api('/api/admin/ops/restore-latest',{method:'POST',body:JSON.stringify({confirm:'RESTORE_LATEST'})});
+          setStatus('Restore queued: '+(d.archive||''));
+        }
+        await refresh();
+      }catch(e){setStatus('Action failed: '+e.message,false)}
+    }
+
+    function buildPresetProfiles(preset, username){
+      const active = (profilesCache||[]).filter(p=>p.active).map(p=>p.name);
+      const filtered = active.filter(n=>forUser(n, username));
+      const tierOf = (name)=>{const p=(profilesCache||[]).find(x=>x.name===name); return lower(p?.tier||'standard')};
+      const std = filtered.filter(n=>tierOf(n)==='standard');
+      const prem = filtered.filter(n=>tierOf(n)==='premium');
+      const byKeywords = (arr, keywords) => arr.filter(n => keywords.some(k => lower(n).includes(k)));
+      const codStd = std.filter(isCodProfile);
+      const codPrem = prem.filter(isCodProfile);
+      if(preset==='cod') return codStd.filter(n=>!isAdvancedCodProfile(n));
+      if(preset==='cod_ranked_advanced') return codStd.filter(n=>isAdvancedCodProfile(n)).concat(codStd.filter(n=>!isAdvancedCodProfile(n)).slice(0,1));
+      if(preset==='cod_premium') return codPrem;
+      if(preset==='cod_ddos_premium') return prem.filter(n=>isCodProfile(n) || lower(n).includes('ddos'));
+      if(preset==='cod_ultra_elite') {
+        return prem.filter(n=>{
+          const x=lower(n);
+          return x.includes('-bo7') && (x.includes('ddos') || x.includes('moba') || x.includes('xterm') || x.includes('advanced'));
+        });
+      }
+      if(preset==='fortnite_ranked_standard') return byKeywords(std, ['fortnite','fn-','-fn']);
+      if(preset==='fortnite_ranked_premium') return byKeywords(prem, ['fortnite','fn-','-fn']);
+      if(preset==='apex_ranked_standard') return byKeywords(std, ['apex']);
+      if(preset==='apex_ranked_premium') return byKeywords(prem, ['apex']);
+      if(preset==='valorant_ranked_standard') return byKeywords(std, ['valorant']);
+      if(preset==='valorant_ranked_premium') return byKeywords(prem, ['valorant']);
+      if(preset==='cs2_faceit_standard') return byKeywords(std, ['cs2','counter','faceit']);
+      if(preset==='cs2_faceit_premium') return byKeywords(prem, ['cs2','counter','faceit']);
+      if(preset==='r6_ranked_standard') return byKeywords(std, ['r6','siege']);
+      if(preset==='r6_ranked_premium') return byKeywords(prem, ['r6','siege']);
+      if(preset==='rocket_ranked_standard') return byKeywords(std, ['rocket']);
+      if(preset==='overwatch_ranked_standard') return byKeywords(std, ['overwatch','ow2']);
+      if(preset==='lol_ranked_standard') return byKeywords(std, ['lol','league']);
+      if(preset==='dota_ranked_standard') return byKeywords(std, ['dota']);
+      if(preset==='pubg_ranked_standard') return byKeywords(std, ['pubg']);
+      if(preset==='browsing') return std.filter(isBrowsingProfile);
+      if(preset==='browsing_premium') return prem.filter(isBrowsingProfile);
+      if(preset==='cod_advanced') {
+        const adv = filtered.filter(isAdvancedCodProfile);
+        return adv.length ? adv : filtered.filter(isCodProfile);
+      }
+      if(preset==='cod_advanced_mobaxterm') {
+        const mx = filtered.filter(n=>{const x=lower(n); return x.includes('-bo7') && (x.includes('moba') || x.includes('xterm'));});
+        if(mx.length) return mx;
+        const adv = filtered.filter(isAdvancedCodProfile);
+        if(adv.length) return adv;
+        return filtered.filter(isCodProfile);
+      }
+      if(preset==='all_selected_user') return filtered;
+      return [];
+    }
+
+    function applyPreset(){
+      const preset = presetSel.value;
+      const username = selectedUsername();
+      if(preset==='none'){setStatus('Preset cleared.'); return;}
+      const profiles = buildPresetProfiles(preset, username);
+      if(!profiles.length){
+        setStatus('No matching profiles found for this preset/user.', false);
+        return;
+      }
+      notes.value = profiles.join(', ');
+      if(actionSel.value!=='create_user' && actionSel.value!=='set_profiles'){
+        actionSel.value='set_profiles';
+        configureFields();
+        notes.value = profiles.join(', ');
+      }
+      setStatus(`Preset applied (${profiles.length} profiles). ${PRESET_INFO[preset] || ''}`);
+    }
+
+    async function listBackups(){try{const b=await api('/api/admin/ops/backups'); renderList(backupsEl,b.backups||[],x=>`${esc(x.modifiedAt)} <strong>${esc(x.name)}</strong> <span class="muted">${esc(x.size)} bytes</span>`); setStatus('Backups listed.');}catch(e){setStatus('Backup list failed: '+e.message,false)}}
+    function exportAuditJson(){download('frenzynet-audit.json', JSON.stringify(auditCache,null,2), 'application/json')}
+    function exportAuditCsv(){const rows=[['createdAt','eventType','username','clientIp','detail']].concat((auditCache||[]).map(x=>[x.createdAt||'',x.eventType||'',x.username||'',x.clientIp||'',x.detail||''])); const escCsv=v=>'"'+String(v??'').replace(/"/g,'""')+'"'; download('frenzynet-audit.csv', rows.map(r=>r.map(escCsv).join(',')).join('\n')+'\n', 'text/csv')}
+    async function quickToken(){try{const r=await api('/api/admin/servers/enroll-token',{method:'POST',body:JSON.stringify({ttlMinutes:60,defaultRegion:'global',defaultServerPool:'default',defaultTier:'standard'})}); enrollOutput.classList.remove('hidden'); enrollOutput.value=`Enroll Token (expires ${r.expiresAt}):\\n${r.enrollToken}\\n\\nRun on new server:\\n${r.example || `curl -fsSL ${r.bootstrapScriptUrl} | sudo bash -s -- --enroll-token '${r.enrollToken}' --name 'new-node-01'`}`; setStatus('Quick enroll token created.');}catch(e){setStatus('Token create failed: '+e.message,false)}}
+
+    document.getElementById('login').addEventListener('click', login);
+    refreshBtn.addEventListener('click', refresh);
+    document.getElementById('runAction').addEventListener('click', runAction);
+    document.getElementById('listBackups').addEventListener('click', listBackups);
+    document.getElementById('exportAuditJson').addEventListener('click', exportAuditJson);
+    document.getElementById('exportAuditCsv').addEventListener('click', exportAuditCsv);
+    document.getElementById('applyPreset').addEventListener('click', applyPreset);
+    document.getElementById('quickEnrollToken').addEventListener('click', quickToken);
+    actionSel.addEventListener('change', configureFields);
+    presetSel.addEventListener('change', ()=>{const p=presetSel.value; if(p==='none'){return;} setStatus(PRESET_INFO[p] || 'Preset selected.');});
+    configureFields();
+    adminArea.style.display='none';
+    showPresetDescriptions();
+    fillCreatePreset();
+  </script>
+</body>
+</html>

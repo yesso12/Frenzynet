@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FrenzyNets Referrals</title>
+  <style>
+    body { margin: 0; background: #070d1c; color: #e8f2ff; font-family: Segoe UI, Arial, sans-serif; }
+    .wrap { max-width: 900px; margin: 24px auto; padding: 0 14px; }
+    .card { border: 1px solid #2a4674; background: #101d38; border-radius: 12px; padding: 14px; margin-bottom: 10px; }
+    .muted { color: #9eb6dc; }
+    input, button { font: inherit; padding: 9px 10px; border-radius: 8px; }
+    input { width: 100%; background: #091427; border: 1px solid #2d4d80; color: #e8f2ff; }
+    button { background: #38d8ff; border: none; color: #00111f; font-weight: 700; cursor: pointer; }
+    a { color: #38d8ff; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1 style="margin:0 0 8px">Referral Portal</h1>
+      <div class="muted">Share your referral link. Both players can receive bonus days after successful payment approval.</div>
+    </div>
+    <div class="card">
+      <div class="muted">Your username</div>
+      <input id="u" placeholder="dustin" />
+      <div style="height:8px"></div>
+      <button id="b">Generate Referral Link</button>
+      <div id="out" class="muted" style="margin-top:10px"></div>
+    </div>
+    <div class="card"><a href="/">Back to site</a></div>
+  </div>
+  <script>
+    document.getElementById('b').onclick = () => {
+      const u = (document.getElementById('u').value || '').trim().toLowerCase();
+      if (!u) {
+        document.getElementById('out').textContent = 'Enter username first.';
+        return;
+      }
+      const url = new URL(location.origin + '/billing/');
+      url.searchParams.set('ref', u);
+      navigator.clipboard.writeText(url.toString())
+        .then(() => { document.getElementById('out').textContent = 'Copied: ' + url.toString(); })
+        .catch(() => { document.getElementById('out').textContent = url.toString(); });
+    };
+  </script>
+</body>
+</html>
