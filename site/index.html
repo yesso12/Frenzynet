@@ -707,12 +707,16 @@
     <div class="footer">&copy; 2026 FrenzyNets. All rights reserved. | FrenzyNets Control Plane | <a href="/legal/terms.html">Terms</a> | <a href="/legal/privacy.html">Privacy</a> | <a href="/legal/refund.html">Refunds</a></div>
   </div>
 
-  <script>window.__FRNZ_DISABLE_API_CALLS = true;</script>
+  <script>window.__FRNZ_API_HOST = window.__FRNZ_API_HOST || 'https://api.frenzynets.com';</script>
 
   <script>
-    const __FRNZ_DISABLE_API_CALLS = typeof window.__FRNZ_DISABLE_API_CALLS !== 'undefined' ? Boolean(window.__FRNZ_DISABLE_API_CALLS) : false;
-    const __FRNZ_USE_API = !__FRNZ_DISABLE_API_CALLS;
-    async function getJson(url){ if(!__FRNZ_USE_API) throw new Error('api_disabled'); const r = await fetch(url, { cache: 'no-store' }); if(!r.ok) throw new Error(String(r.status)); return r.json(); }
+    const FRNZ_API_BASE = String(window.__FRNZ_API_HOST || 'https://api.frenzynets.com').replace(/\/+$/,'');
+    function resolveApi(endpoint) {
+      if (/^https?:\\/\\//i.test(endpoint)) return endpoint;
+      const prefix = endpoint.startsWith('/') ? endpoint : '/' + endpoint;
+      return FRNZ_API_BASE + prefix;
+    }
+    async function getJson(url){ const resolved = resolveApi(url); const r = await fetch(resolved, { cache: 'no-store' }); if(!r.ok) throw new Error(String(r.status)); return r.json(); }
     function ago(min){ if(min==null) return 'n/a'; if(min<1) return 'just now'; if(min<60) return `${min} min ago`; const h=Math.floor(min/60); const m=min%60; return `${h}h ${m}m ago`; }
 
     async function getStatusWithFallback(){
@@ -735,17 +739,17 @@
       throw new Error('status_unreachable');
     }
 
-    async function loadLivePricing() {
-      const endpoints = ['/api/frenzynet/api/billing/providers', '/api/billing/providers'];
-      let data = null;
-      for (const ep of endpoints) {
-        try {
-          const r = await fetch(ep, { cache: 'no-store' });
-          if (!r.ok) continue;
-          data = await r.json();
-          break;
-        } catch (_) { }
-      }
+      async function loadLivePricing() {
+        const endpoints = ['/api/frenzynet/api/billing/providers', '/api/billing/providers'];
+        let data = null;
+        for (const ep of endpoints) {
+          try {
+            const r = await fetch(resolveApi(ep), { cache: 'no-store' });
+            if (!r.ok) continue;
+            data = await r.json();
+            break;
+          } catch (_) { }
+        }
       const plansGrid = document.getElementById('plansGrid');
       const addonsGrid = document.getElementById('addonsGrid');
       const bundleGrid = document.getElementById('bundleGrid');
@@ -972,7 +976,7 @@
         let ok = false;
         for (const ep of endpoints) {
           try {
-            const r = await fetch(ep, { cache: 'no-store' });
+            const r = await fetch(resolveApi(ep), { cache: 'no-store' });
             if (r.ok) { ok = true; break; }
           } catch (_) { }
         }
@@ -1101,7 +1105,7 @@
         const endpoints = ['/api/public/site-config', '/api/frenzynet/api/public/site-config'];
         for (const ep of endpoints) {
           try {
-            const r = await fetch(ep, { cache: 'no-store' });
+            const r = await fetch(resolveApi(ep), { cache: 'no-store' });
             if (!r.ok) continue;
             const d = await r.json();
             const fromApi = d?.siteConfig?.betaCountdownEndIso;
