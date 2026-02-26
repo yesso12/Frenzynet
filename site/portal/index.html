@@ -43,7 +43,7 @@
   </div>
   <script>
     let token = '';
-    const API_BASE = String(window.__FRNZ_API_HOST || 'https://api.frenzynets.com').replace(/\/+$/,'');
+    const API_BASE = `${String(window.__FRNZ_API_HOST || 'https://api.frenzynets.com').replace(/\/+$/,'')}/api/frenzynet`;
     async function api(path, opts = {}) {
       const h = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
       if (token) h.Authorization = 'Bearer ' + token;
