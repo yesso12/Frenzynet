@@ -869,6 +869,16 @@
               <textarea id="pvProfiles" placeholder="optional: allowed profiles CSV"></textarea>
             </div>
 
+            <div class="card" style="background:#0b1730">
+              <h3>User Directory (Edit/Delete)</h3>
+              <div class="row">
+                <input id="pvUserSearch" placeholder="search username/role/plan/channel" />
+                <button id="pvUserSearchClear" class="secondary">Clear</button>
+              </div>
+              <div id="pvUserManagerList" class="list muted" style="margin-top:8px">No users loaded.</div>
+              <div class="muted" style="margin-top:8px">Edit loads the user into advanced controls below. Delete permanently removes the account.</div>
+            </div>
+
             <details class="card" style="background:#0b1730">
               <summary><strong>Advanced: User Access & Identity</strong></summary>
               <div class="row" style="margin-top:8px">
@@ -1868,6 +1878,61 @@
     });
   }
 
+  function renderProvisioningUsers() {
+    const q = String(byId('pvUserSearch')?.value || '').trim().toLowerCase();
+    const rows = users
+      .filter(u => {
+        if (!q) return true;
+        const hay = [u.username, u.role, u.plan, u.updateChannel].map(x => String(x || '').toLowerCase()).join(' ');
+        return hay.includes(q);
+      })
+      .sort((a, b) => String(a.username || '').localeCompare(String(b.username || '')));
+
+    if (!rows.length) {
+      byId('pvUserManagerList').innerHTML = '<div class="item muted">No users match your filter.</div>';
+      return;
+    }
+
+    byId('pvUserManagerList').innerHTML = `<table class="table"><thead><tr><th>User</th><th>Role</th><th>Plan</th><th>Channel</th><th>Status</th><th>Actions</th></tr></thead><tbody>${
+      rows.map(u => `<tr>
+        <td><strong>${esc(u.username)}</strong></td>
+        <td>${esc(u.role || (u.isAdmin ? 'admin' : 'user'))}</td>
+        <td>${esc(u.plan || 'standard')}</td>
+        <td>${esc(u.updateChannel || 'stable')}</td>
+        <td>${u.lockedUntil ? '<span class="pill">locked</span>' : '<span class="pill">active</span>'}</td>
+        <td class="row">
+          <button class="secondary" data-pv-edit="${esc(u.username)}">Edit</button>
+          <button class="danger" data-pv-delete="${esc(u.username)}">Delete</button>
+        </td>
+      </tr>`).join('')
+    }</tbody></table>`;
+
+    document.querySelectorAll('[data-pv-edit]').forEach(btn => btn.onclick = async () => {
+      const username = btn.dataset.pvEdit;
+      byId('pvUserTarget').value = username;
+      byId('securityUser').value = username;
+      await loadSecurityForUser();
+      setStatus(`Loaded ${username} into user/security controls`, true);
+    });
+
+    document.querySelectorAll('[data-pv-delete]').forEach(btn => btn.onclick = async () => {
+      if (!requirePerm('users.delete')) return;
+      const username = btn.dataset.pvDelete;
+      const ok = await confirmDanger(`delete user ${username}`);
+      if (!ok) return;
+      const allow = await guardAction('users.delete', `delete user ${username}`, {
+        ownerOnly: true,
+        request: { path:'/api/admin/users/delete', method:'POST', body:{ username }, postAction:'refreshAll' }
+      });
+      if (!allow) return;
+      await api('/api/admin/users/delete', { method:'POST', body:JSON.stringify({ username }) });
+      appendImmutableAudit('users.delete', `deleted ${username} from user directory (reason: ${ok.reason})`, 'warn');
+      await savePanelState();
+      await refreshAll();
+      setStatus(`Deleted ${username}`, true);
+    });
+  }
+
   function renderPresets() {
     const rows = presetCatalog.map(name => {
       const m = state.presetMeta[name] || { version:'1.0.0', rollout:'internal', changeLog:'' };
@@ -2366,6 +2431,7 @@
     renderRevenue();
     renderSupportBoard();
     renderLifecycle();
+    renderProvisioningUsers();
     renderPresets();
     renderFleet();
     renderAudit();
@@ -2380,6 +2446,11 @@
     byId('refreshBtn').onclick = refreshAll;
     byId('refreshTickets').onclick = refreshAll;
     byId('loadSecurity').onclick = loadSecurityForUser;
+    byId('pvUserSearch').oninput = renderProvisioningUsers;
+    byId('pvUserSearchClear').onclick = () => {
+      byId('pvUserSearch').value = '';
+      renderProvisioningUsers();
+    };
 
     byId('revokeAllAccess').onclick = async () => {
       const username = byId('securityUser').value;
