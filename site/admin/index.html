@@ -675,6 +675,7 @@
             <select id="securityUser"><option value="">(select user)</option></select>
             <button id="loadSecurity" class="secondary">Load Devices/Sessions</button>
             <button id="revokeAllAccess" class="danger">Revoke All Access</button>
+            <button id="deleteSecurityUser" class="danger">Delete User</button>
           </div>
           <div class="split" style="margin-top:10px">
             <div>
@@ -2393,6 +2394,24 @@
       appendImmutableAudit('users.revoke_all', `revoked all access for ${username}`, 'warn');
       await savePanelState();
       setStatus(`Revoked all access for ${username}`, true);
+    };
+
+    byId('deleteSecurityUser').onclick = async () => {
+      if (!requirePerm('users.delete')) return;
+      const username = byId('securityUser').value;
+      if (!username) return setStatus('Select user first.', false);
+      const ok = await confirmDanger(`delete user ${username}`);
+      if (!ok) return;
+      const allow = await guardAction('users.delete', `delete user ${username}`, {
+        ownerOnly: true,
+        request: { path:'/api/admin/users/delete', method:'POST', body:{ username }, postAction:'refreshAll' }
+      });
+      if (!allow) return;
+      await api('/api/admin/users/delete', { method:'POST', body:JSON.stringify({ username }) });
+      appendImmutableAudit('users.delete', `deleted ${username} from security panel (reason: ${ok.reason})`, 'warn');
+      await savePanelState();
+      await refreshAll();
+      setStatus(`Deleted ${username}`, true);
     };
 
     byId('savePermMatrix').onclick = async () => {
