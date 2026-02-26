@@ -156,7 +156,7 @@
   </div>
 
   <script>
-    const API_BASE = `${String(window.__FRNZ_API_HOST || 'https://api.frenzynets.com').replace(/\/+$/,'')}/api/frenzynet`;
+    const API_BASE = String(window.__FRNZ_API_HOST || 'https://api.frenzynets.com').replace(/\/+$/,'');
     let plans = [];
     let addons = [];
     let selected = null;
