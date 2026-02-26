@@ -21,3 +21,4 @@ jobs:
           user_name: FrenzyNet Site Builder
           user_email: deploy@frenzynet.com
           keep_files: false
+          cname: frenzynets.com
