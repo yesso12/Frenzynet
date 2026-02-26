@@ -729,7 +729,7 @@
     function ago(min){ if(min==null) return 'n/a'; if(min<1) return 'just now'; if(min<60) return `${min} min ago`; const h=Math.floor(min/60); const m=min%60; return `${h}h ${m}m ago`; }
 
     async function getStatusWithFallback(){
-      const endpoints = ['/api/public/status', '/api/frenzynet/api/public/status'];
+      const endpoints = ['/api/public/status'];
       const attempts = 3;
       for (let i = 0; i < attempts; i++) {
         for (const ep of endpoints) {
@@ -749,7 +749,7 @@
     }
 
       async function loadLivePricing() {
-        const endpoints = ['/api/frenzynet/api/billing/providers', '/api/billing/providers'];
+        const endpoints = ['/api/billing/providers'];
         let data = null;
         for (const ep of endpoints) {
           try {
@@ -950,7 +950,7 @@
 
     async function loadSiteConfig() {
       if (window.__FRNZ_USE_API === false) return;
-      const endpoints = ['/api/public/site-config', '/api/frenzynet/api/public/site-config'];
+      const endpoints = ['/api/public/site-config'];
       for (const ep of endpoints) {
         try {
           const d = await getJson(ep);
@@ -976,11 +976,8 @@
       async function heartbeatTick() {
         const endpoints = [
           '/api/public/ping',
-          '/api/frenzynet/api/public/ping',
           '/api/public/status',
-          '/api/frenzynet/api/public/status',
-          '/api/health',
-          '/api/frenzynet/api/health'
+          '/api/health'
         ];
         let ok = false;
         for (const ep of endpoints) {
@@ -1111,7 +1108,7 @@
             return;
           }
         } catch (_) { }
-        const endpoints = ['/api/public/site-config', '/api/frenzynet/api/public/site-config'];
+        const endpoints = ['/api/public/site-config'];
         for (const ep of endpoints) {
           try {
             const r = await fetch(resolveApi(ep), { cache: 'no-store' });
