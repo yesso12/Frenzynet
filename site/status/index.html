@@ -33,12 +33,17 @@
     </div>
   </div>
   <script>
+    const API_BASE = String(window.__FRNZ_API_HOST || 'https://api.frenzynets.com').replace(/\/+$/,'');
+    function apiUrl(path) {
+      const p = path.startsWith('/') ? path : `/${path}`;
+      return `${API_BASE}${p}`;
+    }
     async function load() {
       const endpoints = ['/api/public/status', '/api/frenzynet/api/public/status'];
       let data = null;
       for (const ep of endpoints) {
         try {
-          const r = await fetch(ep, { cache: 'no-store' });
+          const r = await fetch(apiUrl(ep), { cache: 'no-store' });
           if (r.ok) {
             data = await r.json();
             break;
