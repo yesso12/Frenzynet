@@ -154,6 +154,10 @@
           <label for="roomInput">Room Code</label>
           <input id="roomInput" placeholder="e.g. K7V9P2" />
         </div>
+        <div>
+          <label for="adminKeyInput">Admin Key (for Delete Room Code)</label>
+          <input id="adminKeyInput" type="password" placeholder="Admin key" />
+        </div>
         <div class="row">
           <button id="createBtn">Create Room</button>
           <button id="joinBtn" class="secondary">Join Room</button>
@@ -216,6 +220,7 @@
     const els = {
       displayName: document.getElementById('displayName'),
       roomInput: document.getElementById('roomInput'),
+      adminKeyInput: document.getElementById('adminKeyInput'),
       titleInput: document.getElementById('titleInput'),
       mediaInput: document.getElementById('mediaInput'),
       createBtn: document.getElementById('createBtn'),
@@ -254,6 +259,7 @@
       lastSeekSentAt: 0,
       lastRoom: null
     };
+    const SESSION_KEY = 'telewatch_session';
 
     const rtc = {
       localScreenStream: null,
@@ -357,6 +363,25 @@
         action
       }, extra || {});
       await apiRequest('POST', '/api/watch/control', body);
+    }
+
+    function saveSession() {
+      try {
+        if (!state.roomCode || !state.participantToken) return;
+        localStorage.setItem(
+          SESSION_KEY,
+          JSON.stringify({
+            roomCode: state.roomCode,
+            participantToken: state.participantToken,
+            participantId: state.participantId || '',
+            isHost: !!state.isHost
+          })
+        );
+      } catch (_) {}
+    }
+
+    function clearSession() {
+      try { localStorage.removeItem(SESSION_KEY); } catch (_) {}
     }
 
     function upsertIceQueue(participantId, candidate) {
@@ -574,13 +599,14 @@
 
     async function deleteRoomByCode() {
       const code = normalizeRoomCode(els.roomInput.value);
+      const adminKey = String(els.adminKeyInput.value || '').trim();
       if (!code) {
         setStatus(false, 'Enter a room code first.');
         return;
       }
       const ok = window.confirm(`Delete room code ${code}?`);
       if (!ok) return;
-      const data = await apiRequest('POST', '/api/watch/delete', { roomCode: code });
+      const data = await apiRequest('POST', '/api/watch/delete', { roomCode: code, adminKey });
       setStatus(false, `Room ${data.roomCode || code} deleted.`);
       addEventLine(`Room ${data.roomCode || code} deleted.`);
     }
@@ -603,6 +629,7 @@
       els.chatBtn.disabled = false;
       if (state.pollTimer) clearInterval(state.pollTimer);
       state.pollTimer = setInterval(pollState, POLL_MS);
+      saveSession();
       pollState();
     }
 
@@ -728,7 +755,20 @@
       try { await joinRoom(); } catch (err) { setStatus(false, String(err.message || err)); }
     });
     els.deleteCodeBtn.addEventListener('click', async () => {
-      try { await deleteRoomByCode(); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
+      try {
+        await deleteRoomByCode();
+      } catch (err) {
+        const msg = String(err && err.message ? err.message : err);
+        if (msg.includes('admin_key_required')) {
+          setStatus(false, 'Admin key required to delete by room code.');
+          return;
+        }
+        if (msg.includes('admin_key_invalid')) {
+          setStatus(false, 'Admin key is invalid.');
+          return;
+        }
+        setStatus(false, msg);
+      }
     });
     els.setMediaBtn.addEventListener('click', async () => {
       try { await setupMedia(); } catch (err) { setStatus(false, String(err.message || err)); }
@@ -773,6 +813,7 @@
         els.deleteRoomBtn.disabled = true;
         els.chatBtn.disabled = true;
         updateBadges();
+        clearSession();
         setSyncLabel('room deleted');
         setStatus(false, 'Room deleted.');
         addEventLine('Room deleted by host.');
@@ -819,12 +860,42 @@
         els.roomInput.value = normalizeRoomCode(els.roomInput.value);
       });
       try {
+        const savedAdminKey = localStorage.getItem('telewatch_admin_key') || '';
+        if (savedAdminKey) els.adminKeyInput.value = savedAdminKey;
+      } catch (_) {}
+      els.adminKeyInput.addEventListener('input', () => {
+        try { localStorage.setItem('telewatch_admin_key', els.adminKeyInput.value); } catch (_) {}
+      });
+      try {
         const savedName = localStorage.getItem('telewatch_name') || '';
         if (savedName) els.displayName.value = savedName;
       } catch (_) {}
       els.displayName.addEventListener('input', () => {
         try { localStorage.setItem('telewatch_name', els.displayName.value.trim()); } catch (_) {}
       });
+      try {
+        const raw = localStorage.getItem(SESSION_KEY) || '';
+        if (raw) {
+          const s = JSON.parse(raw);
+          const room = normalizeRoomCode(s.roomCode || '');
+          const token = String(s.participantToken || '').trim();
+          if (room && token) {
+            state.roomCode = room;
+            state.participantToken = token;
+            state.participantId = String(s.participantId || '').trim();
+            state.isHost = !!s.isHost;
+            state.sinceEventId = 0;
+            els.roomInput.value = room;
+            onSessionStart();
+            if (state.isHost) {
+              setStatus(false, 'Session restored. Re-click Share Monitor / Tab after refresh.');
+            } else {
+              setStatus(false, 'Session restored. Reconnecting stream...');
+            }
+            return;
+          }
+        }
+      } catch (_) {}
       updateBadges();
       if (roomFromQuery) setStatus(false, 'Enter name and click Join Room');
     })();
