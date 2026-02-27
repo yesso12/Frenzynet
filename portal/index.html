@@ -1,84 +1,17 @@
 <!doctype html>
-<html lang="en">
+<html lang='en'>
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>FrenzyNets Client Portal</title>
-  <style>
-    body { margin: 0; background: #070d1c; color: #e8f2ff; font-family: Segoe UI, Arial, sans-serif; }
-    .wrap { max-width: 980px; margin: 24px auto; padding: 0 14px; }
-    .card { border: 1px solid #2a4674; background: #101d38; border-radius: 12px; padding: 14px; margin-bottom: 10px; }
-    .muted { color: #9eb6dc; }
-    .row { display: flex; gap: 8px; flex-wrap: wrap; }
-    input, button { font: inherit; padding: 9px 10px; border-radius: 8px; }
-    input { background: #091427; border: 1px solid #2d4d80; color: #e8f2ff; }
-    button { background: #38d8ff; border: none; color: #00111f; font-weight: 700; cursor: pointer; }
-    .list { max-height: 280px; overflow: auto; }
-    a { color: #38d8ff; }
-  </style>
+  <meta charset='utf-8' />
+  <meta name='viewport' content='width=device-width, initial-scale=1' />
+  <title>FrenzyNets Watch Party Portal</title>
+  <style>body{margin:0;background:#071126;color:#e9f2ff;font-family:Segoe UI,Arial,sans-serif}.wrap{max-width:920px;margin:24px auto;padding:0 14px}.card{border:1px solid #2a4674;background:#101d38;border-radius:12px;padding:14px;margin-bottom:10px}.muted{color:#9eb6dc}.btn{display:inline-block;padding:9px 11px;border-radius:8px;border:1px solid #3a5da7;background:#16306b;color:#e9f2ff;text-decoration:none;font-weight:700}</style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="card">
-      <h1 style="margin:0 0 8px">Client License Portal</h1>
-      <div class="muted">View account, allowed profiles, and subscription status.</div>
-    </div>
-    <div class="card">
-      <div class="row">
-        <input id="u" placeholder="username" />
-        <input id="p" type="password" placeholder="password" />
-        <button id="l">Login</button>
-      </div>
-      <div id="s" class="muted" style="margin-top:8px"></div>
-    </div>
-    <div class="card">
-      <h3 style="margin-top:0">Session</h3>
-      <pre id="session" class="list muted">Not logged in.</pre>
-    </div>
-    <div class="card">
-      <h3 style="margin-top:0">Active Add-ons</h3>
-      <div id="addons" class="muted">Login to view active add-ons.</div>
-    </div>
-    <div class="card"><a href="/">Back to site</a></div>
+  <div class='wrap'>
+    <div class='card'><h1 style='margin:0 0 8px'>Watch Party Portal</h1><div class='muted'>Portal is focused on watch party access and room participation only.</div></div>
+    <div class='card'><a class='btn' href='/telewatch/'>Open Watch Party</a></div>
+    <div class='card'><a class='btn' href='/telewatch/admin/'>Open Admin Panel</a></div>
+    <div class='card'><a href='/'>Back to Home</a></div>
   </div>
-  <script>
-    let token = '';
-    async function api(path, opts = {}) {
-      const h = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
-      if (token) h.Authorization = 'Bearer ' + token;
-      const r = await fetch('/api/frenzynet' + path, Object.assign({}, opts, { headers: h }));
-      const t = await r.text();
-      let d = {};
-      try { d = t ? JSON.parse(t) : {}; } catch {}
-      if (!r.ok) throw new Error(d.error || r.statusText);
-      return d;
-    }
-    document.getElementById('l').onclick = async () => {
-      try {
-        const username = document.getElementById('u').value.trim();
-        const password = document.getElementById('p').value;
-        const d = await api('/api/auth/login', { method: 'POST', body: JSON.stringify({ username, password, deviceId: 'portal-web' }) });
-        token = d.token || '';
-        document.getElementById('s').textContent = 'Logged in as ' + (d.user?.username || username);
-        const ses = await api('/api/auth/session');
-        document.getElementById('session').textContent = JSON.stringify(ses, null, 2);
-        const sub = ses?.billing?.subscription;
-        let text = 'No active add-ons detected.';
-        try {
-          const raw = localStorage.getItem('frenzy_checkout_draft');
-          if (raw) {
-            const draft = JSON.parse(raw);
-            if (Array.isArray(draft.addons) && draft.addons.length) {
-              text = 'Recent selected add-ons on this device: ' + draft.addons.join(', ');
-            }
-          }
-        } catch (_) {}
-        if (sub?.planCode) text = `Plan: ${sub.planCode}. ` + text;
-        document.getElementById('addons').textContent = text;
-      } catch (e) {
-        document.getElementById('s').textContent = 'Login failed: ' + e.message;
-      }
-    };
-  </script>
 </body>
 </html>
