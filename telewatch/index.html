@@ -890,7 +890,8 @@
       localThemeKey: 'clean',
       accessMode: 'public',
       pendingJoinRequests: [],
-      pendingJoinToken: ''
+      pendingJoinToken: '',
+      inviteToken: ''
     };
     const SESSION_KEY = 'telewatch_session';
     const ADMIN_SESSION_KEY = 'telewatch_admin_session';
@@ -2071,7 +2072,7 @@
         participantToken: state.participantToken,
         action
       }, extra || {});
-      await apiRequest('POST', '/api/watch/control', body);
+      return await apiRequest('POST', '/api/watch/control', body);
     }
 
     function saveSession() {
@@ -2361,11 +2362,13 @@
       const roomCode = normalizeRoomCode(inviteCode || els.roomInput.value);
       const displayName = els.displayName.value.trim() || '';
       const requestToken = readPendingJoinToken(roomCode, displayName);
+      const inviteToken = String(state.inviteToken || '').trim();
       const payload = {
         roomCode,
         displayName
       };
       if (requestToken) payload.requestToken = requestToken;
+      if (inviteToken) payload.inviteToken = inviteToken;
       const data = await apiRequest('POST', '/api/watch/join', payload);
       if (data && data.pendingApproval) {
         state.pendingJoinToken = String(data.requestToken || requestToken || '');
@@ -2379,6 +2382,7 @@
       state.participantToken = data.participantToken;
       state.participantId = data.participantId || '';
       state.isHost = !!data.isHost;
+      state.inviteToken = '';
       state.sinceEventId = 0;
       onSessionStart();
       saveRecentRoom(state.roomCode);
@@ -2624,10 +2628,19 @@
 
     async function copyInviteLink() {
       if (!state.roomCode) return;
-      const url = window.location.origin + '/telewatch/?room=' + encodeURIComponent(state.roomCode);
+      let url = window.location.origin + '/telewatch/?room=' + encodeURIComponent(state.roomCode);
+      if (state.isHost) {
+        try {
+          const res = await sendControl('create_invite', { ttlMinutes: 720, maxUses: 0 });
+          const token = String(res && res.actionPayload && res.actionPayload.inviteToken ? res.actionPayload.inviteToken : '').trim();
+          if (token) {
+            url += '&invite=' + encodeURIComponent(token);
+          }
+        } catch (_) {}
+      }
       try {
         await navigator.clipboard.writeText(url);
-        setSyncLabel('invite copied');
+        setSyncLabel('watch link copied');
       } catch (_) {
         setSyncLabel(url);
       }
@@ -2769,6 +2782,14 @@
         const msg = String(err && err.message ? err.message : err);
         if (msg.includes('room_closed')) {
           setStatus(false, 'This room is closed. Host must reopen it.');
+          return;
+        }
+        if (msg.includes('invite_invalid')) {
+          setStatus(false, 'Invite link expired or invalid. Ask host for a new link.');
+          return;
+        }
+        if (msg.includes('join_banned')) {
+          setStatus(false, 'You are temporarily blocked from this room.');
           return;
         }
         if (msg.includes('join_request_denied')) {
@@ -3069,6 +3090,8 @@
       if (openPartyTimer) clearInterval(openPartyTimer);
       openPartyTimer = setInterval(refreshOpenParties, 15000);
       const roomFromQuery = normalizeRoomCode(qp('room') || '');
+      const inviteFromQuery = String(qp('invite') || '').trim();
+      if (inviteFromQuery) state.inviteToken = inviteFromQuery;
       if (roomFromQuery) els.roomInput.value = roomFromQuery;
       els.roomInput.addEventListener('input', () => {
         els.roomInput.value = normalizeRoomCode(els.roomInput.value);
@@ -3144,7 +3167,9 @@
         }
       } catch (_) {}
       updateBadges();
-      if (roomFromQuery) setStatus(false, 'Enter name and click Join Room');
+      if (roomFromQuery) {
+        setStatus(false, inviteFromQuery ? 'Invite link detected. Enter name and click Join Room.' : 'Enter name and click Join Room');
+      }
     })();
   </script>
 </body>
