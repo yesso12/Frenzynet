@@ -488,6 +488,12 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             '/api/telewatch/watch/admin/logout',
             '/api/telewatch/api/watch/admin/logout',
         }
+        admin_rooms_paths = {
+            '/watch/admin/rooms',
+            '/api/watch/admin/rooms',
+            '/api/telewatch/watch/admin/rooms',
+            '/api/telewatch/api/watch/admin/rooms',
+        }
         delete_paths = {'/watch/delete', '/api/watch/delete', '/api/telewatch/watch/delete', '/api/telewatch/api/watch/delete'}
         control_paths = {'/watch/control', '/api/watch/control', '/api/telewatch/watch/control', '/api/telewatch/api/watch/control'}
 
@@ -632,6 +638,49 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                 conn.execute('DELETE FROM watch_admin_sessions WHERE session_token=?', (admin_token,))
                 conn.commit()
             self._json(HTTPStatus.OK, {'ok': True, 'loggedOut': True})
+            return
+
+        if path in admin_rooms_paths:
+            admin_token = str(payload.get('adminToken', '')).strip()
+            with get_db() as conn:
+                ensure_public_rooms(conn)
+                cleanup_rooms(conn)
+                actor = validate_admin_session(conn, admin_token)
+                if actor is None:
+                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'admin_auth_invalid'})
+                    return
+                rows = conn.execute(
+                    '''
+                    SELECT
+                      r.room_code,
+                      r.title,
+                      r.updated_at,
+                      (
+                        SELECT COUNT(*)
+                        FROM watch_participants p
+                        WHERE p.room_code=r.room_code AND p.last_seen_at >= datetime('now', '-20 minutes')
+                      ) AS active_count
+                    FROM watch_rooms r
+                    ORDER BY r.updated_at DESC
+                    LIMIT 120
+                    '''
+                ).fetchall()
+                conn.commit()
+            self._json(
+                HTTPStatus.OK,
+                {
+                    'ok': True,
+                    'rooms': [
+                        {
+                            'roomCode': r['room_code'],
+                            'title': r['title'] or '',
+                            'updatedAt': r['updated_at'],
+                            'activeCount': int(r['active_count'] or 0),
+                        }
+                        for r in rows
+                    ],
+                },
+            )
             return
 
         if path in delete_paths:
@@ -867,7 +916,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     self._json(HTTPStatus.NOT_FOUND, {'error': 'room_not_found'})
                     return
 
-                if action in {'play', 'pause', 'seek', 'set_media', 'set_title', 'delete_room'} and not bool(part['is_host']):
+                if action in {'play', 'pause', 'seek', 'set_media', 'set_title', 'delete_room', 'reset_room', 'mute_user'} and not bool(part['is_host']):
                     self._json(HTTPStatus.FORBIDDEN, {'error': 'host_required'})
                     return
 
@@ -917,6 +966,34 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     title = str(payload.get('title', '')).strip()[:160]
                     conn.execute('UPDATE watch_rooms SET title=?, updated_at=datetime(\'now\') WHERE room_code=?', (title, room_code_val))
                     event_payload['title'] = title
+                elif action == 'reset_room':
+                    title = str(payload.get('title', '')).strip()[:160]
+                    if not title:
+                        title = room['title'] or ''
+                    conn.execute(
+                        '''
+                        UPDATE watch_rooms
+                        SET media_url='', playback_sec=0, is_playing=0, title=?, updated_at=datetime('now')
+                        WHERE room_code=?
+                        ''',
+                        (title, room_code_val),
+                    )
+                    event_payload['title'] = title
+                elif action == 'mute_user':
+                    to_participant_id = str(payload.get('toParticipantId', '')).strip().lower()[:24]
+                    muted = bool(payload.get('muted', True))
+                    if not to_participant_id:
+                        self._json(HTTPStatus.BAD_REQUEST, {'error': 'toParticipantId_required'})
+                        return
+                    target = conn.execute(
+                        'SELECT participant_id FROM watch_participants WHERE room_code=? AND participant_id=? LIMIT 1',
+                        (room_code_val, to_participant_id),
+                    ).fetchone()
+                    if target is None:
+                        self._json(HTTPStatus.NOT_FOUND, {'error': 'target_participant_not_found'})
+                        return
+                    event_payload['toParticipantId'] = to_participant_id
+                    event_payload['muted'] = bool(muted)
                 elif action == 'chat':
                     msg = str(payload.get('message', '')).strip()
                     if not msg:
