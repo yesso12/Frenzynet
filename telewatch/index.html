@@ -290,16 +290,21 @@
       gap: 8px;
       border-bottom: 1px solid var(--line);
       padding-bottom: 8px;
+      align-items: center;
     }
     .tab-btn {
       border: 1px solid #d1dae5;
       background: #fff;
       color: #33475f;
-      border-radius: 999px;
-      padding: 7px 12px;
+      border-radius: 10px;
+      padding: 8px 12px;
       font-size: 12px;
       font-weight: 700;
       cursor: pointer;
+      width: auto;
+      min-width: 0;
+      flex: 0 0 auto;
+      line-height: 1.2;
     }
     .tab-btn.active {
       border-color: var(--tab-active-line);
