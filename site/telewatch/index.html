@@ -113,6 +113,18 @@
     }
     .events div { padding: 3px 0; border-bottom: 1px dashed rgba(70, 108, 140, 0.4); }
     .events div:last-child { border-bottom: 0; }
+    .chat-feed {
+      max-height: 180px;
+      overflow: auto;
+      background: #07101d;
+      border: 1px solid #264364;
+      border-radius: 8px;
+      padding: 8px;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .chat-feed div { padding: 4px 0; border-bottom: 1px dashed rgba(70, 108, 140, 0.35); }
+    .chat-feed div:last-child { border-bottom: 0; }
     .footer { margin-top: 12px; color: #88a8c8; font-size: 13px; }
     a { color: #70d8ff; }
     @media (max-width: 980px) {
@@ -183,6 +195,8 @@
           <button id="pauseBtn" class="secondary">Pause</button>
           <button id="resyncBtn" class="secondary">Force Re-sync</button>
         </div>
+        <h3>Room Messages</h3>
+        <div id="chatFeed" class="chat-feed"></div>
         <h3>Events</h3>
         <div id="events" class="events"></div>
       </section>
@@ -223,6 +237,7 @@
       connState: document.getElementById('connState'),
       nowTitle: document.getElementById('nowTitle'),
       events: document.getElementById('events'),
+      chatFeed: document.getElementById('chatFeed'),
       player: document.getElementById('player'),
       screenView: document.getElementById('screenView')
     };
@@ -292,6 +307,15 @@
       els.events.prepend(d);
       while (els.events.children.length > 120) {
         els.events.removeChild(els.events.lastChild);
+      }
+    }
+
+    function addChatLine(sender, message) {
+      const d = document.createElement('div');
+      d.textContent = `${sender}: ${message}`;
+      els.chatFeed.prepend(d);
+      while (els.chatFeed.children.length > 200) {
+        els.chatFeed.removeChild(els.chatFeed.lastChild);
       }
     }
 
@@ -675,8 +699,11 @@
             await processSignal(ev.payload || {});
             continue;
           }
-          if (ev.type === 'chat') addEventLine(actor + ': ' + String(ev.payload?.message || ''));
-          else addEventLine(actor + ' · ' + ev.type.replace('_', ' '));
+          if (ev.type === 'chat') {
+            addChatLine(actor, String(ev.payload?.message || ''));
+            continue;
+          }
+          addEventLine(actor + ' · ' + ev.type.replace('_', ' '));
         }
       } catch (err) {
         setStatus(false, 'Reconnect pending: ' + (err?.message || 'network_error'));
