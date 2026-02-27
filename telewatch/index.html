@@ -882,6 +882,13 @@
                   </select>
                 </div>
                 <div>
+                  <label for="mediaModeSelect">Media Transport</label>
+                  <select id="mediaModeSelect">
+                    <option value="webrtc">WebRTC Direct (Low Server Load)</option>
+                    <option value="sfu">SFU Relay (Best for 40-50+)</option>
+                  </select>
+                </div>
+                <div>
                   <label for="accessModeSelect">Party Access</label>
                   <select id="accessModeSelect">
                     <option value="public">Public (Anyone can join)</option>
@@ -1162,6 +1169,7 @@
     </div>
   </div>
 
+  <script defer src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
   <script>
     const API_PREFIXES = ['https://api.frenzynets.com/api/telewatch'];
     const POLL_RETRY_MS = 1200;
@@ -1243,6 +1251,7 @@
       movieQualitySelect: document.getElementById('movieQualitySelect'),
       webcamQualitySelect: document.getElementById('webcamQualitySelect'),
       audioProfileSelect: document.getElementById('audioProfileSelect'),
+      mediaModeSelect: document.getElementById('mediaModeSelect'),
       cohostKickPerm: document.getElementById('cohostKickPerm'),
       cohostMutePerm: document.getElementById('cohostMutePerm'),
       cohostAccessPerm: document.getElementById('cohostAccessPerm'),
@@ -1349,6 +1358,10 @@
       autoRejoinTried: false,
       clientMode: 'web',
       allowWebcam: true,
+      mediaMode: 'webrtc',
+      sfuEnabled: false,
+      sfuUrl: '',
+      chatScopeRoom: '',
       chatMessages: new Map(),
       pinnedMessageId: 0,
       reconnectCount: 0,
@@ -1862,6 +1875,15 @@
       camOfferedTo: new Set(),
       adaptive: new Map(),
       adaptiveTimer: null
+    };
+    const sfu = {
+      room: null,
+      connected: false,
+      localScreenTrack: null,
+      localScreenAudioTrack: null,
+      localVoiceTrack: null,
+      localCamTrack: null,
+      remoteAudioEls: new Map()
     };
     let openPartyTimer = null;
     let adminRoomsTimer = null;
@@ -2528,6 +2550,177 @@
       return safe;
     }
 
+    function currentMediaMode() {
+      const raw = String(state.mediaMode || 'webrtc').toLowerCase();
+      return raw === 'sfu' ? 'sfu' : 'webrtc';
+    }
+
+    function isSfuMode() {
+      return currentMediaMode() === 'sfu';
+    }
+
+    function applyMediaModeState(mode, persistControl) {
+      const clean = String(mode || 'webrtc').toLowerCase() === 'sfu' ? 'sfu' : 'webrtc';
+      const prev = String(state.mediaMode || 'webrtc').toLowerCase();
+      state.mediaMode = clean;
+      if (prev === 'sfu' && clean !== 'sfu' && sfu.room) {
+        try { sfu.room.disconnect(); } catch (_) {}
+        sfu.room = null;
+        sfu.connected = false;
+        clearSfuRemoteAudio();
+      }
+      if (els.mediaModeSelect) {
+        els.mediaModeSelect.value = clean;
+        if (persistControl) {
+          els.mediaModeSelect.disabled = !!state.roomCode;
+        }
+      }
+    }
+
+    function sfuRoomEventConsts() {
+      return window.LivekitClient && window.LivekitClient.RoomEvent ? window.LivekitClient.RoomEvent : {};
+    }
+
+    function sfuTrackSourceConsts() {
+      return window.LivekitClient && window.LivekitClient.Track && window.LivekitClient.Track.Source
+        ? window.LivekitClient.Track.Source
+        : {};
+    }
+
+    function attachSfuScreenTrack(track) {
+      if (!els.screenView || !track || !track.mediaStreamTrack) return;
+      try {
+        els.screenView.srcObject = new MediaStream([track.mediaStreamTrack]);
+        els.screenView.muted = true;
+        els.screenView.play().catch(() => {});
+      } catch (_) {}
+      updateMediaVisibility();
+    }
+
+    function clearSfuRemoteAudio() {
+      for (const el of sfu.remoteAudioEls.values()) {
+        try {
+          el.srcObject = null;
+          el.remove();
+        } catch (_) {}
+      }
+      sfu.remoteAudioEls.clear();
+    }
+
+    function handleSfuTrackSubscribed(track, publication, participant) {
+      if (!track) return;
+      const sourceConsts = sfuTrackSourceConsts();
+      const source = publication && publication.source ? publication.source : '';
+      const key = `${String(participant && participant.identity || '')}:${String(publication && publication.trackSid || '')}`;
+      if (track.kind === 'video') {
+        const isScreen = source === sourceConsts.ScreenShare || source === 'screen_share';
+        if (isScreen && !state.isHost) {
+          attachSfuScreenTrack(track);
+          setSyncLabel('receiving host stream');
+          updateStatusChips((state.participants || []).length);
+        }
+        return;
+      }
+      if (track.kind === 'audio') {
+        try {
+          const audio = track.attach();
+          audio.autoplay = true;
+          audio.playsInline = true;
+          audio.dataset.sfuAudio = key;
+          document.body.appendChild(audio);
+          sfu.remoteAudioEls.set(key, audio);
+        } catch (_) {}
+      }
+    }
+
+    function handleSfuTrackUnsubscribed(track, publication, participant) {
+      const key = `${String(participant && participant.identity || '')}:${String(publication && publication.trackSid || '')}`;
+      const audio = sfu.remoteAudioEls.get(key);
+      if (audio) {
+        try { audio.srcObject = null; audio.remove(); } catch (_) {}
+        sfu.remoteAudioEls.delete(key);
+      }
+      if (track && track.kind === 'video' && !state.isHost && els.screenView) {
+        const src = els.screenView.srcObject;
+        const streamTracks = src && src.getTracks ? src.getTracks() : [];
+        if (!streamTracks || !streamTracks.length) {
+          try { els.screenView.srcObject = null; } catch (_) {}
+        }
+      }
+    }
+
+    async function fetchSfuConfig() {
+      try {
+        const data = await apiRequest('GET', '/api/watch/sfu/config');
+        state.sfuEnabled = !!(data && data.enabled);
+        state.sfuUrl = String((data && data.url) || '').trim();
+        if (els.mediaModeSelect) {
+          const hasSfuOpt = Array.from(els.mediaModeSelect.options).some((o) => String(o.value) === 'sfu');
+          if (hasSfuOpt) {
+            const sfuOpt = Array.from(els.mediaModeSelect.options).find((o) => String(o.value) === 'sfu');
+            if (sfuOpt) sfuOpt.disabled = !state.sfuEnabled;
+          }
+        }
+      } catch (_) {
+        state.sfuEnabled = false;
+        state.sfuUrl = '';
+      }
+    }
+
+    async function disconnectSfu() {
+      try { await stopScreenShare(); } catch (_) {}
+      try { await stopVoiceChat(); } catch (_) {}
+      try { await stopWebcamShare(); } catch (_) {}
+      clearSfuRemoteAudio();
+      if (sfu.room) {
+        try { sfu.room.disconnect(); } catch (_) {}
+      }
+      sfu.room = null;
+      sfu.connected = false;
+    }
+
+    async function ensureSfuConnected() {
+      if (!isSfuMode()) return;
+      if (!state.roomCode || !state.participantToken) return;
+      if (sfu.connected && sfu.room) return;
+      if (!state.sfuEnabled || !state.sfuUrl) {
+        throw new Error('SFU mode is not configured on server.');
+      }
+      if (!window.LivekitClient || !window.LivekitClient.Room) {
+        throw new Error('SFU client library failed to load.');
+      }
+      const tokenRes = await apiRequest('POST', '/api/watch/sfu/token', {
+        roomCode: state.roomCode,
+        participantToken: state.participantToken,
+        displayName: String((els.displayName && els.displayName.value) || '').trim() || 'Viewer',
+      });
+      const roomUrl = String(tokenRes.url || state.sfuUrl || '').trim();
+      const token = String(tokenRes.token || '').trim();
+      if (!roomUrl || !token) {
+        throw new Error('SFU token request failed.');
+      }
+      const LK = window.LivekitClient;
+      const ev = sfuRoomEventConsts();
+      const room = new LK.Room({
+        adaptiveStream: true,
+        dynacast: true,
+      });
+      room.on(ev.TrackSubscribed || 'trackSubscribed', (track, publication, participant) => {
+        handleSfuTrackSubscribed(track, publication, participant);
+      });
+      room.on(ev.TrackUnsubscribed || 'trackUnsubscribed', (track, publication, participant) => {
+        handleSfuTrackUnsubscribed(track, publication, participant);
+      });
+      room.on(ev.Disconnected || 'disconnected', () => {
+        sfu.connected = false;
+        clearSfuRemoteAudio();
+      });
+      await room.connect(roomUrl, token);
+      sfu.room = room;
+      sfu.connected = true;
+      addEventLine('Connected to SFU relay');
+    }
+
     async function setSenderQuality(sender, profile) {
       if (!sender || !sender.getParameters || !sender.setParameters || !profile) return;
       try {
@@ -2850,6 +3043,20 @@
       rtc.localVoiceStream = stream;
       const mutedByHost = !!state.hostMuted[state.participantId || ''];
       for (const t of stream.getAudioTracks()) t.enabled = !mutedByHost;
+      if (isSfuMode()) {
+        await ensureSfuConnected();
+        const micTrack = stream.getAudioTracks()[0];
+        if (micTrack && sfu.room) {
+          if (sfu.localVoiceTrack) {
+            try { await sfu.room.localParticipant.unpublishTrack(sfu.localVoiceTrack); } catch (_) {}
+          }
+          await sfu.room.localParticipant.publishTrack(micTrack, { name: 'mic' });
+          sfu.localVoiceTrack = micTrack;
+        }
+        updateVoiceUi();
+        addEventLine('Voice joined');
+        return;
+      }
       updateVoiceUi();
       await syncVoiceOffers();
       addEventLine('Voice joined');
@@ -2861,6 +3068,10 @@
           try { t.stop(); } catch (_) {}
         }
       }
+      if (isSfuMode() && sfu.room && sfu.localVoiceTrack) {
+        try { await sfu.room.localParticipant.unpublishTrack(sfu.localVoiceTrack); } catch (_) {}
+      }
+      sfu.localVoiceTrack = null;
       rtc.localVoiceStream = null;
       for (const row of rtc.peers.values()) {
         const pc = row.pc;
@@ -2925,6 +3136,19 @@
         els.localWebcamPreview.play().catch(() => {});
       }
       updateVoiceUi();
+      if (isSfuMode()) {
+        await ensureSfuConnected();
+        const camTrack = stream.getVideoTracks()[0];
+        if (camTrack && sfu.room) {
+          if (sfu.localCamTrack) {
+            try { await sfu.room.localParticipant.unpublishTrack(sfu.localCamTrack); } catch (_) {}
+          }
+          await sfu.room.localParticipant.publishTrack(camTrack, { name: 'camera' });
+          sfu.localCamTrack = camTrack;
+        }
+        addEventLine('Webcam started');
+        return;
+      }
       if (!state.isHost) {
         await syncCamOfferToHost();
       }
@@ -2938,6 +3162,10 @@
         }
       }
       rtc.localCamStream = null;
+      if (isSfuMode() && sfu.room && sfu.localCamTrack) {
+        try { await sfu.room.localParticipant.unpublishTrack(sfu.localCamTrack); } catch (_) {}
+      }
+      sfu.localCamTrack = null;
       if (els.localWebcamPreview) {
         try { els.localWebcamPreview.srcObject = null; } catch (_) {}
         els.localWebcamPreview.classList.add('hidden-media');
@@ -3140,6 +3368,12 @@
     }
 
     function addChatLine(sender, message, messageId, createdAt) {
+      if (!state.roomCode) return;
+      if (state.chatScopeRoom && state.chatScopeRoom !== state.roomCode) {
+        state.chatMessages = new Map();
+        state.pinnedMessageId = 0;
+      }
+      state.chatScopeRoom = state.roomCode;
       const id = Number(messageId || 0);
       if (!id) return;
       const ts = createdAt
@@ -3753,6 +3987,27 @@
       } else {
         addEventLine('No share audio detected. In picker enable tab/system audio.');
       }
+      if (isSfuMode()) {
+        await ensureSfuConnected();
+        if (!sfu.room) throw new Error('SFU room unavailable.');
+        if (sfu.localScreenTrack) {
+          try { await sfu.room.localParticipant.unpublishTrack(sfu.localScreenTrack); } catch (_) {}
+        }
+        if (sfu.localScreenAudioTrack) {
+          try { await sfu.room.localParticipant.unpublishTrack(sfu.localScreenAudioTrack); } catch (_) {}
+        }
+        if (vidTrack) {
+          await sfu.room.localParticipant.publishTrack(vidTrack, { name: 'screen' });
+          sfu.localScreenTrack = vidTrack;
+        }
+        if (audTrack) {
+          await sfu.room.localParticipant.publishTrack(audTrack, { name: 'screen-audio' });
+          sfu.localScreenAudioTrack = audTrack;
+        }
+        updateMediaVisibility();
+        updateHostPreview();
+        return;
+      }
       await broadcastOffersToViewers();
       startAdaptiveLoop();
       updateMediaVisibility();
@@ -3766,6 +4021,16 @@
         }
       }
       rtc.localScreenStream = null;
+      if (isSfuMode() && sfu.room) {
+        if (sfu.localScreenTrack) {
+          try { await sfu.room.localParticipant.unpublishTrack(sfu.localScreenTrack); } catch (_) {}
+        }
+        if (sfu.localScreenAudioTrack) {
+          try { await sfu.room.localParticipant.unpublishTrack(sfu.localScreenAudioTrack); } catch (_) {}
+        }
+      }
+      sfu.localScreenTrack = null;
+      sfu.localScreenAudioTrack = null;
       els.startShareBtn.disabled = !state.isHost;
       els.stopShareBtn.disabled = true;
       if (state.isHost) {
@@ -3782,6 +4047,7 @@
     }
 
     async function processSignal(payload) {
+      if (isSfuMode()) return;
       const toId = String(payload.toParticipantId || '');
       if (!toId || toId !== state.participantId) return;
       const fromId = String(payload.fromParticipantId || '');
@@ -3828,6 +4094,7 @@
         title: els.titleInput.value.trim(),
         mediaUrl: els.mediaInput.value.trim(),
         themeKey: selectedTheme,
+        mediaMode: String((els.mediaModeSelect && els.mediaModeSelect.value) || state.mediaMode || 'webrtc').toLowerCase() === 'sfu' ? 'sfu' : 'webrtc',
         accessMode: String((els.accessModeSelect && els.accessModeSelect.value) || 'public').trim().toLowerCase()
       };
       const data = await apiRequest('POST', '/api/watch/create', payload);
@@ -3836,6 +4103,7 @@
       state.participantId = data.participantId || '';
       state.isHost = true;
       state.sinceEventId = 0;
+      applyMediaModeState(String(data.mediaMode || payload.mediaMode || 'webrtc'), true);
       state.roomThemeKey = selectedTheme || 'clean';
       applyTheme(state.roomThemeKey, false);
       els.roomInput.value = state.roomCode;
@@ -3879,6 +4147,7 @@
       state.isHost = !!data.isHost;
       state.inviteToken = '';
       state.sinceEventId = 0;
+      applyMediaModeState(String((data.room && data.room.mediaMode) || state.mediaMode || 'webrtc'), true);
       onSessionStart();
       saveRecentRoom(state.roomCode);
       if (isPremiumUser()) {
@@ -4126,6 +4395,9 @@
     function onSessionStart() {
       state.chatMessages = new Map();
       state.pinnedMessageId = 0;
+      state.chatScopeRoom = state.roomCode || '';
+      state.requests = [];
+      state.hostMuted = {};
       renderChatFeed();
       updateBadges();
       setThemeControlState();
@@ -4138,6 +4410,7 @@
       els.stopShareBtn.disabled = true;
       els.resetRoomBtn.disabled = !state.isHost;
       els.deleteRoomBtn.disabled = !state.isHost;
+      if (els.mediaModeSelect) els.mediaModeSelect.disabled = true;
       if (els.setAccessModeBtn) els.setAccessModeBtn.disabled = !state.isHost;
       if (els.accessModeSelect) els.accessModeSelect.disabled = !state.isHost;
       if (els.inviteTtlInput) els.inviteTtlInput.disabled = !state.isHost;
@@ -4150,12 +4423,26 @@
       saveSession();
       updateMediaVisibility();
       updateHostPreview();
+      if (isSfuMode()) {
+        ensureSfuConnected().catch((err) => {
+          const msg = String(err && err.message ? err.message : err);
+          setStatus(false, 'SFU connect failed: ' + msg);
+        });
+      }
       startPollingLoop();
     }
 
     function applyRoomState(room, force) {
       if (!room) return;
       state.lastRoom = room;
+      applyMediaModeState(String(room.mediaMode || state.mediaMode || 'webrtc'), true);
+      if (els.joinHint) {
+        els.joinHint.textContent = isSfuMode()
+          ? 'SFU room active: better scaling for larger watch parties.'
+          : (state.clientMode === 'desktop'
+            ? 'Desktop mode selected. Create/join opens the FrenzyNet desktop app.'
+            : 'Share your room code in Discord voice chat. Everyone runs their own stream account.');
+      }
       state.accessMode = String(room.accessMode || 'public');
       state.allowWebcam = room.allowWebcam !== false;
       const perms = room.cohostPerms || {};
@@ -4304,13 +4591,13 @@
         updateStatusChips(data.activeCount || 0);
         applyRoomState(data.room || null, false);
         updateMediaVisibility();
-        if (state.isHost && rtc.localScreenStream) {
+        if (!isSfuMode() && state.isHost && rtc.localScreenStream) {
           await broadcastOffersToViewers();
         }
-        if (voiceOn()) {
+        if (!isSfuMode() && voiceOn()) {
           await syncVoiceOffers();
         }
-        if (camOn() && !state.isHost) {
+        if (!isSfuMode() && camOn() && !state.isHost) {
           await syncCamOfferToHost();
         }
         for (const ev of (data.events || [])) {
@@ -4351,7 +4638,9 @@
             const targetId = String(ev.payload?.toParticipantId || '').toLowerCase();
             if (targetId && targetId === String(state.participantId || '').toLowerCase()) {
               stopPollingLoop();
+              await disconnectSfu().catch(() => {});
               state.roomCode = '';
+              state.chatScopeRoom = '';
               state.participantToken = '';
               state.participantId = '';
               clearSession();
@@ -4359,6 +4648,7 @@
               state.pinnedMessageId = 0;
               renderChatFeed();
               await stopWebcamShare().catch(() => {});
+              if (els.mediaModeSelect) els.mediaModeSelect.disabled = false;
               setStatus(false, 'You were removed by the host.');
               setSyncLabel('removed');
               updateBadges();
@@ -4431,15 +4721,18 @@
         if (msg.includes('invalid_participant')) {
           const prevRoom = String(state.roomCode || '');
           stopPollingLoop();
+          await disconnectSfu().catch(() => {});
           clearSession();
           state.chatMessages = new Map();
           state.pinnedMessageId = 0;
           renderChatFeed();
           await stopWebcamShare().catch(() => {});
           state.roomCode = '';
+          state.chatScopeRoom = '';
           state.participantToken = '';
           state.participantId = '';
           state.participants = [];
+          if (els.mediaModeSelect) els.mediaModeSelect.disabled = false;
           updateBadges();
           const canAttemptAutoJoin = !state.autoRejoinTried && prevRoom && String(els.displayName && els.displayName.value || '').trim();
           if (canAttemptAutoJoin) {
@@ -4764,6 +5057,15 @@
     if (els.densitySelect) {
       els.densitySelect.addEventListener('change', () => applyDensityMode(els.densitySelect.value, true));
     }
+    if (els.mediaModeSelect) {
+      els.mediaModeSelect.addEventListener('change', () => {
+        if (state.roomCode) {
+          els.mediaModeSelect.value = currentMediaMode();
+          return;
+        }
+        applyMediaModeState(els.mediaModeSelect.value, false);
+      });
+    }
     if (els.uiModeSelect) {
       els.uiModeSelect.addEventListener('change', () => applyUIMode(els.uiModeSelect.value, true));
     }
@@ -4876,9 +5178,12 @@
       try {
         await sendControl('delete_room', {});
         stopPollingLoop();
+        await disconnectSfu().catch(() => {});
         await stopScreenShare();
+        await stopVoiceChat();
         await stopWebcamShare();
         state.roomCode = '';
+        state.chatScopeRoom = '';
         state.participantToken = '';
         state.participantId = '';
         state.participants = [];
@@ -4896,6 +5201,7 @@
         els.resetRoomBtn.disabled = true;
         els.deleteRoomBtn.disabled = true;
         els.chatBtn.disabled = true;
+        if (els.mediaModeSelect) els.mediaModeSelect.disabled = false;
         updateBadges();
         applyTheme(state.localThemeKey || 'clean', false);
         setThemeControlState();
@@ -5012,6 +5318,15 @@
       if (els.audioProfileSelect && !els.audioProfileSelect.value) {
         els.audioProfileSelect.value = 'cinema';
       }
+      if (els.mediaModeSelect && !els.mediaModeSelect.value) {
+        els.mediaModeSelect.value = 'webrtc';
+      }
+      applyMediaModeState((els.mediaModeSelect && els.mediaModeSelect.value) || 'webrtc', false);
+      fetchSfuConfig().then(() => {
+        if (!state.sfuEnabled && currentMediaMode() === 'sfu') {
+          applyMediaModeState('webrtc', false);
+        }
+      }).catch(() => {});
       if (els.webcamPolicySelect && !els.webcamPolicySelect.value) {
         els.webcamPolicySelect.value = 'allow';
       }
