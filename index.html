@@ -133,9 +133,6 @@
     }
     .kpi .n { font-weight:800; font-size:1.1rem; color:#e7f4ff; }
     .kpi .k { font-size:.76rem; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
-    .poll-option { margin-top:8px; }
-    .bar-wrap { height:8px; border-radius:999px; background:#1a2e53; overflow:hidden; margin-top:4px; }
-    .bar { height:100%; background:linear-gradient(90deg,#37d8ff,#00b8ef); width:0%; transition:width .2s ease; }
     .spotlight {
       border:1px solid #3b6192;
       border-radius:10px;
@@ -260,19 +257,10 @@
     </section>
 
     <section class="card" style="margin-top:10px">
-      <h3>Community Poll</h3>
-      <p>Vote what should be featured on the next major public night.</p>
-      <div class="poll-option">
-        <div class="row"><button data-poll="action" class="btn poll-vote" type="button">Vote Action</button><span id="pollActionLabel" class="meta">0 votes</span></div>
-        <div class="bar-wrap"><div id="pollActionBar" class="bar"></div></div>
-      </div>
-      <div class="poll-option">
-        <div class="row"><button data-poll="comedy" class="btn poll-vote" type="button">Vote Comedy</button><span id="pollComedyLabel" class="meta">0 votes</span></div>
-        <div class="bar-wrap"><div id="pollComedyBar" class="bar"></div></div>
-      </div>
-      <div class="poll-option">
-        <div class="row"><button data-poll="anime" class="btn poll-vote" type="button">Vote Anime</button><span id="pollAnimeLabel" class="meta">0 votes</span></div>
-        <div class="bar-wrap"><div id="pollAnimeBar" class="bar"></div></div>
+      <h3>Community Voting</h3>
+      <p>All official polls and voting now happen in Discord only.</p>
+      <div class="row">
+        <a class="btn" href="https://discord.gg/4uRUSAN498" target="_blank" rel="noopener">Open Discord Voting</a>
       </div>
     </section>
 
@@ -461,36 +449,6 @@
       document.getElementById('reactInvite').addEventListener('click', () => { const r = readReactions(); r.invite += 1; writeReactions(r); renderReactions(); });
       renderReactions();
 
-      function readPoll() {
-        try { return JSON.parse(localStorage.getItem('fn_public_poll') || '{"action":0,"comedy":0,"anime":0}'); } catch (_) { return { action:0, comedy:0, anime:0 }; }
-      }
-      function writePoll(v) {
-        try { localStorage.setItem('fn_public_poll', JSON.stringify(v)); } catch (_) {}
-      }
-      function renderPoll() {
-        const p = readPoll();
-        const total = Math.max(1, p.action + p.comedy + p.anime);
-        const aPct = Math.round((p.action / total) * 100);
-        const cPct = Math.round((p.comedy / total) * 100);
-        const nPct = Math.round((p.anime / total) * 100);
-        document.getElementById('pollActionLabel').textContent = `${p.action} votes`;
-        document.getElementById('pollComedyLabel').textContent = `${p.comedy} votes`;
-        document.getElementById('pollAnimeLabel').textContent = `${p.anime} votes`;
-        document.getElementById('pollActionBar').style.width = `${aPct}%`;
-        document.getElementById('pollComedyBar').style.width = `${cPct}%`;
-        document.getElementById('pollAnimeBar').style.width = `${nPct}%`;
-      }
-      document.querySelectorAll('.poll-vote').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          const key = btn.getAttribute('data-poll');
-          const p = readPoll();
-          if (!p[key] && p[key] !== 0) return;
-          p[key] += 1;
-          writePoll(p);
-          renderPoll();
-        });
-      });
-      renderPoll();
     })();
   </script>
 </body>
