@@ -579,6 +579,18 @@
                     <option value="off">No Audio</option>
                   </select>
                 </div>
+                <div>
+                  <label for="accessModeSelect">Party Access</label>
+                  <select id="accessModeSelect">
+                    <option value="public">Public (Anyone can join)</option>
+                    <option value="invite">Invite Only (Host approval)</option>
+                    <option value="closed">Closed (No new joins)</option>
+                  </select>
+                </div>
+                <div>
+                  <label>&nbsp;</label>
+                  <button id="setAccessModeBtn" class="secondary">Set Access Mode</button>
+                </div>
               </div>
               <button id="setMediaBtn" class="secondary">Set Media</button>
               <button id="copyLinkBtn" class="secondary">Copy Invite</button>
@@ -600,6 +612,18 @@
                 <select id="muteTargetSelect"></select>
                 <button id="muteTargetBtn" class="secondary">Mute</button>
                 <button id="unmuteTargetBtn" class="secondary">Unmute</button>
+              </div>
+              <div class="row">
+                <select id="kickTargetSelect"></select>
+                <button id="kickTargetBtn" class="danger-btn">Kick User</button>
+              </div>
+            </div>
+            <div class="block stack full">
+              <h3>Join Requests (Invite Only)</h3>
+              <select id="joinRequestSelect"></select>
+              <div class="row">
+                <button id="approveJoinBtn" class="secondary">Approve Join</button>
+                <button id="denyJoinBtn" class="secondary">Deny Join</button>
               </div>
             </div>
             <div class="block stack full">
@@ -722,9 +746,11 @@
             <h3>Room Messages</h3>
             <div class="muted">Live room chat appears here. Newest messages show first.</div>
             <div id="chatFeed" class="chat-feed"></div>
-            <h3>Events</h3>
-            <div class="muted">Playback and system events for this room.</div>
-            <div id="events" class="events"></div>
+            <div id="eventsBlock">
+              <h3>Events</h3>
+              <div class="muted">Playback and system events for this room.</div>
+              <div id="events" class="events"></div>
+            </div>
           </div>
           <div class="block admin-delete">
             <h3>Admin Console</h3>
@@ -791,8 +817,15 @@
       muteTargetSelect: document.getElementById('muteTargetSelect'),
       muteTargetBtn: document.getElementById('muteTargetBtn'),
       unmuteTargetBtn: document.getElementById('unmuteTargetBtn'),
+      kickTargetSelect: document.getElementById('kickTargetSelect'),
+      kickTargetBtn: document.getElementById('kickTargetBtn'),
       shareSurfaceSelect: document.getElementById('shareSurfaceSelect'),
       shareAudioSelect: document.getElementById('shareAudioSelect'),
+      accessModeSelect: document.getElementById('accessModeSelect'),
+      setAccessModeBtn: document.getElementById('setAccessModeBtn'),
+      joinRequestSelect: document.getElementById('joinRequestSelect'),
+      approveJoinBtn: document.getElementById('approveJoinBtn'),
+      denyJoinBtn: document.getElementById('denyJoinBtn'),
       createBtn: document.getElementById('createBtn'),
       joinBtn: document.getElementById('joinBtn'),
       setMediaBtn: document.getElementById('setMediaBtn'),
@@ -826,6 +859,7 @@
       reactionButtons: Array.from(document.querySelectorAll('.reaction-btn')),
       participantsGrid: document.getElementById('participantsGrid'),
       events: document.getElementById('events'),
+      eventsBlock: document.getElementById('eventsBlock'),
       chatFeed: document.getElementById('chatFeed'),
       player: document.getElementById('player'),
       screenView: document.getElementById('screenView'),
@@ -853,12 +887,16 @@
       adminRooms: [],
       requests: [],
       roomThemeKey: 'clean',
-      localThemeKey: 'clean'
+      localThemeKey: 'clean',
+      accessMode: 'public',
+      pendingJoinRequests: [],
+      pendingJoinToken: ''
     };
     const SESSION_KEY = 'telewatch_session';
     const ADMIN_SESSION_KEY = 'telewatch_admin_session';
     const RECENT_ROOMS_KEY = 'telewatch_recent_rooms';
     const THEME_KEY = 'telewatch_theme';
+    const JOIN_REQUEST_KEY = 'telewatch_join_request';
 
     const THEMES = {
       clean: {
@@ -1382,6 +1420,57 @@
       }
     }
 
+    function setEventsVisibility() {
+      if (!els.eventsBlock) return;
+      const isAdmin = !!(state.adminToken && state.adminUsername);
+      els.eventsBlock.style.display = isAdmin ? '' : 'none';
+    }
+
+    function joinRequestStorageKey(roomCode, displayName) {
+      return `${normalizeRoomCode(roomCode)}::${String(displayName || '').trim().toLowerCase()}`;
+    }
+
+    function readPendingJoinToken(roomCode, displayName) {
+      try {
+        const raw = localStorage.getItem(JOIN_REQUEST_KEY) || '{}';
+        const map = JSON.parse(raw);
+        const key = joinRequestStorageKey(roomCode, displayName);
+        return String((map && map[key]) || '').trim();
+      } catch (_) {
+        return '';
+      }
+    }
+
+    function writePendingJoinToken(roomCode, displayName, token) {
+      try {
+        const raw = localStorage.getItem(JOIN_REQUEST_KEY) || '{}';
+        const map = JSON.parse(raw) || {};
+        const key = joinRequestStorageKey(roomCode, displayName);
+        if (token) map[key] = token;
+        else delete map[key];
+        localStorage.setItem(JOIN_REQUEST_KEY, JSON.stringify(map));
+      } catch (_) {}
+    }
+
+    function renderJoinRequests() {
+      if (!els.joinRequestSelect) return;
+      const rows = Array.isArray(state.pendingJoinRequests) ? state.pendingJoinRequests : [];
+      els.joinRequestSelect.innerHTML = '';
+      if (!rows.length) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = 'No pending join requests';
+        els.joinRequestSelect.appendChild(opt);
+        return;
+      }
+      for (const r of rows) {
+        const opt = document.createElement('option');
+        opt.value = String(r.requestToken || '');
+        opt.textContent = `${String(r.displayName || 'Guest')} · ${String(r.createdAt || '')}`;
+        els.joinRequestSelect.appendChild(opt);
+      }
+    }
+
     async function setRoomTheme(themeKey) {
       const clean = Object.prototype.hasOwnProperty.call(THEMES, themeKey) ? themeKey : 'clean';
       if (!state.roomCode || !state.participantToken || !state.isHost) {
@@ -1691,21 +1780,33 @@
       const hostCanModerate = !!state.isHost;
       if (els.muteTargetBtn) els.muteTargetBtn.disabled = !hostCanModerate;
       if (els.unmuteTargetBtn) els.unmuteTargetBtn.disabled = !hostCanModerate;
+      if (els.kickTargetBtn) els.kickTargetBtn.disabled = !hostCanModerate;
+      if (els.approveJoinBtn) els.approveJoinBtn.disabled = !hostCanModerate;
+      if (els.denyJoinBtn) els.denyJoinBtn.disabled = !hostCanModerate;
+      if (els.setAccessModeBtn) els.setAccessModeBtn.disabled = !hostCanModerate;
     }
 
     function refreshMuteTargets() {
       if (!els.muteTargetSelect) return;
       els.muteTargetSelect.innerHTML = '';
+      if (els.kickTargetSelect) els.kickTargetSelect.innerHTML = '';
       const mine = String(state.participantId || '');
       const targets = (state.participants || []).filter((p) => p && !p.isSelf).map((p) => ({
         id: String(p.participantId || ''),
-        name: String(p.displayName || p.participantId || 'user')
+        name: String(p.displayName || p.participantId || 'user'),
+        isHost: !!p.isHost
       })).filter((p) => p.id && p.id !== mine);
       if (!targets.length) {
         const o = document.createElement('option');
         o.value = '';
         o.textContent = 'No participants';
         els.muteTargetSelect.appendChild(o);
+        if (els.kickTargetSelect) {
+          const ko = document.createElement('option');
+          ko.value = '';
+          ko.textContent = 'No participants';
+          els.kickTargetSelect.appendChild(ko);
+        }
         return;
       }
       for (const t of targets) {
@@ -1713,6 +1814,18 @@
         o.value = t.id;
         o.textContent = t.name;
         els.muteTargetSelect.appendChild(o);
+        if (els.kickTargetSelect && !t.isHost) {
+          const ko = document.createElement('option');
+          ko.value = t.id;
+          ko.textContent = t.name;
+          els.kickTargetSelect.appendChild(ko);
+        }
+      }
+      if (els.kickTargetSelect && !els.kickTargetSelect.options.length) {
+        const ko = document.createElement('option');
+        ko.value = '';
+        ko.textContent = 'No kickable users';
+        els.kickTargetSelect.appendChild(ko);
       }
     }
 
@@ -1808,6 +1921,40 @@
       setStatus(true, (muted ? 'Muted ' : 'Unmuted ') + toParticipantId);
     }
 
+    async function setAccessMode() {
+      if (!state.isHost) return;
+      const accessMode = String((els.accessModeSelect && els.accessModeSelect.value) || 'public').trim().toLowerCase();
+      if (!['public', 'invite', 'closed'].includes(accessMode)) {
+        setStatus(false, 'Invalid access mode.');
+        return;
+      }
+      await sendControl('set_access_mode', { accessMode });
+      state.accessMode = accessMode;
+      setStatus(true, 'Access mode set to ' + accessMode + '.');
+    }
+
+    async function kickSelectedUser() {
+      if (!state.isHost) return;
+      const toParticipantId = String((els.kickTargetSelect && els.kickTargetSelect.value) || '').trim().toLowerCase();
+      if (!toParticipantId) {
+        setStatus(false, 'Select a user to kick.');
+        return;
+      }
+      await sendControl('kick_user', { toParticipantId });
+      setStatus(true, 'User removed from room.');
+    }
+
+    async function resolveJoinRequest(status) {
+      if (!state.isHost) return;
+      const requestToken = String((els.joinRequestSelect && els.joinRequestSelect.value) || '').trim();
+      if (!requestToken) {
+        setStatus(false, 'No join request selected.');
+        return;
+      }
+      await sendControl('resolve_join_request', { requestToken, status });
+      setStatus(true, `Join request ${status}.`);
+    }
+
     async function refreshAdminRooms() {
       if (!(state.adminToken && state.adminUsername)) return;
       const data = await apiRequest('POST', '/api/watch/admin/rooms', { adminToken: state.adminToken });
@@ -1856,6 +2003,7 @@
     }
 
     function addEventLine(text) {
+      if (!(state.adminToken && state.adminUsername)) return;
       const d = document.createElement('div');
       d.textContent = text;
       els.events.prepend(d);
@@ -2191,7 +2339,8 @@
         displayName: els.displayName.value.trim() || 'Host',
         title: els.titleInput.value.trim(),
         mediaUrl: els.mediaInput.value.trim(),
-        themeKey: selectedTheme
+        themeKey: selectedTheme,
+        accessMode: String((els.accessModeSelect && els.accessModeSelect.value) || 'public').trim().toLowerCase()
       };
       const data = await apiRequest('POST', '/api/watch/create', payload);
       state.roomCode = data.roomCode;
@@ -2209,11 +2358,23 @@
 
     async function joinRoom() {
       const inviteCode = parseInviteRoom(els.inviteInput && els.inviteInput.value);
+      const roomCode = normalizeRoomCode(inviteCode || els.roomInput.value);
+      const displayName = els.displayName.value.trim() || '';
+      const requestToken = readPendingJoinToken(roomCode, displayName);
       const payload = {
-        roomCode: normalizeRoomCode(inviteCode || els.roomInput.value),
-        displayName: els.displayName.value.trim() || ''
+        roomCode,
+        displayName
       };
+      if (requestToken) payload.requestToken = requestToken;
       const data = await apiRequest('POST', '/api/watch/join', payload);
+      if (data && data.pendingApproval) {
+        state.pendingJoinToken = String(data.requestToken || requestToken || '');
+        writePendingJoinToken(roomCode, displayName, state.pendingJoinToken);
+        setStatus(false, 'Join request sent. Waiting for host approval...');
+        return;
+      }
+      writePendingJoinToken(roomCode, displayName, '');
+      state.pendingJoinToken = '';
       state.roomCode = payload.roomCode;
       state.participantToken = data.participantToken;
       state.participantId = data.participantId || '';
@@ -2262,6 +2423,7 @@
       els.adminLoginPanel.classList.toggle('hidden', signedIn);
       els.adminToolsPanel.classList.toggle('hidden', !signedIn);
       if (els.adminRoomsBlock) els.adminRoomsBlock.classList.toggle('hidden', !signedIn);
+      setEventsVisibility();
     }
 
     function saveAdminSession() {
@@ -2380,6 +2542,8 @@
       els.stopShareBtn.disabled = true;
       els.resetRoomBtn.disabled = !state.isHost;
       els.deleteRoomBtn.disabled = !state.isHost;
+      if (els.setAccessModeBtn) els.setAccessModeBtn.disabled = !state.isHost;
+      if (els.accessModeSelect) els.accessModeSelect.disabled = !state.isHost;
       els.chatBtn.disabled = false;
       setWizardStep(2);
       switchTab(state.isHost ? 'host' : 'chat');
@@ -2393,6 +2557,10 @@
     function applyRoomState(room, force) {
       if (!room) return;
       state.lastRoom = room;
+      state.accessMode = String(room.accessMode || 'public');
+      if (els.accessModeSelect && ['public', 'invite', 'closed'].includes(state.accessMode)) {
+        els.accessModeSelect.value = state.accessMode;
+      }
       const roomTheme = Object.prototype.hasOwnProperty.call(THEMES, String(room.themeKey || '')) ? String(room.themeKey) : 'clean';
       state.roomThemeKey = roomTheme;
       applyTheme(roomTheme, false);
@@ -2485,9 +2653,11 @@
         });
         state.participantId = data.selfParticipantId || state.participantId;
         state.participants = Array.isArray(data.participants) ? data.participants : [];
+        state.pendingJoinRequests = Array.isArray(data.pendingJoinRequests) ? data.pendingJoinRequests : [];
         refreshMuteTargets();
         updateVoiceUi();
         renderParticipants();
+        renderJoinRequests();
         setStatus(true, 'Connected · active viewers: ' + (data.activeCount || 0));
         updateStatusChips(data.activeCount || 0);
         applyRoomState(data.room || null, false);
@@ -2532,6 +2702,22 @@
             renderParticipants();
             continue;
           }
+          if (ev.type === 'kick_user') {
+            const targetId = String(ev.payload?.toParticipantId || '').toLowerCase();
+            if (targetId && targetId === String(state.participantId || '').toLowerCase()) {
+              if (state.pollTimer) clearInterval(state.pollTimer);
+              state.roomCode = '';
+              state.participantToken = '';
+              state.participantId = '';
+              clearSession();
+              setStatus(false, 'You were removed by the host.');
+              setSyncLabel('removed');
+              updateBadges();
+              setThemeControlState();
+              return;
+            }
+            continue;
+          }
           if (ev.type === 'chat') {
             addChatLine(actor, String(ev.payload?.message || ''));
             continue;
@@ -2539,7 +2725,20 @@
           addEventLine(actor + ' · ' + ev.type.replace('_', ' '));
         }
       } catch (err) {
-        setStatus(false, 'Reconnect pending: ' + (err?.message || 'network_error'));
+        const msg = String(err && err.message ? err.message : 'network_error');
+        if (msg.includes('invalid_participant')) {
+          if (state.pollTimer) clearInterval(state.pollTimer);
+          clearSession();
+          state.roomCode = '';
+          state.participantToken = '';
+          state.participantId = '';
+          state.participants = [];
+          updateBadges();
+          setStatus(false, 'You are no longer in this room.');
+          setSyncLabel('disconnected');
+          return;
+        }
+        setStatus(false, 'Reconnect pending: ' + msg);
         setSyncLabel('retrying');
         updateStatusChips(0);
         updateMediaVisibility();
@@ -2568,6 +2767,15 @@
         await joinRoom();
       } catch (err) {
         const msg = String(err && err.message ? err.message : err);
+        if (msg.includes('room_closed')) {
+          setStatus(false, 'This room is closed. Host must reopen it.');
+          return;
+        }
+        if (msg.includes('join_request_denied')) {
+          writePendingJoinToken(normalizeRoomCode(els.roomInput.value), els.displayName.value.trim() || '', '');
+          setStatus(false, 'Join request denied by host.');
+          return;
+        }
         if (msg.includes('room_full')) {
           setStatus(false, 'Room is full (25 people max).');
           return;
@@ -2632,6 +2840,26 @@
     if (els.unmuteTargetBtn) {
       els.unmuteTargetBtn.addEventListener('click', async () => {
         try { await hostSetMuteTarget(false); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
+      });
+    }
+    if (els.kickTargetBtn) {
+      els.kickTargetBtn.addEventListener('click', async () => {
+        try { await kickSelectedUser(); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
+      });
+    }
+    if (els.setAccessModeBtn) {
+      els.setAccessModeBtn.addEventListener('click', async () => {
+        try { await setAccessMode(); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
+      });
+    }
+    if (els.approveJoinBtn) {
+      els.approveJoinBtn.addEventListener('click', async () => {
+        try { await resolveJoinRequest('approved'); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
+      });
+    }
+    if (els.denyJoinBtn) {
+      els.denyJoinBtn.addEventListener('click', async () => {
+        try { await resolveJoinRequest('denied'); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
       });
     }
     if (els.copyAdminRoomBtn) {
@@ -2835,6 +3063,8 @@
       updateMediaVisibility();
       renderParticipants();
       renderRequestQueue();
+      renderJoinRequests();
+      setEventsVisibility();
       refreshOpenParties();
       if (openPartyTimer) clearInterval(openPartyTimer);
       openPartyTimer = setInterval(refreshOpenParties, 15000);
