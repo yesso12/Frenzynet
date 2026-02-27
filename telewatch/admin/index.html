@@ -28,6 +28,13 @@
       background: linear-gradient(180deg, var(--panel-soft), #fff);
       padding: 12px;
     }
+    details.tool-section summary {
+      cursor: pointer;
+      font-weight: 800;
+      color: #2b3f57;
+      list-style: none;
+    }
+    details.tool-section summary::-webkit-details-marker { display: none; }
     .row { display: flex; gap: 8px; flex-wrap: wrap; }
     .row > * { flex: 1; min-width: 150px; }
     label { display: block; margin: 0 0 4px; font-size: 11px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
@@ -132,16 +139,7 @@
         <div style="align-self:end"><button id="logoutBtn" class="secondary">Sign Out</button></div>
       </div>
 
-      <div class="tool-section">
-      <h3 style="margin:0 0 8px">Room Management</h3>
-      <div class="row">
-        <div>
-          <label for="roomCodeDelete">Room Code</label>
-          <input id="roomCodeDelete" placeholder="DADDYR" />
-        </div>
-        <div style="align-self:end"><button id="deleteRoomBtn" class="danger">Delete Room</button></div>
-      </div>
-      </div>
+      <div class="muted" style="margin-top:8px">Main Event workspace is isolated below for fast big-night operation.</div>
 
       <div class="tool-section">
       <h3 style="margin:0 0 8px">Main Event Control</h3>
@@ -300,8 +298,16 @@
       <iframe id="studioStreamFrame" class="stream-frame" loading="lazy" referrerpolicy="strict-origin-when-cross-origin"></iframe>
       </div>
 
-      <div class="tool-section">
-      <h3 style="margin:0 0 8px">Admin Accounts</h3>
+      <details class="tool-section">
+      <summary>Other Admin Tools (optional)</summary>
+      <div class="row" style="margin-top:10px">
+        <div>
+          <label for="roomCodeDelete">Room Code</label>
+          <input id="roomCodeDelete" placeholder="DADDYR" />
+        </div>
+        <div style="align-self:end"><button id="deleteRoomBtn" class="danger">Delete Room</button></div>
+      </div>
+      <div style="height:8px"></div>
       <div class="row">
         <div>
           <label for="newAdminUser">Add/Update Username</label>
@@ -321,7 +327,7 @@
         <select id="adminList"></select>
       </div>
       <div style="margin-top:8px"><button id="removeAdminBtn" class="danger">Remove Selected Admin</button></div>
-      </div>
+      </details>
     </div>
   </div>
 
