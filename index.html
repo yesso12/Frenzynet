@@ -263,6 +263,50 @@
     .btn-primary:hover { transform:translateY(-1px) scale(1.01); }
     .btn-secondary { background:rgba(8,18,35,.85); border-color:var(--line); color:var(--text); }
     .btn-secondary:hover { border-color:var(--brand); color:var(--brand); }
+    .watch-join {
+      margin-top:12px;
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      align-items:center;
+    }
+    .watch-input {
+      flex:1 1 220px;
+      min-width:170px;
+      border:1px solid var(--line);
+      border-radius:10px;
+      background:rgba(8,18,35,.88);
+      color:var(--text);
+      padding:10px 12px;
+      font:inherit;
+      font-weight:700;
+      letter-spacing:.04em;
+      text-transform:uppercase;
+    }
+    .watch-input::placeholder { color:var(--muted); letter-spacing:.02em; text-transform:none; }
+    .party-grid {
+      margin-top:10px;
+      display:grid;
+      grid-template-columns:repeat(5,minmax(0,1fr));
+      gap:10px;
+    }
+    .party-btn {
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+      border:1px solid #6a47b8;
+      border-radius:12px;
+      text-decoration:none;
+      background:linear-gradient(150deg, rgba(34,17,59,.95), rgba(14,9,30,.94));
+      color:var(--text);
+      padding:10px;
+      transition:.2s;
+    }
+    .party-btn:hover { border-color:var(--brand); transform:translateY(-1px); box-shadow:0 10px 24px rgba(125,77,255,.35); }
+    .party-code { font-family:'Orbitron',sans-serif; font-size:.95rem; letter-spacing:.06em; }
+    .party-meta { font-size:.82rem; color:var(--muted); }
+    .party-live { color:var(--good); font-weight:700; }
+    .party-open { color:#c4b3e7; font-weight:700; }
 
     .chip-row { display:flex; gap:8px; flex-wrap:wrap; margin-top:14px; animation: rise 1.1s ease-out both; }
     .chip {
@@ -488,6 +532,7 @@
       .upsell-grid { grid-template-columns:1fr; }
       .addon-wall { grid-template-columns:1fr 1fr; }
       .stack-grid { grid-template-columns:1fr; }
+      .party-grid { grid-template-columns:1fr 1fr; }
       .countdown-timer { grid-template-columns:repeat(2,minmax(0,1fr)); }
       .brand img { width:185px; }
       .server-room { opacity:.28; gap:1vw; padding-bottom:2.2vh; }
@@ -496,6 +541,7 @@
     @media (max-width:680px) {
       .game-grid { grid-template-columns:1fr; }
       .addon-wall { grid-template-columns:1fr; }
+      .party-grid { grid-template-columns:1fr; }
     }
   </style>
 </head>
@@ -540,6 +586,7 @@
         <a class="link-btn" href="/frenzynet-updates/trust-info.json">Trust Info</a>
         <a class="link-btn" href="/frenzynet-updates/release-notes-stable.json">Release Notes</a>
         <a class="link-btn" href="/status/">Status</a>
+        <a class="link-btn" data-track="nav_watch_party" href="/telewatch/">Watch Party</a>
         <a class="link-btn" href="/referrals/">Referrals</a>
         <a class="link-btn" href="/portal/">Client Portal</a>
         <a class="link-btn" href="/admin/" target="_blank" rel="noopener">Admin Login</a>
@@ -560,6 +607,7 @@
           <div class="cta-row">
             <a id="heroCtaPrimary" data-track="hero_primary" class="btn btn-primary" href="/billing/">Start Subscription</a>
             <a id="heroCtaSecondary" data-track="hero_secondary" class="btn btn-primary" href="https://discord.gg/4uRUSAN498" target="_blank" rel="noopener">Join Discord Sales</a>
+            <a data-track="hero_watch" class="btn btn-primary" href="/telewatch/">Start Watch Party</a>
             <a data-track="hero_download" class="btn btn-secondary" href="/frenzynet-updates/">Download Client Files</a>
             <a data-track="hero_checkout" class="btn btn-secondary" href="/billing/">Open Checkout</a>
           </div>
@@ -680,6 +728,32 @@
     <section class="game-zone">
       <h2>Player Reviews</h2>
       <div id="reviewCard" class="stack-card"><h4>Loading reviews...</h4></div>
+    </section>
+
+    <section class="game-zone">
+      <h2>Discord Watch Party</h2>
+      <div class="grid">
+        <article class="panel">
+          <h3>Join By Room Code</h3>
+          <p>Paste the room code from Discord voice chat and jump into synced playback.</p>
+          <div class="watch-join">
+            <input id="watchRoomCode" class="watch-input" type="text" maxlength="12" placeholder="Room code (ex: K7V9P2)" />
+            <a id="watchJoinBtn" class="btn btn-primary" href="/telewatch/" data-track="watch_join">Join Watch Party</a>
+          </div>
+          <div id="watchPartyRooms" class="party-grid"></div>
+        </article>
+        <article class="panel">
+          <h3>Create New Room</h3>
+          <p>Host your own watch room and share the generated invite link with your group.</p>
+          <div class="cta-row" style="margin-top:10px">
+            <a class="btn btn-secondary" href="/telewatch/" data-track="watch_create">Open Telewatch</a>
+          </div>
+        </article>
+        <article class="panel">
+          <h3>How It Works</h3>
+          <p>Everyone watches on their own stream account while Telewatch keeps timestamps in sync.</p>
+        </article>
+      </div>
     </section>
 
     <section class="game-zone">
@@ -1112,6 +1186,54 @@
       tick();
       loadBetaEndFromApi().then(tick).catch(() => {});
       setInterval(tick, 1000);
+    })();
+
+    (() => {
+      const input = document.getElementById('watchRoomCode');
+      const join = document.getElementById('watchJoinBtn');
+      if (!input || !join) return;
+      const update = () => {
+        const code = String(input.value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
+        input.value = code;
+        join.href = code ? `/telewatch/?room=${encodeURIComponent(code)}` : '/telewatch/';
+      };
+      input.addEventListener('input', update);
+      update();
+    })();
+
+    (() => {
+      const host = document.getElementById('watchPartyRooms');
+      if (!host) return;
+      const fallbackRooms = Array.from({ length: 10 }, (_, i) => {
+        const code = `WATCH${String(i + 1).padStart(2, '0')}`;
+        return { roomCode: code, title: `Public Room ${String(i + 1).padStart(2, '0')}`, activeCount: 0, isLive: false, joinUrl: `/telewatch/?room=${code}` };
+      });
+      const draw = (rooms) => {
+        host.innerHTML = (rooms || []).slice(0, 10).map((r) => {
+          const code = String(r.roomCode || '').toUpperCase();
+          const viewers = Number(r.activeCount || 0);
+          const live = Boolean(r.isLive);
+          const href = r.joinUrl || `/telewatch/?room=${encodeURIComponent(code)}`;
+          const stateClass = live ? 'party-live' : 'party-open';
+          const stateText = live ? `LIVE · ${viewers} in room` : 'Open Slot';
+          return `<a class="party-btn" data-track="watch_room_click" href="${href}"><span class="party-code">${code}</span><span class="party-meta">${r.title || 'Watch Party Room'}</span><span class="${stateClass}">${stateText}</span></a>`;
+        }).join('');
+      };
+      draw(fallbackRooms);
+      (async () => {
+        const endpoints = ['/api/telewatch/public-rooms', '/api/telewatch/api/public-rooms'];
+        for (const ep of endpoints) {
+          try {
+            const r = await fetch(ep, { cache: 'no-store' });
+            if (!r.ok) continue;
+            const j = await r.json();
+            if (j && Array.isArray(j.rooms) && j.rooms.length) {
+              draw(j.rooms);
+              return;
+            }
+          } catch (_) { }
+        }
+      })();
     })();
 
     (() => {
