@@ -308,6 +308,21 @@
       15% { transform: translateY(-4px) scale(1); opacity: 1; }
       100% { transform: translateY(-46px) scale(1.05); opacity: 0; }
     }
+    .open-party-list {
+      display: grid;
+      gap: 8px;
+    }
+    .open-party-item {
+      border: 1px solid var(--line-soft);
+      background: var(--panel-2);
+      border-radius: 10px;
+      padding: 8px;
+      display: grid;
+      gap: 4px;
+    }
+    .open-party-title { font-weight: 700; }
+    .open-party-meta { font-size: 12px; color: var(--muted); }
+    .hidden-media { display: none !important; }
     .admin-tools.hidden { display: none; }
     .admin-login.hidden { display: none; }
     .host-grid {
@@ -582,6 +597,11 @@
             <span class="status-chip" id="fullChip">Room Open</span>
           </div>
         </div>
+        <div class="block stack">
+          <h3>Open Parties</h3>
+          <div class="muted">Showing only active parties.</div>
+          <div id="openPartiesList" class="open-party-list"></div>
+        </div>
         <div class="stage">
           <div style="position:relative">
             <video id="player" controls playsinline></video>
@@ -704,6 +724,7 @@
       liveChip: document.getElementById('liveChip'),
       shareChip: document.getElementById('shareChip'),
       fullChip: document.getElementById('fullChip'),
+      openPartiesList: document.getElementById('openPartiesList'),
       adminRoomsBlock: document.getElementById('adminRoomsBlock'),
       adminRoomsSelect: document.getElementById('adminRoomsSelect'),
       copyAdminRoomBtn: document.getElementById('copyAdminRoomBtn'),
@@ -996,6 +1017,7 @@
       audioEls: new Map(),
       voiceOfferedTo: new Set()
     };
+    let openPartyTimer = null;
 
     function qp(name) {
       const u = new URL(window.location.href);
@@ -1134,6 +1156,62 @@
           <div class="participant-meta">${mutedByHost ? 'Muted by host' : 'Unmuted'}</div>
         `;
         els.participantsGrid.appendChild(card);
+      }
+    }
+
+    function updateMediaVisibility() {
+      const inRoom = !!state.roomCode;
+      const hasPlayerMedia = !!(els.player && els.player.src);
+      const hasScreenMedia = !!(els.screenView && els.screenView.srcObject);
+      if (els.player) {
+        els.player.classList.toggle('hidden-media', !inRoom || (!hasPlayerMedia && !state.isHost));
+      }
+      if (els.screenView) {
+        els.screenView.classList.toggle('hidden-media', !inRoom || !hasScreenMedia);
+      }
+    }
+
+    function renderOpenParties(rooms) {
+      if (!els.openPartiesList) return;
+      const active = (Array.isArray(rooms) ? rooms : []).filter((r) => Number(r.activeCount || 0) > 0);
+      els.openPartiesList.innerHTML = '';
+      if (!active.length) {
+        const d = document.createElement('div');
+        d.className = 'muted';
+        d.textContent = 'No active parties right now.';
+        els.openPartiesList.appendChild(d);
+        return;
+      }
+      for (const r of active.slice(0, 20)) {
+        const card = document.createElement('div');
+        card.className = 'open-party-item';
+        card.innerHTML = `
+          <div class="open-party-title">${String(r.title || r.roomCode || 'Watch Party')}</div>
+          <div class="open-party-meta">Code: ${String(r.roomCode || '')} · Viewers: ${Number(r.activeCount || 0)}</div>
+        `;
+        const btn = document.createElement('button');
+        btn.className = 'secondary';
+        btn.textContent = 'Join Party';
+        btn.addEventListener('click', async () => {
+          els.roomInput.value = normalizeRoomCode(r.roomCode || '');
+          try { await joinRoom(); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
+        });
+        card.appendChild(btn);
+        els.openPartiesList.appendChild(card);
+      }
+    }
+
+    async function refreshOpenParties() {
+      try {
+        const data = await apiRequest('GET', '/api/public-rooms');
+        renderOpenParties(Array.isArray(data.rooms) ? data.rooms : []);
+      } catch (_) {
+        if (els.openPartiesList && !els.openPartiesList.children.length) {
+          const d = document.createElement('div');
+          d.className = 'muted';
+          d.textContent = 'Unable to load open parties right now.';
+          els.openPartiesList.appendChild(d);
+        }
       }
     }
 
@@ -1675,6 +1753,7 @@
         addEventLine('No share audio detected. In picker enable tab/system audio.');
       }
       await broadcastOffersToViewers();
+      updateMediaVisibility();
     }
 
     async function stopScreenShare() {
@@ -1694,6 +1773,7 @@
       updateStatusChips((state.participants || []).length);
       if (els.shareSourceInfo) els.shareSourceInfo.textContent = 'Selected share source: none';
       if (els.shareAudioInfo) els.shareAudioInfo.textContent = 'Selected share audio: none';
+      updateMediaVisibility();
     }
 
     async function processSignal(payload) {
@@ -1929,6 +2009,7 @@
       if (state.pollTimer) clearInterval(state.pollTimer);
       state.pollTimer = setInterval(pollState, POLL_MS);
       saveSession();
+      updateMediaVisibility();
       pollState();
     }
 
@@ -2029,6 +2110,7 @@
         setStatus(true, 'Connected · active viewers: ' + (data.activeCount || 0));
         updateStatusChips(data.activeCount || 0);
         applyRoomState(data.room || null, false);
+        updateMediaVisibility();
         if (state.isHost && rtc.localScreenStream) {
           await broadcastOffersToViewers();
         }
@@ -2079,6 +2161,7 @@
         setStatus(false, 'Reconnect pending: ' + (err?.message || 'network_error'));
         setSyncLabel('retrying');
         updateStatusChips(0);
+        updateMediaVisibility();
       }
     }
 
@@ -2323,6 +2406,7 @@
         setSyncLabel('room deleted');
         setStatus(false, 'Room deleted.');
         addEventLine('Room deleted by host.');
+        updateMediaVisibility();
       } catch (err) {
         setStatus(false, String(err && err.message ? err.message : err));
       }
@@ -2364,8 +2448,12 @@
       switchTab('session');
       setWizardStep(1);
       updateStatusChips(0);
+      updateMediaVisibility();
       renderParticipants();
       renderRequestQueue();
+      refreshOpenParties();
+      if (openPartyTimer) clearInterval(openPartyTimer);
+      openPartyTimer = setInterval(refreshOpenParties, 15000);
       const roomFromQuery = normalizeRoomCode(qp('room') || '');
       if (roomFromQuery) els.roomInput.value = roomFromQuery;
       els.roomInput.addEventListener('input', () => {
