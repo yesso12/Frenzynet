@@ -1375,6 +1375,10 @@
             <span class="status-chip" id="latencyChip" data-advanced-ui="true">Latency --</span>
             <span class="status-chip" id="driftChip" data-advanced-ui="true">Drift --</span>
             <span class="status-chip" id="reconnectChip" data-advanced-ui="true">Reconnects 0</span>
+            <select id="hostViewModeSelect" class="secondary" style="max-width:210px; display:none">
+              <option value="host">Host View</option>
+              <option value="participant">Participant View</option>
+            </select>
           </div>
         </div>
         <div id="sceneBoard" class="scene-board">
@@ -1722,6 +1726,7 @@
       latencyChip: document.getElementById('latencyChip'),
       driftChip: document.getElementById('driftChip'),
       reconnectChip: document.getElementById('reconnectChip'),
+      hostViewModeSelect: document.getElementById('hostViewModeSelect'),
       openPartiesList: document.getElementById('openPartiesList'),
       sideRooms: document.getElementById('sideRooms'),
       sideVoice: document.getElementById('sideVoice'),
@@ -1798,6 +1803,7 @@
       layoutMode: 'standard',
       densityMode: 'comfortable',
       uiMode: 'easy',
+      hostViewMode: 'host',
       stageChatMinimized: false,
       hostOptionsMinimized: false,
       preferredMicId: '',
@@ -1822,6 +1828,7 @@
     const ROOM_TEMPLATE_KEY = 'telewatch_room_templates_v1';
     const USER_SESSION_KEY = 'telewatch_user_session_v1';
     const UI_MODE_KEY = 'telewatch_ui_mode';
+    const HOST_VIEW_MODE_KEY = 'telewatch_host_view_mode';
     const STAGE_CHAT_MIN_KEY = 'telewatch_stage_chat_min';
     const HOST_OPTIONS_MIN_KEY = 'telewatch_host_options_min';
     const MIC_DEVICE_KEY = 'telewatch_mic_device_id';
@@ -2431,10 +2438,28 @@
       return key;
     }
 
+    function isHostViewActive() {
+      return !!state.isHost && String(state.hostViewMode || 'host') !== 'participant';
+    }
+
+    function applyHostViewMode(mode, persist) {
+      const requested = String(mode || 'host').toLowerCase() === 'participant' ? 'participant' : 'host';
+      const effective = state.isHost ? requested : 'host';
+      state.hostViewMode = effective;
+      if (els.hostViewModeSelect) {
+        els.hostViewModeSelect.value = effective;
+        els.hostViewModeSelect.style.display = state.isHost ? '' : 'none';
+      }
+      document.body.classList.toggle('participant-preview-mode', state.isHost && effective === 'participant');
+      if (persist) {
+        try { localStorage.setItem(HOST_VIEW_MODE_KEY, effective); } catch (_) {}
+      }
+    }
+
     function setThemeControlState() {
       if (!els.themeSelect) return;
       const inRoom = !!state.roomCode;
-      if (inRoom && !state.isHost) {
+      if (inRoom && !isHostViewActive()) {
         els.themeSelect.disabled = true;
         els.themeSelect.title = 'Host controls room theme';
       } else {
@@ -2676,7 +2701,7 @@
           <div class="participant-meta">${mutedByHost ? 'Muted by host' : 'Unmuted'}</div>
           <div class="participant-meta">${(hasRemoteCam || hasLocalCam) ? 'Webcam on' : 'Webcam off'}</div>
         `;
-        if (state.isHost && !p.isSelf) {
+        if (isHostViewActive() && !p.isSelf) {
           const controls = document.createElement('div');
           controls.className = 'participant-controls';
           controls.innerHTML = `
@@ -2703,7 +2728,7 @@
         }
         els.participantsGrid.appendChild(card);
       }
-      if (state.isHost) {
+      if (isHostViewActive()) {
         const keep = new Set(rows.map((r) => String(r.participantId || '')));
         for (const pid of Array.from(rtc.camEls.keys())) {
           if (!keep.has(pid)) {
@@ -3240,7 +3265,7 @@
       if (els.refreshDevicesBtn) els.refreshDevicesBtn.disabled = false;
       if (els.voiceQualitySelect) els.voiceQualitySelect.disabled = false;
       if (els.liveWebcamQualitySelect) els.liveWebcamQualitySelect.disabled = false;
-      const hostCanModerate = !!state.isHost;
+      const hostCanModerate = isHostViewActive();
       if (els.muteTargetBtn) els.muteTargetBtn.disabled = !hostCanModerate;
       if (els.unmuteTargetBtn) els.unmuteTargetBtn.disabled = !hostCanModerate;
       if (els.kickTargetBtn) els.kickTargetBtn.disabled = !hostCanModerate;
@@ -3388,7 +3413,7 @@
 
     function applyHostOptionsVisibility() {
       const hostTabBtn = els.tabButtons.find((b) => b && b.getAttribute('data-tab-btn') === 'host');
-      const canUseHostOptions = !!state.isHost;
+      const canUseHostOptions = isHostViewActive();
       if (hostTabBtn) hostTabBtn.classList.toggle('hidden', !canUseHostOptions);
       if (els.hostTabPane) els.hostTabPane.classList.toggle('hidden', !canUseHostOptions);
       const hostOnlyEls = Array.from(document.querySelectorAll('[data-host-only="true"]'));
@@ -5367,7 +5392,11 @@
 
     function updateBadges() {
       els.roomBadge.textContent = 'Room: ' + (state.roomCode || 'none');
-      els.roleBadge.textContent = 'Role: ' + (state.isHost ? 'host' : 'viewer');
+      let role = state.isHost ? 'host' : 'viewer';
+      if (state.isHost && String(state.hostViewMode || 'host') === 'participant') {
+        role = 'host (participant view)';
+      }
+      els.roleBadge.textContent = 'Role: ' + role;
       applyHostOptionsVisibility();
     }
 
@@ -5395,9 +5424,10 @@
       if (els.inviteTtlInput) els.inviteTtlInput.disabled = !state.isHost;
       if (els.inviteMaxUsesInput) els.inviteMaxUsesInput.disabled = !state.isHost;
       els.chatBtn.disabled = false;
+      applyHostViewMode(state.hostViewMode, false);
       updateVoiceUi();
       setWizardStep(2);
-      switchTab(state.isHost ? 'host' : 'chat');
+      switchTab(isHostViewActive() ? 'host' : 'chat');
       stopPollingLoop();
       saveSession();
       updateMediaVisibility();
@@ -6239,6 +6269,16 @@
     for (const btn of els.tabButtons) {
       btn.addEventListener('click', () => switchTab(btn.getAttribute('data-tab-btn') || 'session'));
     }
+    if (els.hostViewModeSelect) {
+      els.hostViewModeSelect.addEventListener('change', () => {
+        applyHostViewMode(els.hostViewModeSelect.value, true);
+        updateBadges();
+        updateVoiceUi();
+        renderParticipants();
+        setThemeControlState();
+        if (!isHostViewActive()) switchTab('chat');
+      });
+    }
     els.setMediaBtn.addEventListener('click', async () => {
       try { await setupMedia(); } catch (err) { setStatus(false, String(err.message || err)); }
     });
@@ -6465,6 +6505,11 @@
         state.hostOptionsMinimized = false;
       }
       try {
+        state.hostViewMode = String(localStorage.getItem(HOST_VIEW_MODE_KEY) || 'host') === 'participant' ? 'participant' : 'host';
+      } catch (_) {
+        state.hostViewMode = 'host';
+      }
+      try {
         state.stageChatMinimized = String(localStorage.getItem(STAGE_CHAT_MIN_KEY) || '0') === '1';
       } catch (_) {
         state.stageChatMinimized = false;
@@ -6556,6 +6601,7 @@
         }
       } catch (_) {}
       renderAdminIdentity();
+      applyHostViewMode(state.hostViewMode, false);
       updateVoiceUi();
       applyHostOptionsVisibility();
       if (state.adminToken) {
