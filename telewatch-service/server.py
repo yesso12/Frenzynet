@@ -470,6 +470,24 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             '/api/telewatch/watch/admin/add',
             '/api/telewatch/api/watch/admin/add',
         }
+        admin_list_paths = {
+            '/watch/admin/list',
+            '/api/watch/admin/list',
+            '/api/telewatch/watch/admin/list',
+            '/api/telewatch/api/watch/admin/list',
+        }
+        admin_remove_paths = {
+            '/watch/admin/remove',
+            '/api/watch/admin/remove',
+            '/api/telewatch/watch/admin/remove',
+            '/api/telewatch/api/watch/admin/remove',
+        }
+        admin_logout_paths = {
+            '/watch/admin/logout',
+            '/api/watch/admin/logout',
+            '/api/telewatch/watch/admin/logout',
+            '/api/telewatch/api/watch/admin/logout',
+        }
         delete_paths = {'/watch/delete', '/api/watch/delete', '/api/telewatch/watch/delete', '/api/telewatch/api/watch/delete'}
         control_paths = {'/watch/control', '/api/watch/control', '/api/telewatch/watch/control', '/api/telewatch/api/watch/control'}
 
@@ -533,6 +551,87 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                 )
                 conn.commit()
             self._json(HTTPStatus.OK, {'ok': True, 'added': True, 'username': new_username})
+            return
+
+        if path in admin_list_paths:
+            admin_token = str(payload.get('adminToken', '')).strip()
+            with get_db() as conn:
+                ensure_public_rooms(conn)
+                cleanup_rooms(conn)
+                actor = validate_admin_session(conn, admin_token)
+                if actor is None:
+                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'admin_auth_invalid'})
+                    return
+                rows = conn.execute(
+                    '''
+                    SELECT username, is_owner, created_at, updated_at
+                    FROM watch_admins
+                    ORDER BY is_owner DESC, username ASC
+                    '''
+                ).fetchall()
+                conn.commit()
+            self._json(
+                HTTPStatus.OK,
+                {
+                    'ok': True,
+                    'admins': [
+                        {
+                            'username': r['username'],
+                            'isOwner': bool(r['is_owner']),
+                            'createdAt': r['created_at'],
+                            'updatedAt': r['updated_at'],
+                        }
+                        for r in rows
+                    ],
+                },
+            )
+            return
+
+        if path in admin_remove_paths:
+            admin_token = str(payload.get('adminToken', '')).strip()
+            admin_code = str(payload.get('adminCode', '')).strip()
+            remove_username = clean_username(payload.get('username', ''))
+            if not remove_username:
+                self._json(HTTPStatus.BAD_REQUEST, {'error': 'username_required'})
+                return
+            if TELEWATCH_ADMIN_CODE and admin_code != TELEWATCH_ADMIN_CODE:
+                self._json(HTTPStatus.FORBIDDEN, {'error': 'admin_code_invalid'})
+                return
+            with get_db() as conn:
+                ensure_public_rooms(conn)
+                cleanup_rooms(conn)
+                actor = validate_admin_session(conn, admin_token)
+                if actor is None:
+                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'admin_auth_invalid'})
+                    return
+                if not bool(actor['is_owner']):
+                    self._json(HTTPStatus.FORBIDDEN, {'error': 'owner_required'})
+                    return
+                row = conn.execute(
+                    'SELECT username, is_owner FROM watch_admins WHERE username=? LIMIT 1',
+                    (remove_username,),
+                ).fetchone()
+                if row is None:
+                    self._json(HTTPStatus.NOT_FOUND, {'error': 'admin_not_found'})
+                    return
+                if bool(row['is_owner']):
+                    self._json(HTTPStatus.FORBIDDEN, {'error': 'cannot_remove_owner'})
+                    return
+                conn.execute('DELETE FROM watch_admins WHERE username=?', (remove_username,))
+                conn.execute('DELETE FROM watch_admin_sessions WHERE username=?', (remove_username,))
+                conn.commit()
+            self._json(HTTPStatus.OK, {'ok': True, 'removed': True, 'username': remove_username})
+            return
+
+        if path in admin_logout_paths:
+            admin_token = str(payload.get('adminToken', '')).strip()
+            if not admin_token:
+                self._json(HTTPStatus.BAD_REQUEST, {'error': 'adminToken_required'})
+                return
+            with get_db() as conn:
+                conn.execute('DELETE FROM watch_admin_sessions WHERE session_token=?', (admin_token,))
+                conn.commit()
+            self._json(HTTPStatus.OK, {'ok': True, 'loggedOut': True})
             return
 
         if path in delete_paths:

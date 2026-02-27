@@ -94,6 +94,30 @@
     }
     .muted { color: var(--muted); }
     .stack { display: grid; gap: 10px; }
+    .panel-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 8px;
+    }
+    .tab-btn {
+      border: 1px solid #d1dae5;
+      background: #fff;
+      color: #33475f;
+      border-radius: 999px;
+      padding: 7px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .tab-btn.active {
+      border-color: #ff925f;
+      background: #fff3ec;
+      color: #a43f12;
+    }
+    .tab-pane { display: none; }
+    .tab-pane.active { display: grid; gap: 10px; }
     .block {
       border: 1px solid var(--line-soft);
       border-radius: 12px;
@@ -111,7 +135,7 @@
       margin-bottom: 5px;
       display: block;
     }
-    input, button, textarea {
+    input, button, textarea, select {
       width: 100%;
       border-radius: 10px;
       border: 1px solid #d1dae5;
@@ -120,7 +144,7 @@
       padding: 10px 11px;
       font: inherit;
     }
-    input:focus, textarea:focus {
+    input:focus, textarea:focus, select:focus {
       outline: none;
       border-color: #ff925f;
       box-shadow: 0 0 0 3px rgba(255, 95, 31, 0.15);
@@ -188,8 +212,19 @@
       font-size: 13px;
       line-height: 1.45;
     }
-    .chat-feed div { padding: 4px 0; border-bottom: 1px dashed #d6dfe9; }
+    .chat-feed div { padding: 6px 0; border-bottom: 1px dashed #d6dfe9; }
     .chat-feed div:last-child { border-bottom: 0; }
+    .msg-line { display: grid; gap: 1px; }
+    .msg-head { font-size: 11px; color: #6f7d8f; }
+    .msg-body { font-size: 13px; color: #1d2a39; word-break: break-word; }
+    .admin-tools.hidden { display: none; }
+    .admin-login.hidden { display: none; }
+    .host-grid {
+      display: grid;
+      gap: 8px;
+      grid-template-columns: 1fr 1fr;
+    }
+    .host-grid .full { grid-column: 1 / -1; }
     .footer {
       margin-top: 12px;
       color: #718196;
@@ -219,6 +254,7 @@
       .workspace { grid-template-columns: 1fr; }
       .duo { grid-template-columns: 1fr; }
       .row > * { min-width: 100px; }
+      .host-grid { grid-template-columns: 1fr; }
     }
     @media (max-width: 760px) {
       .wrap { width: min(100%, calc(100% - 12px)); margin: 10px auto 18px; }
@@ -247,79 +283,122 @@
 
     <div class="workspace">
       <section class="card stack">
-        <h2>Session & Room</h2>
-        <div class="block stack">
-          <div>
-            <label for="displayName">Display Name</label>
-            <input id="displayName" placeholder="e.g. DFrenzy" />
-          </div>
-          <div>
-            <label for="roomInput">Room Code</label>
-            <input id="roomInput" placeholder="e.g. DADDYR" />
-          </div>
-          <div>
-            <label for="adminKeyInput">Admin Code</label>
-            <input id="adminKeyInput" type="password" placeholder="Admin code for protected options" />
-          </div>
-          <div class="row">
-            <button id="createBtn">Create Room</button>
-            <button id="joinBtn" class="secondary">Join Room</button>
-          </div>
-          <div class="muted" id="joinHint">Share your room code in Discord voice chat. Everyone runs their own stream account.</div>
+        <h2>Control Panel</h2>
+        <div class="panel-tabs">
+          <button class="tab-btn active" data-tab-btn="session">Session</button>
+          <button class="tab-btn" data-tab-btn="host">Host Setup</button>
+          <button class="tab-btn" data-tab-btn="chat">Messages</button>
+          <button class="tab-btn" data-tab-btn="admin">Admin</button>
         </div>
 
-        <div class="block stack">
-          <h3>Admin Panel</h3>
-          <div class="muted" id="adminWhoami">Admin: not signed in</div>
-          <div>
-            <label for="adminUserInput">Admin Username</label>
-            <input id="adminUserInput" type="email" placeholder="Trimbledustn@gmail.com" />
-          </div>
-          <div>
-            <label for="adminPassInput">Admin Password</label>
-            <input id="adminPassInput" type="password" placeholder="Admin password" />
-          </div>
-          <button id="adminLoginBtn" class="secondary">Sign In Admin</button>
-          <div>
-            <label for="newAdminUserInput">Add Admin Username</label>
-            <input id="newAdminUserInput" type="email" placeholder="newadmin@email.com" />
-          </div>
-          <div>
-            <label for="newAdminPassInput">Add Admin Password</label>
-            <input id="newAdminPassInput" type="password" placeholder="At least 8 characters" />
-          </div>
-          <button id="addAdminBtn" class="secondary">Add / Update Admin</button>
-        </div>
-
-        <div class="block stack">
-          <h3>Host Setup</h3>
-          <div>
-            <label for="titleInput">Title</label>
-            <input id="titleInput" placeholder="Episode / movie title" />
-          </div>
-          <div>
-            <label for="mediaInput">Media URL (Optional Direct File)</label>
-            <input id="mediaInput" placeholder="https://.../video.mp4" />
-          </div>
-          <div class="row">
-            <button id="setMediaBtn" class="secondary">Set Media</button>
-            <button id="copyLinkBtn" class="secondary">Copy Invite</button>
+        <div class="tab-pane active" data-tab-pane="session">
+          <div class="block stack">
+            <div>
+              <label for="displayName">Display Name</label>
+              <input id="displayName" placeholder="e.g. DFrenzy" />
+            </div>
+            <div>
+              <label for="roomInput">Room Code</label>
+              <input id="roomInput" placeholder="e.g. DADDYR" />
+            </div>
+            <div class="row">
+              <button id="createBtn">Create Room</button>
+              <button id="joinBtn" class="secondary">Join Room</button>
+            </div>
+            <div class="muted" id="joinHint">Share your room code in Discord voice chat. Everyone runs their own stream account.</div>
           </div>
         </div>
 
-        <div class="block stack">
-          <h3>Live Share Controls</h3>
-          <div class="row">
-            <button id="startShareBtn" class="secondary">Share Monitor / Tab</button>
-            <button id="stopShareBtn" class="secondary" disabled>Stop Share</button>
-            <button id="deleteRoomBtn" class="secondary">Delete Room</button>
+        <div class="tab-pane" data-tab-pane="host">
+          <div class="block stack">
+            <h3>Host Setup</h3>
+            <div class="host-grid">
+              <div class="full">
+                <label for="titleInput">Title</label>
+                <input id="titleInput" placeholder="Episode / movie title" />
+              </div>
+              <div class="full">
+                <label for="mediaInput">Media URL (Optional Direct File)</label>
+                <input id="mediaInput" placeholder="https://.../video.mp4" />
+              </div>
+              <div>
+                <label for="shareSurfaceSelect">Share Source</label>
+                <select id="shareSurfaceSelect">
+                  <option value="auto">Auto (picker default)</option>
+                  <option value="browser">Browser Tab</option>
+                  <option value="window">Window/App</option>
+                  <option value="monitor">Monitor/Screen</option>
+                </select>
+              </div>
+              <div>
+                <label for="shareAudioSelect">Share Audio</label>
+                <select id="shareAudioSelect">
+                  <option value="auto">Auto</option>
+                  <option value="tab">Prefer Tab Audio</option>
+                  <option value="system">Prefer System Audio</option>
+                  <option value="off">No Audio</option>
+                </select>
+              </div>
+              <button id="setMediaBtn" class="secondary">Set Media</button>
+              <button id="copyLinkBtn" class="secondary">Copy Invite</button>
+              <button id="startShareBtn" class="secondary">Share Monitor / Tab</button>
+              <button id="stopShareBtn" class="secondary" disabled>Stop Share</button>
+              <button id="deleteRoomBtn" class="secondary full">Delete Room</button>
+            </div>
           </div>
         </div>
 
-        <div class="block stack">
-          <h3>Room Chat</h3>
-          <textarea id="chatInput" placeholder="Send timestamp notes, e.g. pause at 12:34"></textarea>
-          <button id="chatBtn" class="secondary">Send Note</button>
+        <div class="tab-pane" data-tab-pane="chat">
+          <div class="block stack">
+            <h3>Room Messages</h3>
+            <textarea id="chatInput" placeholder="Send timestamp notes, e.g. pause at 12:34"></textarea>
+            <button id="chatBtn" class="secondary">Send Message</button>
+          </div>
+        </div>
+
+        <div class="tab-pane" data-tab-pane="admin">
+          <div class="block stack admin-login" id="adminLoginPanel">
+            <h3>Admin Sign In</h3>
+            <div class="muted">Sign in first to unlock admin actions.</div>
+            <div>
+              <label for="adminUserInput">Admin Username</label>
+              <input id="adminUserInput" type="email" placeholder="Trimbledustn@gmail.com" />
+            </div>
+            <div>
+              <label for="adminPassInput">Admin Password</label>
+              <input id="adminPassInput" type="password" placeholder="Admin password" />
+            </div>
+            <button id="adminLoginBtn" class="secondary">Sign In Admin</button>
+          </div>
+
+          <div class="block stack admin-tools hidden" id="adminToolsPanel">
+            <h3>Admin Tools</h3>
+            <div class="muted" id="adminWhoami">Admin: not signed in</div>
+            <div>
+              <label for="adminKeyInput">Admin Code</label>
+              <input id="adminKeyInput" type="password" placeholder="Required for protected options" />
+            </div>
+            <div>
+              <label for="newAdminUserInput">Add Admin Username</label>
+              <input id="newAdminUserInput" type="email" placeholder="newadmin@email.com" />
+            </div>
+            <div>
+              <label for="newAdminPassInput">Add Admin Password</label>
+              <input id="newAdminPassInput" type="password" placeholder="At least 8 characters" />
+            </div>
+            <div class="row">
+              <button id="addAdminBtn" class="secondary">Add / Update Admin</button>
+              <button id="refreshAdminsBtn" class="secondary">Refresh Admins</button>
+            </div>
+            <div>
+              <label for="adminListSelect">Admin Accounts</label>
+              <select id="adminListSelect"></select>
+            </div>
+            <div class="row">
+              <button id="removeAdminBtn" class="danger-btn">Remove Selected Admin</button>
+              <button id="adminLogoutBtn" class="secondary">Sign Out</button>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -341,8 +420,10 @@
         <div class="duo">
           <div class="block stack">
             <h3>Room Messages</h3>
+            <div class="muted">Live room chat appears here. Newest messages show first.</div>
             <div id="chatFeed" class="chat-feed"></div>
             <h3>Events</h3>
+            <div class="muted">Playback and system events for this room.</div>
             <div id="events" class="events"></div>
           </div>
           <div class="block admin-delete">
@@ -375,12 +456,20 @@
       adminPassInput: document.getElementById('adminPassInput'),
       adminLoginBtn: document.getElementById('adminLoginBtn'),
       adminWhoami: document.getElementById('adminWhoami'),
+      adminLoginPanel: document.getElementById('adminLoginPanel'),
+      adminToolsPanel: document.getElementById('adminToolsPanel'),
       newAdminUserInput: document.getElementById('newAdminUserInput'),
       newAdminPassInput: document.getElementById('newAdminPassInput'),
       addAdminBtn: document.getElementById('addAdminBtn'),
+      refreshAdminsBtn: document.getElementById('refreshAdminsBtn'),
+      removeAdminBtn: document.getElementById('removeAdminBtn'),
+      adminLogoutBtn: document.getElementById('adminLogoutBtn'),
+      adminListSelect: document.getElementById('adminListSelect'),
       adminDeleteCodeInput: document.getElementById('adminDeleteCodeInput'),
       titleInput: document.getElementById('titleInput'),
       mediaInput: document.getElementById('mediaInput'),
+      shareSurfaceSelect: document.getElementById('shareSurfaceSelect'),
+      shareAudioSelect: document.getElementById('shareAudioSelect'),
       createBtn: document.getElementById('createBtn'),
       joinBtn: document.getElementById('joinBtn'),
       adminDeleteBtn: document.getElementById('adminDeleteBtn'),
@@ -402,7 +491,9 @@
       events: document.getElementById('events'),
       chatFeed: document.getElementById('chatFeed'),
       player: document.getElementById('player'),
-      screenView: document.getElementById('screenView')
+      screenView: document.getElementById('screenView'),
+      tabButtons: Array.from(document.querySelectorAll('[data-tab-btn]')),
+      tabPanes: Array.from(document.querySelectorAll('[data-tab-pane]'))
     };
 
     const state = {
@@ -479,10 +570,23 @@
 
     function addChatLine(sender, message) {
       const d = document.createElement('div');
-      d.textContent = `${sender}: ${message}`;
+      d.className = 'msg-line';
+      const ts = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      d.innerHTML = `<div class="msg-head">${sender} · ${ts}</div><div class="msg-body"></div>`;
+      d.querySelector('.msg-body').textContent = String(message || '');
       els.chatFeed.prepend(d);
       while (els.chatFeed.children.length > 200) {
         els.chatFeed.removeChild(els.chatFeed.lastChild);
+      }
+    }
+
+    function switchTab(name) {
+      const target = String(name || 'session').toLowerCase();
+      for (const btn of els.tabButtons) {
+        btn.classList.toggle('active', btn.getAttribute('data-tab-btn') === target);
+      }
+      for (const pane of els.tabPanes) {
+        pane.classList.toggle('active', pane.getAttribute('data-tab-pane') === target);
       }
     }
 
@@ -650,7 +754,27 @@
       if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
         throw new Error('Browser screen-share API unavailable. Use latest Chrome/Edge/Firefox.');
       }
-      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+      const surface = String((els.shareSurfaceSelect && els.shareSurfaceSelect.value) || 'auto');
+      const audioMode = String((els.shareAudioSelect && els.shareAudioSelect.value) || 'auto');
+      const videoCfg = {};
+      if (surface === 'browser') {
+        videoCfg.displaySurface = 'browser';
+        videoCfg.selfBrowserSurface = 'exclude';
+      } else if (surface === 'window') {
+        videoCfg.displaySurface = 'window';
+      } else if (surface === 'monitor') {
+        videoCfg.displaySurface = 'monitor';
+      }
+      const constraints = {
+        video: Object.keys(videoCfg).length ? videoCfg : true,
+        audio: audioMode !== 'off'
+      };
+      if (audioMode === 'tab') {
+        constraints.preferCurrentTab = true;
+      } else if (audioMode === 'system') {
+        constraints.systemAudio = 'include';
+      }
+      const stream = await navigator.mediaDevices.getDisplayMedia(constraints);
       rtc.localScreenStream = stream;
       els.screenView.srcObject = stream;
       els.screenView.muted = true;
@@ -777,11 +901,10 @@
     }
 
     function renderAdminIdentity() {
-      if (state.adminUsername) {
-        els.adminWhoami.textContent = 'Admin: ' + state.adminUsername;
-      } else {
-        els.adminWhoami.textContent = 'Admin: not signed in';
-      }
+      const signedIn = !!(state.adminToken && state.adminUsername);
+      els.adminWhoami.textContent = signedIn ? ('Admin: ' + state.adminUsername) : 'Admin: not signed in';
+      els.adminLoginPanel.classList.toggle('hidden', signedIn);
+      els.adminToolsPanel.classList.toggle('hidden', !signedIn);
     }
 
     function saveAdminSession() {
@@ -797,6 +920,13 @@
       } catch (_) {}
     }
 
+    function clearAdminSession() {
+      state.adminToken = '';
+      state.adminUsername = '';
+      try { localStorage.removeItem(ADMIN_SESSION_KEY); } catch (_) {}
+      renderAdminIdentity();
+    }
+
     async function adminLogin() {
       const username = String(els.adminUserInput.value || '').trim().toLowerCase();
       const password = String(els.adminPassInput.value || '').trim();
@@ -808,6 +938,7 @@
       state.adminUsername = String(data.username || username);
       saveAdminSession();
       renderAdminIdentity();
+      await refreshAdminList();
       setStatus(true, 'Admin signed in.');
     }
 
@@ -825,8 +956,52 @@
         newPassword
       });
       els.newAdminPassInput.value = '';
+      await refreshAdminList();
       setStatus(true, 'Admin user added: ' + newUsername);
       addEventLine('Admin added: ' + newUsername);
+    }
+
+    async function refreshAdminList() {
+      if (!state.adminToken) return;
+      const data = await apiRequest('POST', '/api/watch/admin/list', { adminToken: state.adminToken });
+      const admins = Array.isArray(data.admins) ? data.admins : [];
+      els.adminListSelect.innerHTML = '';
+      for (const row of admins) {
+        const opt = document.createElement('option');
+        opt.value = row.username;
+        opt.textContent = row.isOwner ? `${row.username} (owner)` : row.username;
+        els.adminListSelect.appendChild(opt);
+      }
+      if (!admins.length) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = 'No admins found';
+        els.adminListSelect.appendChild(opt);
+      }
+    }
+
+    async function removeSelectedAdmin() {
+      const username = String((els.adminListSelect && els.adminListSelect.value) || '').trim().toLowerCase();
+      const adminCode = String(els.adminKeyInput.value || '').trim();
+      if (!state.adminToken) throw new Error('Sign in as admin first.');
+      if (!username) throw new Error('Select an admin to remove.');
+      if (!adminCode) throw new Error('Admin code required.');
+      const ok = window.confirm(`Remove admin ${username}?`);
+      if (!ok) return;
+      await apiRequest('POST', '/api/watch/admin/remove', { adminToken: state.adminToken, adminCode, username });
+      await refreshAdminList();
+      setStatus(true, `Admin removed: ${username}`);
+      addEventLine(`Admin removed: ${username}`);
+    }
+
+    async function adminLogout() {
+      const token = String(state.adminToken || '').trim();
+      if (!token) return;
+      try {
+        await apiRequest('POST', '/api/watch/admin/logout', { adminToken: token });
+      } catch (_) {}
+      clearAdminSession();
+      setStatus(false, 'Admin signed out.');
     }
 
     function updateBadges() {
@@ -1017,6 +1192,20 @@
         setStatus(false, msg);
       }
     });
+    els.refreshAdminsBtn.addEventListener('click', async () => {
+      try {
+        await refreshAdminList();
+        setStatus(true, 'Admin list refreshed.');
+      } catch (err) {
+        const msg = String(err && err.message ? err.message : err);
+        if (msg.includes('admin_auth_invalid')) {
+          clearAdminSession();
+          setStatus(false, 'Admin session expired. Sign in again.');
+          return;
+        }
+        setStatus(false, msg);
+      }
+    });
     els.addAdminBtn.addEventListener('click', async () => {
       try {
         await addAdminUser();
@@ -1033,6 +1222,37 @@
         setStatus(false, msg);
       }
     });
+    els.removeAdminBtn.addEventListener('click', async () => {
+      try {
+        await removeSelectedAdmin();
+      } catch (err) {
+        const msg = String(err && err.message ? err.message : err);
+        if (msg.includes('owner_required')) {
+          setStatus(false, 'Only the owner can remove admins.');
+          return;
+        }
+        if (msg.includes('cannot_remove_owner')) {
+          setStatus(false, 'Owner account cannot be removed.');
+          return;
+        }
+        if (msg.includes('admin_auth_invalid')) {
+          clearAdminSession();
+          setStatus(false, 'Admin session expired. Sign in again.');
+          return;
+        }
+        if (msg.includes('admin_code_invalid')) {
+          setStatus(false, 'Admin code is invalid.');
+          return;
+        }
+        setStatus(false, msg);
+      }
+    });
+    els.adminLogoutBtn.addEventListener('click', async () => {
+      await adminLogout();
+    });
+    for (const btn of els.tabButtons) {
+      btn.addEventListener('click', () => switchTab(btn.getAttribute('data-tab-btn') || 'session'));
+    }
     els.setMediaBtn.addEventListener('click', async () => {
       try { await setupMedia(); } catch (err) { setStatus(false, String(err.message || err)); }
     });
@@ -1117,6 +1337,7 @@
     });
 
     (function init() {
+      switchTab('session');
       const roomFromQuery = normalizeRoomCode(qp('room') || '');
       if (roomFromQuery) els.roomInput.value = roomFromQuery;
       els.roomInput.addEventListener('input', () => {
@@ -1142,6 +1363,11 @@
         }
       } catch (_) {}
       renderAdminIdentity();
+      if (state.adminToken) {
+        refreshAdminList().catch(() => {
+          clearAdminSession();
+        });
+      }
       try {
         const savedName = localStorage.getItem('telewatch_name') || '';
         if (savedName) els.displayName.value = savedName;
