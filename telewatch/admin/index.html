@@ -97,6 +97,16 @@
       font-size: 15px;
       letter-spacing: .02em;
     }
+    .easy-bar {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 10px;
+      border: 1px solid #3a5d8e;
+      border-radius: 10px;
+      padding: 10px;
+      background: linear-gradient(160deg, #0f2140, #173056);
+    }
+    .easy-bar .muted { color: #c2d5f0; }
     @media (max-width: 760px) {
       .wrap { width: calc(100% - 14px); margin: 10px auto; }
       .row > * { min-width: 100%; flex-basis: 100%; }
@@ -175,6 +185,13 @@
       <div class="row" style="align-items:center">
         <h3 style="margin:0">Main Event TV Console</h3>
         <div style="text-align:right"><span class="pill">Big Night Mode</span></div>
+      </div>
+      <div class="easy-bar">
+        <div class="row">
+          <button id="quickStartMainEventBtn" class="big">Quick Start Main Event</button>
+          <button id="quickStopMainEventBtn" class="danger big">Quick Stop</button>
+        </div>
+        <div id="quickMainEventState" class="muted">Ready. Click Quick Start to auto-configure main event.</div>
       </div>
       <div class="muted" style="margin:6px 0 8px">Fast workflow: Prep, Create Event, Load Stream Console, then Go Live.</div>
       <div class="row" style="margin-bottom:8px">
@@ -351,6 +368,9 @@
       mainEventRooms: document.getElementById('mainEventRooms'),
       refreshRoomsBtn: document.getElementById('refreshRoomsBtn'),
       mainEventPrepBtn: document.getElementById('mainEventPrepBtn'),
+      quickStartMainEventBtn: document.getElementById('quickStartMainEventBtn'),
+      quickStopMainEventBtn: document.getElementById('quickStopMainEventBtn'),
+      quickMainEventState: document.getElementById('quickMainEventState'),
       createMainEventBtn: document.getElementById('createMainEventBtn'),
       mainEventGoLiveBtn: document.getElementById('mainEventGoLiveBtn'),
       enableMainEventBtn: document.getElementById('enableMainEventBtn'),
@@ -420,6 +440,9 @@
     function mainEventStudioUrl(code) {
       const c = cleanCode(code);
       return c ? `https://frenzynets.com/telewatch/?room=${encodeURIComponent(c)}&admin=1` : 'https://frenzynets.com/telewatch/?admin=1';
+    }
+    function setQuickState(msg) {
+      if (els.quickMainEventState) els.quickMainEventState.textContent = msg;
     }
     function toLocalInputValue(iso) {
       const d = new Date(String(iso || '').trim());
@@ -657,6 +680,116 @@
         setStatus('Console prepped for big night.');
       } catch (e) {
         setStatus('Prep failed: ' + (e.message || e));
+      }
+    });
+
+    els.quickStartMainEventBtn.addEventListener('click', async () => {
+      try {
+        setQuickState('Starting: preparing console defaults...');
+        if (!els.mainEventCountdown.value) {
+          els.mainEventCountdown.value = nextSaturdayLocalInput();
+        }
+        if (!String(els.mainEventMode.value || '').trim()) els.mainEventMode.value = 'broadcast';
+        if (!String(els.studioAccessMode.value || '').trim()) els.studioAccessMode.value = 'public';
+        if (!String(els.studioTheme.value || '').trim()) els.studioTheme.value = 'clean';
+
+        let code = cleanCode(els.mainEventRoomCode.value || els.mainEventRooms.value);
+        if (!code) {
+          setQuickState('Creating main event room...');
+          const created = await api('/api/watch/create', {
+            adminToken: state.token,
+            roomCode: '',
+            displayName: String(els.mainEventHostName.value || '').trim() || 'MainHost',
+            title: String(els.mainEventTitle.value || '').trim() || 'Main Event',
+            accessMode: 'public',
+            mediaMode: String(els.mainEventMode.value || 'broadcast').trim().toLowerCase()
+          });
+          code = cleanCode(created.roomCode || '');
+          state.mainHostToken = String(created.participantToken || '').trim();
+          state.mainHostRoomCode = code;
+        }
+        if (!code) throw new Error('main_event_room_required');
+        els.mainEventRoomCode.value = code;
+
+        setQuickState('Applying lockdown + countdown settings...');
+        await api('/api/watch/admin/settings', {
+          adminToken: state.token,
+          adminCode: String(els.adminCode.value || '').trim(),
+          action: 'set',
+          mainEventRoomCode: code,
+          mainEventLockdown: true,
+          mainEventCountdownIso: localInputToIso(els.mainEventCountdown.value)
+        });
+        els.mainEventLockdown.value = '1';
+
+        if (!String(state.mainHostToken || '').trim() || cleanCode(state.mainHostRoomCode) !== code) {
+          setQuickState('Attaching host controls...');
+          const joined = await api('/api/watch/join', {
+            roomCode: code,
+            displayName: String(els.mainEventHostName.value || '').trim() || 'MainHost'
+          });
+          if (joined && joined.isHost) {
+            state.mainHostToken = String(joined.participantToken || '').trim();
+            state.mainHostRoomCode = code;
+          }
+        }
+
+        if (String(els.studioTitle.value || '').trim() || String(els.studioMediaUrl.value || '').trim()) {
+          setQuickState('Setting movie details...');
+          await sendMainControl('set_media', {
+            title: String(els.studioTitle.value || els.mainEventTitle.value || '').trim(),
+            mediaUrl: String(els.studioMediaUrl.value || '').trim()
+          });
+        }
+        await sendMainControl('set_access_mode', { accessMode: String(els.studioAccessMode.value || 'public').trim() });
+        await sendMainControl('set_theme', { themeKey: String(els.studioTheme.value || 'clean').trim() });
+
+        const url = mainEventStudioUrl(code);
+        els.studioStreamUrl.value = url;
+        els.studioStreamFrame.src = url;
+        save();
+        render();
+        await refreshAdminRooms();
+        await loadMainEventSettings();
+        setQuickState(`Ready: room ${code} configured. Use Go Live when stream is ready.`);
+        setStatus(`Main Event quick setup complete for ${code}.`);
+      } catch (e) {
+        setQuickState('Quick Start failed. Check admin code / room state.');
+        setStatus('Quick Start failed: ' + (e.message || e));
+      }
+    });
+
+    els.quickStopMainEventBtn.addEventListener('click', async () => {
+      try {
+        const code = cleanCode(els.mainEventRoomCode.value || els.mainEventRooms.value || state.mainHostRoomCode);
+        if (!code) throw new Error('main_event_room_required');
+        await api('/api/watch/delete', {
+          roomCode: code,
+          adminToken: state.token,
+          adminCode: String(els.adminCode.value || '').trim()
+        });
+        await api('/api/watch/admin/settings', {
+          adminToken: state.token,
+          adminCode: String(els.adminCode.value || '').trim(),
+          action: 'set',
+          mainEventLockdown: false,
+          mainEventRoomCode: ''
+        });
+        state.mainHostToken = '';
+        state.mainHostRoomCode = '';
+        els.mainEventRoomCode.value = '';
+        els.mainEventLockdown.value = '0';
+        els.studioStreamFrame.src = '';
+        els.studioStreamUrl.value = mainEventStudioUrl('');
+        save();
+        render();
+        await refreshAdminRooms();
+        await loadMainEventSettings();
+        setQuickState('Stopped. Main Event is fully disabled.');
+        setStatus(`Main Event stopped and room ${code} deleted.`);
+      } catch (e) {
+        setQuickState('Quick Stop failed.');
+        setStatus('Quick Stop failed: ' + (e.message || e));
       }
     });
 
