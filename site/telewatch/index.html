@@ -359,6 +359,31 @@
     }
     .participant-name { font-weight: 700; font-size: 13px; }
     .participant-meta { font-size: 11px; color: var(--muted); }
+    .webcam-grid {
+      display: grid;
+      gap: 8px;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    }
+    .webcam-tile {
+      border: 1px solid var(--line-soft);
+      border-radius: 10px;
+      background: var(--panel-2);
+      padding: 6px;
+      display: grid;
+      gap: 6px;
+    }
+    .webcam-tile video {
+      max-height: 130px;
+      border-radius: 8px;
+    }
+    .webcam-label {
+      font-size: 11px;
+      color: var(--muted);
+      text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
     .reaction-bar {
       display: flex;
       gap: 6px;
@@ -590,6 +615,14 @@
                   </select>
                 </div>
                 <div>
+                  <label for="shareQualitySelect">Share Quality</label>
+                  <select id="shareQualitySelect">
+                    <option value="balanced">Balanced (720p / 30fps)</option>
+                    <option value="high">High (1080p / 60fps)</option>
+                    <option value="ultra">Ultra (1440p / 60fps)</option>
+                  </select>
+                </div>
+                <div>
                   <label for="accessModeSelect">Party Access</label>
                   <select id="accessModeSelect">
                     <option value="public">Public (Anyone can join)</option>
@@ -629,12 +662,26 @@
             <div class="block stack full">
               <h3>Voice Chat</h3>
               <div id="voiceStatus" class="muted">Voice: off</div>
+              <div id="webcamStatus" class="muted">Webcam: off</div>
               <div id="shareSourceInfo" class="muted">Selected share source: none</div>
               <div id="shareAudioInfo" class="muted">Selected share audio: none</div>
+              <div class="row">
+                <select id="webcamPolicySelect">
+                  <option value="allow">Allow participant webcams</option>
+                  <option value="deny">Block participant webcams</option>
+                </select>
+                <button id="setWebcamPolicyBtn" class="secondary">Apply Webcam Policy</button>
+              </div>
               <div class="row">
                 <button id="joinVoiceBtn" class="secondary">Join Voice</button>
                 <button id="leaveVoiceBtn" class="secondary" disabled>Leave Voice</button>
               </div>
+              <div class="row">
+                <button id="startWebcamBtn" class="secondary">Start Webcam</button>
+                <button id="stopWebcamBtn" class="secondary" disabled>Stop Webcam</button>
+              </div>
+              <video id="localWebcamPreview" playsinline autoplay muted class="hidden-media"></video>
+              <div id="remoteWebcamGrid" class="webcam-grid hidden-media"></div>
               <div class="row">
                 <select id="muteTargetSelect"></select>
                 <button id="muteTargetBtn" class="secondary">Mute</button>
@@ -842,8 +889,16 @@
       joinVoiceBtn: document.getElementById('joinVoiceBtn'),
       leaveVoiceBtn: document.getElementById('leaveVoiceBtn'),
       voiceStatus: document.getElementById('voiceStatus'),
+      webcamStatus: document.getElementById('webcamStatus'),
       shareSourceInfo: document.getElementById('shareSourceInfo'),
       shareAudioInfo: document.getElementById('shareAudioInfo'),
+      shareQualitySelect: document.getElementById('shareQualitySelect'),
+      webcamPolicySelect: document.getElementById('webcamPolicySelect'),
+      setWebcamPolicyBtn: document.getElementById('setWebcamPolicyBtn'),
+      startWebcamBtn: document.getElementById('startWebcamBtn'),
+      stopWebcamBtn: document.getElementById('stopWebcamBtn'),
+      localWebcamPreview: document.getElementById('localWebcamPreview'),
+      remoteWebcamGrid: document.getElementById('remoteWebcamGrid'),
       muteTargetSelect: document.getElementById('muteTargetSelect'),
       muteTargetBtn: document.getElementById('muteTargetBtn'),
       unmuteTargetBtn: document.getElementById('unmuteTargetBtn'),
@@ -927,7 +982,8 @@
       pendingJoinToken: '',
       inviteToken: '',
       autoRejoinTried: false,
-      clientMode: 'web'
+      clientMode: 'web',
+      allowWebcam: true
     };
     const SESSION_KEY = 'telewatch_session';
     const ADMIN_SESSION_KEY = 'telewatch_admin_session';
@@ -1411,13 +1467,17 @@
     const rtc = {
       localScreenStream: null,
       localVoiceStream: null,
+      localCamStream: null,
       peers: new Map(),
       pendingCandidates: new Map(),
       offeredTo: new Set(),
       audioEls: new Map(),
-      voiceOfferedTo: new Set()
+      camEls: new Map(),
+      voiceOfferedTo: new Set(),
+      camOfferedTo: new Set()
     };
     let openPartyTimer = null;
+    let desktopFallbackTimer = null;
 
     function qp(name) {
       const u = new URL(window.location.href);
@@ -1427,6 +1487,10 @@
     function applyClientMode(mode) {
       const clean = String(mode || '').trim().toLowerCase() === 'desktop' ? 'desktop' : 'web';
       state.clientMode = clean;
+      if (clean === 'web' && desktopFallbackTimer) {
+        clearTimeout(desktopFallbackTimer);
+        desktopFallbackTimer = null;
+      }
       if (els.clientModeSelect) els.clientModeSelect.value = clean;
       if (els.joinHint) {
         els.joinHint.textContent = clean === 'desktop'
@@ -1441,14 +1505,29 @@
       const room = normalizeRoomCode(els.roomInput && els.roomInput.value);
       const name = String((els.displayName && els.displayName.value) || '').trim();
       const title = String((els.titleInput && els.titleInput.value) || '').trim();
+      if (desktopFallbackTimer) {
+        clearTimeout(desktopFallbackTimer);
+        desktopFallbackTimer = null;
+      }
       const u = new URL('frenzynet://telewatch');
       u.searchParams.set('action', action);
       if (room) u.searchParams.set('room', room);
       if (name) u.searchParams.set('name', name);
       if (title) u.searchParams.set('title', title);
       if (state.inviteToken) u.searchParams.set('invite', String(state.inviteToken));
+      let blurred = false;
+      const onBlur = () => { blurred = true; };
+      window.addEventListener('blur', onBlur, { once: true });
       window.location.href = u.toString();
       setStatus(true, 'Opening desktop app...');
+      desktopFallbackTimer = window.setTimeout(() => {
+        window.removeEventListener('blur', onBlur);
+        desktopFallbackTimer = null;
+        if (state.clientMode === 'desktop' && !blurred) {
+          applyClientMode('web');
+          setStatus(false, 'Desktop app not detected. Switched to web mode.');
+        }
+      }, 2200);
     }
 
     function setStatus(ok, text) {
@@ -1710,12 +1789,30 @@
         const card = document.createElement('div');
         card.className = 'participant-card';
         const mutedByHost = !!state.hostMuted[String(p.participantId || '').toLowerCase()];
+        const hasRemoteCam = !!rtc.camEls.get(String(p.participantId || ''));
+        const hasLocalCam = !!(p.isSelf && camOn());
         card.innerHTML = `
           <div class="participant-name">${String(p.displayName || 'Guest')}</div>
-          <div class="participant-meta">${p.isHost ? 'Host' : 'Viewer'}${p.isSelf ? ' · You' : ''}</div>
+          <div class="participant-meta">${p.isHost ? 'Host' : (p.isCohost ? 'Co-host' : 'Viewer')}${p.isSelf ? ' · You' : ''}</div>
           <div class="participant-meta">${mutedByHost ? 'Muted by host' : 'Unmuted'}</div>
+          <div class="participant-meta">${(hasRemoteCam || hasLocalCam) ? 'Webcam on' : 'Webcam off'}</div>
         `;
         els.participantsGrid.appendChild(card);
+      }
+      if (state.isHost) {
+        const keep = new Set(rows.map((r) => String(r.participantId || '')));
+        for (const pid of Array.from(rtc.camEls.keys())) {
+          if (!keep.has(pid)) {
+            const tile = rtc.camEls.get(pid);
+            if (tile) {
+              try { tile.video.srcObject = null; tile.wrap.remove(); } catch (_) {}
+            }
+            rtc.camEls.delete(pid);
+          }
+        }
+        if (els.remoteWebcamGrid) {
+          els.remoteWebcamGrid.classList.toggle('hidden-media', rtc.camEls.size < 1);
+        }
       }
     }
 
@@ -1869,12 +1966,45 @@
       return !!(rtc.localVoiceStream && rtc.localVoiceStream.getAudioTracks().length);
     }
 
+    function camOn() {
+      return !!(rtc.localCamStream && rtc.localCamStream.getVideoTracks().length);
+    }
+
+    function getShareQualityProfile() {
+      const raw = String((els.shareQualitySelect && els.shareQualitySelect.value) || 'balanced').toLowerCase();
+      if (raw === 'ultra') {
+        return { key: 'ultra', maxBitrate: 10000000, maxFramerate: 60, width: 2560, height: 1440, frameRate: 60 };
+      }
+      if (raw === 'high') {
+        return { key: 'high', maxBitrate: 6500000, maxFramerate: 60, width: 1920, height: 1080, frameRate: 60 };
+      }
+      return { key: 'balanced', maxBitrate: 3200000, maxFramerate: 30, width: 1280, height: 720, frameRate: 30 };
+    }
+
+    async function setSenderQuality(sender, profile) {
+      if (!sender || !sender.getParameters || !sender.setParameters || !profile) return;
+      try {
+        const params = sender.getParameters() || {};
+        if (!Array.isArray(params.encodings) || !params.encodings.length) params.encodings = [{}];
+        params.encodings[0].maxBitrate = profile.maxBitrate;
+        params.encodings[0].maxFramerate = profile.maxFramerate;
+        await sender.setParameters(params);
+      } catch (_) {}
+    }
+
     function updateVoiceUi() {
       if (els.voiceStatus) {
         const muted = !!state.hostMuted[state.participantId || ''];
         els.voiceStatus.textContent = voiceOn()
           ? (muted ? 'Voice: on (muted by host)' : 'Voice: on')
           : 'Voice: off';
+      }
+      if (els.webcamStatus) {
+        if (!state.allowWebcam && !state.isHost) {
+          els.webcamStatus.textContent = 'Webcam: blocked by host';
+        } else {
+          els.webcamStatus.textContent = camOn() ? 'Webcam: on' : 'Webcam: off';
+        }
       }
       if (els.joinVoiceBtn) els.joinVoiceBtn.disabled = voiceOn();
       if (els.leaveVoiceBtn) els.leaveVoiceBtn.disabled = !voiceOn();
@@ -1885,6 +2015,17 @@
       if (els.approveJoinBtn) els.approveJoinBtn.disabled = !hostCanModerate;
       if (els.denyJoinBtn) els.denyJoinBtn.disabled = !hostCanModerate;
       if (els.setAccessModeBtn) els.setAccessModeBtn.disabled = !hostCanModerate;
+      if (els.setWebcamPolicyBtn) els.setWebcamPolicyBtn.disabled = !hostCanModerate;
+      if (els.webcamPolicySelect) {
+        els.webcamPolicySelect.disabled = !hostCanModerate;
+        els.webcamPolicySelect.value = state.allowWebcam ? 'allow' : 'deny';
+      }
+      const canUseWebcam = !!state.roomCode && (state.isHost || state.allowWebcam);
+      if (els.startWebcamBtn) els.startWebcamBtn.disabled = !canUseWebcam || camOn();
+      if (els.stopWebcamBtn) els.stopWebcamBtn.disabled = !camOn();
+      if (els.remoteWebcamGrid) {
+        els.remoteWebcamGrid.classList.toggle('hidden-media', !state.isHost || rtc.camEls.size < 1);
+      }
     }
 
     function refreshMuteTargets() {
@@ -1981,6 +2122,58 @@
       }
     }
 
+    function addLocalCamTrackToPeer(pc) {
+      if (!rtc.localCamStream) return;
+      const track = rtc.localCamStream.getVideoTracks()[0];
+      if (!track) return;
+      const existing = pc.getSenders().find((s) => s.track && s.track.kind === 'video' && s.track.id === track.id);
+      if (existing) {
+        existing.replaceTrack(track).catch(() => {});
+      } else {
+        pc.addTrack(track, rtc.localCamStream);
+      }
+    }
+
+    function hostRemoteCamContainer(participantId, displayName) {
+      if (!els.remoteWebcamGrid) return null;
+      const key = String(participantId || '').trim();
+      if (!key) return null;
+      let tile = rtc.camEls.get(key);
+      if (tile) return tile;
+      const wrap = document.createElement('div');
+      wrap.className = 'webcam-tile';
+      const video = document.createElement('video');
+      video.autoplay = true;
+      video.playsInline = true;
+      video.muted = false;
+      const label = document.createElement('div');
+      label.className = 'webcam-label';
+      label.textContent = displayName || key;
+      wrap.appendChild(video);
+      wrap.appendChild(label);
+      els.remoteWebcamGrid.appendChild(wrap);
+      tile = { wrap, video, label };
+      rtc.camEls.set(key, tile);
+      return tile;
+    }
+
+    async function syncCamOfferToHost() {
+      if (!camOn() || state.isHost) return;
+      const hostId = getHostParticipantId();
+      if (!hostId) return;
+      if (rtc.camOfferedTo.has(hostId)) return;
+      const pc = ensurePeer(hostId);
+      addLocalCamTrackToPeer(pc);
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      await sendControl('signal', {
+        toParticipantId: hostId,
+        signalType: 'offer',
+        sdp: String(offer.sdp || '')
+      });
+      rtc.camOfferedTo.add(hostId);
+    }
+
     async function startVoiceChat() {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error('Voice chat unavailable in this browser.');
@@ -2020,6 +2213,66 @@
       if (!toParticipantId) return;
       await sendControl('mute_user', { toParticipantId, muted: !!muted });
       setStatus(true, (muted ? 'Muted ' : 'Unmuted ') + toParticipantId);
+    }
+
+    async function setWebcamPolicy() {
+      if (!state.isHost) return;
+      const mode = String((els.webcamPolicySelect && els.webcamPolicySelect.value) || 'allow').toLowerCase();
+      const allowWebcam = mode !== 'deny';
+      await sendControl('set_webcam_policy', { allowWebcam });
+      state.allowWebcam = allowWebcam;
+      updateVoiceUi();
+      setStatus(true, allowWebcam ? 'Participant webcams enabled.' : 'Participant webcams blocked.');
+    }
+
+    async function startWebcamShare() {
+      if (!state.roomCode) return;
+      if (!state.isHost && !state.allowWebcam) {
+        setStatus(false, 'Host has blocked participant webcams.');
+        return;
+      }
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('Webcam is unavailable in this browser.');
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30, max: 60 } },
+        audio: false
+      });
+      rtc.localCamStream = stream;
+      if (els.localWebcamPreview) {
+        els.localWebcamPreview.srcObject = stream;
+        els.localWebcamPreview.classList.remove('hidden-media');
+        els.localWebcamPreview.play().catch(() => {});
+      }
+      updateVoiceUi();
+      if (!state.isHost) {
+        await syncCamOfferToHost();
+      }
+      addEventLine('Webcam started');
+    }
+
+    async function stopWebcamShare() {
+      if (rtc.localCamStream) {
+        for (const t of rtc.localCamStream.getTracks()) {
+          try { t.stop(); } catch (_) {}
+        }
+      }
+      rtc.localCamStream = null;
+      if (els.localWebcamPreview) {
+        try { els.localWebcamPreview.srcObject = null; } catch (_) {}
+        els.localWebcamPreview.classList.add('hidden-media');
+      }
+      rtc.camOfferedTo.clear();
+      for (const row of rtc.peers.values()) {
+        const pc = row.pc;
+        for (const sender of pc.getSenders()) {
+          if (sender.track && sender.track.kind === 'video' && sender.track !== (rtc.localScreenStream && rtc.localScreenStream.getVideoTracks()[0])) {
+            sender.replaceTrack(null).catch(() => {});
+          }
+        }
+      }
+      updateVoiceUi();
+      addEventLine('Webcam stopped');
     }
 
     async function setAccessMode() {
@@ -2234,10 +2487,16 @@
       rtc.pendingCandidates.delete(participantId);
       rtc.offeredTo.delete(participantId);
       rtc.voiceOfferedTo.delete(participantId);
+      rtc.camOfferedTo.delete(participantId);
       const audioEl = rtc.audioEls.get(participantId);
       if (audioEl) {
         try { audioEl.srcObject = null; audioEl.remove(); } catch (_) {}
         rtc.audioEls.delete(participantId);
+      }
+      const camTile = rtc.camEls.get(participantId);
+      if (camTile) {
+        try { camTile.video.srcObject = null; camTile.wrap.remove(); } catch (_) {}
+        rtc.camEls.delete(participantId);
       }
     }
 
@@ -2274,6 +2533,16 @@
           }
           return;
         }
+        if (state.isHost && track && track.kind === 'video') {
+          const participant = (state.participants || []).find((p) => String(p.participantId || '') === participantId);
+          const tile = hostRemoteCamContainer(participantId, participant ? String(participant.displayName || participantId) : participantId);
+          if (tile && ev.streams && ev.streams[0]) {
+            tile.video.srcObject = ev.streams[0];
+            tile.video.play().catch(() => {});
+            if (els.remoteWebcamGrid) els.remoteWebcamGrid.classList.remove('hidden-media');
+          }
+          return;
+        }
         if (!state.isHost && ev.streams && ev.streams[0]) {
           els.screenView.srcObject = ev.streams[0];
           els.screenView.muted = false;
@@ -2290,20 +2559,28 @@
       return row ? String(row.participantId || '') : '';
     }
 
-    function syncHostTrackSenders(participantId, pc) {
+    async function syncHostTrackSenders(participantId, pc) {
       if (!state.isHost || !rtc.localScreenStream) return;
+      const profile = getShareQualityProfile();
       const tracks = rtc.localScreenStream.getTracks().filter((t) => t.kind === 'video' || t.kind === 'audio');
       for (const track of tracks) {
         const existing = pc.getSenders().find((s) => s.track && s.track.kind === track.kind);
-        if (existing) existing.replaceTrack(track).catch(() => {});
-        else pc.addTrack(track, rtc.localScreenStream);
+        let sender = existing;
+        if (sender) {
+          sender.replaceTrack(track).catch(() => {});
+        } else {
+          sender = pc.addTrack(track, rtc.localScreenStream);
+        }
+        if (track.kind === 'video') {
+          await setSenderQuality(sender, profile);
+        }
       }
     }
 
     async function createOfferFor(participantId) {
       if (!state.isHost || !rtc.localScreenStream || !participantId) return;
       const pc = ensurePeer(participantId);
-      syncHostTrackSenders(participantId, pc);
+      await syncHostTrackSenders(participantId, pc);
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       await sendControl('signal', {
@@ -2341,7 +2618,11 @@
       }
       const surface = String((els.shareSurfaceSelect && els.shareSurfaceSelect.value) || 'auto');
       const audioMode = String((els.shareAudioSelect && els.shareAudioSelect.value) || 'auto');
+      const quality = getShareQualityProfile();
       const videoCfg = {};
+      videoCfg.width = { ideal: quality.width };
+      videoCfg.height = { ideal: quality.height };
+      videoCfg.frameRate = { ideal: quality.frameRate, max: quality.maxFramerate };
       if (surface === 'browser') {
         videoCfg.displaySurface = 'browser';
         videoCfg.selfBrowserSurface = 'exclude';
@@ -2369,6 +2650,7 @@
       if (els.shareAudioInfo) {
         els.shareAudioInfo.textContent = 'Selected share audio: ' + (audTrack && audTrack.label ? audTrack.label : 'none');
       }
+      setStatus(true, `Sharing ${quality.key} quality (${quality.width}x${quality.height}).`);
       els.screenView.srcObject = stream;
       els.screenView.muted = true;
       try { await els.screenView.play(); } catch (_) {}
@@ -2420,11 +2702,12 @@
       const kind = String(payload.signalType || '').toLowerCase();
       if (!fromId || !kind) return;
       const pc = ensurePeer(fromId);
-      if (state.isHost) syncHostTrackSenders(fromId, pc);
+      if (state.isHost) await syncHostTrackSenders(fromId, pc);
       if (kind === 'offer') {
         await pc.setRemoteDescription({ type: 'offer', sdp: String(payload.sdp || '') });
         await flushIceQueue(fromId, pc);
         if (voiceOn()) addLocalVoiceTrackToPeer(pc);
+        if (camOn() && !state.isHost && fromId === getHostParticipantId()) addLocalCamTrackToPeer(pc);
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
         await sendControl('signal', {
@@ -2669,6 +2952,7 @@
       if (els.inviteTtlInput) els.inviteTtlInput.disabled = !state.isHost;
       if (els.inviteMaxUsesInput) els.inviteMaxUsesInput.disabled = !state.isHost;
       els.chatBtn.disabled = false;
+      updateVoiceUi();
       setWizardStep(2);
       switchTab(state.isHost ? 'host' : 'chat');
       stopPollingLoop();
@@ -2681,8 +2965,12 @@
       if (!room) return;
       state.lastRoom = room;
       state.accessMode = String(room.accessMode || 'public');
+      state.allowWebcam = room.allowWebcam !== false;
       if (els.accessModeSelect && ['public', 'invite', 'closed'].includes(state.accessMode)) {
         els.accessModeSelect.value = state.accessMode;
+      }
+      if (els.webcamPolicySelect) {
+        els.webcamPolicySelect.value = state.allowWebcam ? 'allow' : 'deny';
       }
       const roomTheme = Object.prototype.hasOwnProperty.call(THEMES, String(room.themeKey || '')) ? String(room.themeKey) : 'clean';
       state.roomThemeKey = roomTheme;
@@ -2692,7 +2980,11 @@
       if (!state.isHost) {
         els.titleInput.value = room.title || '';
         els.mediaInput.value = room.mediaUrl || '';
+        if (!state.allowWebcam && camOn()) {
+          stopWebcamShare().catch(() => {});
+        }
       }
+      updateVoiceUi();
 
       const p = els.player;
       const mediaUrl = (room.mediaUrl || '').trim();
@@ -2810,6 +3102,9 @@
         if (voiceOn()) {
           await syncVoiceOffers();
         }
+        if (camOn() && !state.isHost) {
+          await syncCamOfferToHost();
+        }
         for (const ev of (data.events || [])) {
           state.sinceEventId = Math.max(state.sinceEventId, Number(ev.id) || 0);
           const actor = ev.actor || 'user';
@@ -2852,11 +3147,22 @@
               state.participantToken = '';
               state.participantId = '';
               clearSession();
+              await stopWebcamShare().catch(() => {});
               setStatus(false, 'You were removed by the host.');
               setSyncLabel('removed');
               updateBadges();
               setThemeControlState();
               return false;
+            }
+            continue;
+          }
+          if (ev.type === 'set_webcam_policy') {
+            const allowed = !!ev.payload?.allowWebcam;
+            state.allowWebcam = allowed;
+            updateVoiceUi();
+            if (!allowed && !state.isHost && camOn()) {
+              await stopWebcamShare().catch(() => {});
+              setStatus(false, 'Host disabled participant webcams.');
             }
             continue;
           }
@@ -2872,6 +3178,7 @@
           const prevRoom = String(state.roomCode || '');
           stopPollingLoop();
           clearSession();
+          await stopWebcamShare().catch(() => {});
           state.roomCode = '';
           state.participantToken = '';
           state.participantId = '';
@@ -3009,6 +3316,21 @@
     if (els.leaveVoiceBtn) {
       els.leaveVoiceBtn.addEventListener('click', async () => {
         try { await stopVoiceChat(); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
+      });
+    }
+    if (els.setWebcamPolicyBtn) {
+      els.setWebcamPolicyBtn.addEventListener('click', async () => {
+        try { await setWebcamPolicy(); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
+      });
+    }
+    if (els.startWebcamBtn) {
+      els.startWebcamBtn.addEventListener('click', async () => {
+        try { await startWebcamShare(); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
+      });
+    }
+    if (els.stopWebcamBtn) {
+      els.stopWebcamBtn.addEventListener('click', async () => {
+        try { await stopWebcamShare(); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
       });
     }
     if (els.muteTargetBtn) {
@@ -3172,6 +3494,7 @@
         await sendControl('delete_room', {});
         stopPollingLoop();
         await stopScreenShare();
+        await stopWebcamShare();
         state.roomCode = '';
         state.participantToken = '';
         state.participantId = '';
@@ -3287,6 +3610,12 @@
       }
       if (els.shareAudioSelect && !els.shareAudioSelect.value) {
         els.shareAudioSelect.value = 'tab';
+      }
+      if (els.shareQualitySelect && !els.shareQualitySelect.value) {
+        els.shareQualitySelect.value = 'high';
+      }
+      if (els.webcamPolicySelect && !els.webcamPolicySelect.value) {
+        els.webcamPolicySelect.value = 'allow';
       }
       const inviteSettings = readInviteSettings();
       if (els.inviteTtlInput) els.inviteTtlInput.value = String(inviteSettings.ttlMinutes);
