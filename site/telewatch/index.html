@@ -406,6 +406,67 @@
       display: grid;
       gap: 8px;
     }
+    .movie-chat-dock {
+      border: 1px solid #3a4f6f;
+      border-radius: 12px;
+      background: #162131;
+      padding: 8px;
+      display: grid;
+      gap: 8px;
+    }
+    .movie-chat-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .movie-chat-head h3 {
+      margin: 0;
+      text-transform: none;
+      letter-spacing: .01em;
+      color: #e6f0ff;
+      font-size: 15px;
+    }
+    .movie-chat-head button {
+      width: auto;
+      min-width: 120px;
+      padding: 6px 10px;
+    }
+    .movie-chat-body {
+      display: grid;
+      gap: 8px;
+    }
+    .movie-chat-body.hidden {
+      display: none;
+    }
+    .movie-chat-feed {
+      max-height: 230px;
+      min-height: 170px;
+      overflow: auto;
+      border: 1px solid #334761;
+      border-radius: 10px;
+      padding: 8px;
+      background: #0f1722;
+      display: grid;
+      gap: 8px;
+      scrollbar-width: auto;
+      scrollbar-color: #5f7faa #1a2432;
+    }
+    .movie-chat-feed::-webkit-scrollbar {
+      width: 10px;
+    }
+    .movie-chat-feed::-webkit-scrollbar-track {
+      background: #1a2432;
+      border-radius: 10px;
+    }
+    .movie-chat-feed::-webkit-scrollbar-thumb {
+      background: #5f7faa;
+      border-radius: 10px;
+      border: 2px solid #1a2432;
+    }
+    .movie-chat-feed .msg-actions {
+      display: none;
+    }
     .duo {
       display: grid;
       grid-template-columns: 1fr 330px;
@@ -1331,12 +1392,38 @@
                 <div id="reactionOverlay" class="reaction-overlay"></div>
               </div>
               <video id="screenView" controls autoplay playsinline muted></video>
+              <div class="movie-chat-dock">
+                <div class="movie-chat-head">
+                  <h3>Movie Chat</h3>
+                  <button id="stageChatToggleBtn" class="secondary">Minimize Chat</button>
+                </div>
+                <div id="stageChatBody" class="movie-chat-body">
+                  <div id="stagePinnedChat" class="pinned-box">No pinned message</div>
+                  <div id="stageChatFeed" class="movie-chat-feed"></div>
+                  <div class="chat-compose">
+                    <textarea id="stageChatInput" placeholder="Message while watching..."></textarea>
+                    <button id="stageChatSendBtn" class="secondary">Send</button>
+                  </div>
+                </div>
+              </div>
               <div class="family-lounge">
                 <h3 style="margin:0">Family Lounge Voice + Webcam</h3>
                 <div id="voiceStatus" class="muted">Voice: off</div>
                 <div id="webcamStatus" class="muted">Webcam: off</div>
                 <div id="shareSourceInfo" class="muted">Selected share source: none</div>
                 <div id="shareAudioInfo" class="muted">Selected share audio: none</div>
+                <div class="row">
+                  <div>
+                    <label for="displaySelect">Movie Display</label>
+                    <select id="displaySelect"></select>
+                  </div>
+                  <div style="align-self:end">
+                    <button id="refreshDisplaysBtn" class="secondary">Refresh Displays</button>
+                  </div>
+                  <div style="align-self:end">
+                    <button id="openOnDisplayBtn" class="secondary">Open Stage On Display</button>
+                  </div>
+                </div>
                 <div class="media-device-panel">
                   <div class="row">
                     <div>
@@ -1654,6 +1741,15 @@
       eventsBlock: document.getElementById('eventsBlock'),
       chatFeed: document.getElementById('chatFeed'),
       chatCount: document.getElementById('chatCount'),
+      stageChatToggleBtn: document.getElementById('stageChatToggleBtn'),
+      stageChatBody: document.getElementById('stageChatBody'),
+      stagePinnedChat: document.getElementById('stagePinnedChat'),
+      stageChatFeed: document.getElementById('stageChatFeed'),
+      stageChatInput: document.getElementById('stageChatInput'),
+      stageChatSendBtn: document.getElementById('stageChatSendBtn'),
+      displaySelect: document.getElementById('displaySelect'),
+      refreshDisplaysBtn: document.getElementById('refreshDisplaysBtn'),
+      openOnDisplayBtn: document.getElementById('openOnDisplayBtn'),
       player: document.getElementById('player'),
       screenView: document.getElementById('screenView'),
       stepSession: document.getElementById('stepSession'),
@@ -1702,9 +1798,11 @@
       layoutMode: 'standard',
       densityMode: 'comfortable',
       uiMode: 'easy',
+      stageChatMinimized: false,
       hostOptionsMinimized: false,
       preferredMicId: '',
       preferredCamId: '',
+      availableDisplays: [],
       userToken: '',
       userEmail: '',
       userDisplayName: '',
@@ -1724,6 +1822,7 @@
     const ROOM_TEMPLATE_KEY = 'telewatch_room_templates_v1';
     const USER_SESSION_KEY = 'telewatch_user_session_v1';
     const UI_MODE_KEY = 'telewatch_ui_mode';
+    const STAGE_CHAT_MIN_KEY = 'telewatch_stage_chat_min';
     const HOST_OPTIONS_MIN_KEY = 'telewatch_host_options_min';
     const MIC_DEVICE_KEY = 'telewatch_mic_device_id';
     const CAM_DEVICE_KEY = 'telewatch_cam_device_id';
@@ -3308,6 +3407,70 @@
       els.hostOptionsToggleBtn.textContent = state.hostOptionsMinimized ? 'Expand Host Options' : 'Minimize Host Options';
     }
 
+    function renderStageChatMinimized() {
+      if (!els.stageChatBody || !els.stageChatToggleBtn) return;
+      els.stageChatBody.classList.toggle('hidden', !!state.stageChatMinimized);
+      els.stageChatToggleBtn.textContent = state.stageChatMinimized ? 'Show Chat' : 'Minimize Chat';
+    }
+
+    async function refreshDisplayOptions() {
+      if (!els.displaySelect) return;
+      state.availableDisplays = [];
+      let screens = [];
+      if (window.getScreenDetails) {
+        try {
+          const details = await window.getScreenDetails();
+          screens = Array.isArray(details && details.screens) ? details.screens : [];
+        } catch (_) {}
+      }
+      if (!screens.length && window.screen) {
+        screens = [window.screen];
+      }
+      state.availableDisplays = screens;
+      els.displaySelect.innerHTML = '';
+      for (let i = 0; i < screens.length; i += 1) {
+        const s = screens[i] || {};
+        const o = document.createElement('option');
+        o.value = String(i);
+        const left = Number.isFinite(Number(s.availLeft)) ? Number(s.availLeft) : 0;
+        const top = Number.isFinite(Number(s.availTop)) ? Number(s.availTop) : 0;
+        const w = Number.isFinite(Number(s.availWidth)) ? Number(s.availWidth) : Number(s.width || 0);
+        const h = Number.isFinite(Number(s.availHeight)) ? Number(s.availHeight) : Number(s.height || 0);
+        const primary = s.isPrimary ? 'Primary' : `Display ${i + 1}`;
+        o.textContent = `${primary} (${w}x${h} @ ${left},${top})`;
+        els.displaySelect.appendChild(o);
+      }
+      if (!screens.length) {
+        const o = document.createElement('option');
+        o.value = '';
+        o.textContent = 'Current display only';
+        els.displaySelect.appendChild(o);
+      }
+    }
+
+    function openStageOnSelectedDisplay() {
+      const qs = new URLSearchParams(window.location.search);
+      if (state.roomCode && !qs.get('room')) qs.set('room', state.roomCode);
+      const url = `${window.location.origin}${window.location.pathname}?${qs.toString()}`;
+      const selected = Number((els.displaySelect && els.displaySelect.value) || 0);
+      const target = state.availableDisplays[selected] || state.availableDisplays[0] || window.screen;
+      const w = Math.max(900, Number(target && (target.availWidth || target.width) || 1280));
+      const h = Math.max(540, Number(target && (target.availHeight || target.height) || 720));
+      const left = Number(target && target.availLeft || 0);
+      const top = Number(target && target.availTop || 0);
+      const popup = window.open(url, '_blank', `noopener,noreferrer,width=${w},height=${h},left=${left},top=${top}`);
+      if (!popup) {
+        setStatus(false, 'Popup blocked. Allow popups, then try Open Stage On Display again.');
+        return;
+      }
+      try {
+        popup.moveTo(left, top);
+        popup.resizeTo(w, h);
+        popup.focus();
+      } catch (_) {}
+      setStatus(true, 'Stage opened on selected display. Move it if needed, then go fullscreen.');
+    }
+
     function refreshMuteTargets() {
       if (!els.muteTargetSelect) return;
       els.muteTargetSelect.innerHTML = '';
@@ -3833,14 +3996,16 @@
     }
 
     function renderPinnedMessage() {
-      if (!els.pinnedChat) return;
       const id = Number(state.pinnedMessageId || 0);
       const entry = id ? state.chatMessages.get(id) : null;
       if (!entry) {
-        els.pinnedChat.textContent = 'No pinned message';
+        if (els.pinnedChat) els.pinnedChat.textContent = 'No pinned message';
+        if (els.stagePinnedChat) els.stagePinnedChat.textContent = 'No pinned message';
         return;
       }
-      els.pinnedChat.textContent = `${entry.actor}: ${entry.message}`;
+      const txt = `${entry.actor}: ${entry.message}`;
+      if (els.pinnedChat) els.pinnedChat.textContent = txt;
+      if (els.stagePinnedChat) els.stagePinnedChat.textContent = txt;
     }
 
     function sendChatReaction(messageId, emoji) {
@@ -3891,16 +4056,26 @@
       const hiddenCount = Math.max(0, sorted.length - 80);
       const entries = sorted.slice(Math.max(0, sorted.length - 80));
       const wasNearBottom = Math.abs((els.chatFeed.scrollTop + els.chatFeed.clientHeight) - els.chatFeed.scrollHeight) < 36;
+      const stageWasNearBottom = els.stageChatFeed
+        ? Math.abs((els.stageChatFeed.scrollTop + els.stageChatFeed.clientHeight) - els.stageChatFeed.scrollHeight) < 36
+        : true;
       if (els.chatCount) {
         const total = sorted.length;
         els.chatCount.textContent = `${total} message${total === 1 ? '' : 's'}`;
       }
       els.chatFeed.innerHTML = '';
+      if (els.stageChatFeed) els.stageChatFeed.innerHTML = '';
       if (hiddenCount > 0) {
         const note = document.createElement('div');
         note.className = 'empty-state';
         note.textContent = `${hiddenCount} older messages archived`;
         els.chatFeed.appendChild(note);
+        if (els.stageChatFeed) {
+          const note2 = document.createElement('div');
+          note2.className = 'empty-state';
+          note2.textContent = note.textContent;
+          els.stageChatFeed.appendChild(note2);
+        }
       }
       for (const row of entries) {
         const d = document.createElement('div');
@@ -3951,9 +4126,16 @@
           d.appendChild(card);
         }
         els.chatFeed.appendChild(d);
+        if (els.stageChatFeed) {
+          const copy = d.cloneNode(true);
+          els.stageChatFeed.appendChild(copy);
+        }
       }
       if (wasNearBottom || entries.length < 2) {
         els.chatFeed.scrollTop = els.chatFeed.scrollHeight;
+      }
+      if (els.stageChatFeed && (stageWasNearBottom || entries.length < 2)) {
+        els.stageChatFeed.scrollTop = els.stageChatFeed.scrollHeight;
       }
       renderPinnedMessage();
     }
@@ -5320,11 +5502,14 @@
       updateHostPreview();
     }
 
-    async function sendChat() {
-      const message = els.chatInput.value.trim();
+    async function sendChat(source) {
+      const fromStage = String(source || '').toLowerCase() === 'stage';
+      const input = fromStage ? els.stageChatInput : els.chatInput;
+      if (!input) return;
+      const message = String(input.value || '').trim();
       if (!message) return;
       await sendControl('chat', { message });
-      els.chatInput.value = '';
+      input.value = '';
     }
 
     async function copyInviteLink() {
@@ -6060,11 +6245,41 @@
     els.chatBtn.addEventListener('click', async () => {
       try { await sendChat(); } catch (err) { setStatus(false, String(err.message || err)); }
     });
+    if (els.stageChatSendBtn) {
+      els.stageChatSendBtn.addEventListener('click', async () => {
+        try { await sendChat('stage'); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
+      });
+    }
     if (els.chatInput) {
       els.chatInput.addEventListener('keydown', async (ev) => {
         if (ev.key !== 'Enter' || ev.shiftKey) return;
         ev.preventDefault();
         try { await sendChat(); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
+      });
+    }
+    if (els.stageChatInput) {
+      els.stageChatInput.addEventListener('keydown', async (ev) => {
+        if (ev.key !== 'Enter' || ev.shiftKey) return;
+        ev.preventDefault();
+        try { await sendChat('stage'); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
+      });
+    }
+    if (els.stageChatToggleBtn) {
+      els.stageChatToggleBtn.addEventListener('click', () => {
+        state.stageChatMinimized = !state.stageChatMinimized;
+        try { localStorage.setItem(STAGE_CHAT_MIN_KEY, state.stageChatMinimized ? '1' : '0'); } catch (_) {}
+        renderStageChatMinimized();
+      });
+    }
+    if (els.refreshDisplaysBtn) {
+      els.refreshDisplaysBtn.addEventListener('click', async () => {
+        await refreshDisplayOptions();
+        setStatus(true, 'Display list refreshed.');
+      });
+    }
+    if (els.openOnDisplayBtn) {
+      els.openOnDisplayBtn.addEventListener('click', () => {
+        openStageOnSelectedDisplay();
       });
     }
     els.copyLinkBtn.addEventListener('click', copyInviteLink);
@@ -6249,7 +6464,14 @@
       } catch (_) {
         state.hostOptionsMinimized = false;
       }
+      try {
+        state.stageChatMinimized = String(localStorage.getItem(STAGE_CHAT_MIN_KEY) || '0') === '1';
+      } catch (_) {
+        state.stageChatMinimized = false;
+      }
       renderHostOptionsMinimized();
+      renderStageChatMinimized();
+      refreshDisplayOptions().catch(() => {});
       if (els.mediaModeSelect && !els.mediaModeSelect.value) {
         els.mediaModeSelect.value = 'webrtc';
       }
