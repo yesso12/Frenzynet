@@ -3,9 +3,6 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-  <meta http-equiv="Pragma" content="no-cache" />
-  <meta http-equiv="Expires" content="0" />
   <title>FrenzyNets Client Portal</title>
   <style>
     body { margin: 0; background: #070d1c; color: #e8f2ff; font-family: Segoe UI, Arial, sans-serif; }
@@ -46,11 +43,10 @@
   </div>
   <script>
     let token = '';
-    const API_BASE = String(window.__FRNZ_API_HOST || 'https://api.frenzynets.com').replace(/\/+$/,'');
     async function api(path, opts = {}) {
       const h = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
       if (token) h.Authorization = 'Bearer ' + token;
-      const r = await fetch(API_BASE + path, Object.assign({}, opts, { headers: h }));
+      const r = await fetch('/api/frenzynet' + path, Object.assign({}, opts, { headers: h }));
       const t = await r.text();
       let d = {};
       try { d = t ? JSON.parse(t) : {}; } catch {}

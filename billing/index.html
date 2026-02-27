@@ -3,9 +3,6 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-  <meta http-equiv="Pragma" content="no-cache" />
-  <meta http-equiv="Expires" content="0" />
   <title>FrenzyNet - Secure Checkout</title>
   <style>
     :root { --bg-a:#061128; --bg-b:#0f1f4a; --card:#122658; --line:#2d4685; --text:#eef5ff; --muted:#9fb4dc; --cyan:#35e8ff; --green:#22d489; --warn:#ffd166; --err:#ff6b87; }
@@ -159,7 +156,7 @@
   </div>
 
   <script>
-    const API_BASE = String(window.__FRNZ_API_HOST || 'https://api.frenzynets.com').replace(/\/+$/,'');
+    const API_BASE = '/api/frenzynet';
     let plans = [];
     let addons = [];
     let selected = null;
