@@ -1221,7 +1221,11 @@
       };
       draw(fallbackRooms);
       (async () => {
-        const endpoints = ['/api/telewatch/public-rooms', '/api/telewatch/api/public-rooms'];
+        const endpoints = [
+          'https://api.frenzynets.com/api/telewatch/public-rooms',
+          '/api/telewatch/public-rooms',
+          '/api/telewatch/api/public-rooms'
+        ];
         for (const ep of endpoints) {
           try {
             const r = await fetch(ep, { cache: 'no-store' });
