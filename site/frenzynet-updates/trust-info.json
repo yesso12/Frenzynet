@@ -1,29 +1,21 @@
 {
-  "version": "2026.02.27.001343",
+  "product": "FrenzyNets Watch Party Desktop Panel",
   "channel": "stable",
-  "publishedAt": "2026-02-27T00:13:46Z",
-  "setupExe": {
-    "file": "FrenzyNet-Setup.exe",
-    "sha256": "2a9f1d3bb0fb77aaf35625d65f562f8d56b82b71c2ffd49d30370d524e7cc020",
-    "url": "https://frenzynets.com/frenzynet-updates/2026.02.27.001343/FrenzyNet-Setup.exe"
-  },
-  "setupByArch": {
-    "win-x64": {"file":"FrenzyNet-Setup-win-x64.exe","sha256":"2a9f1d3bb0fb77aaf35625d65f562f8d56b82b71c2ffd49d30370d524e7cc020","url":"https://frenzynets.com/frenzynet-updates/FrenzyNet-Setup-win-x64.exe"},
-    "win-arm64": {"file":"FrenzyNet-Setup-win-arm64.exe","sha256":"3f78929d5de94270c67b126736618f51e84cb76535253377de46c4cb00b9a664","url":"https://frenzynets.com/frenzynet-updates/FrenzyNet-Setup-win-arm64.exe"},
-    "win-x86": {"file":"FrenzyNet-Setup-win-x86.exe","sha256":"461e0ab519b1e2a684026104070bd7a9f69616e8596d585dba635029fc3dff0a","url":"https://frenzynets.com/frenzynet-updates/FrenzyNet-Setup-win-x86.exe"}
-  },
-  "packageZip": {
-    "file": "FrenzyNet-win-x64.zip",
-    "sha256": "51bbdd1f76d96ffb00ee3cccb52d54313a71c936e35989e5f93c93cc94cfc068",
-    "url": "https://frenzynets.com/frenzynet-updates/2026.02.27.001343/FrenzyNet-win-x64.zip"
-  },
-  "hashFiles": [
-    "https://frenzynets.com/frenzynet-updates/2026.02.27.001343/FrenzyNet-Setup.exe.sha256",
-    "https://frenzynets.com/frenzynet-updates/2026.02.27.001343/FrenzyNet-win-x64.zip.sha256",
-    "https://frenzynets.com/frenzynet-updates/FrenzyNet-Setup-win-x64.exe.sha256",
-    "https://frenzynets.com/frenzynet-updates/FrenzyNet-Setup-win-arm64.exe.sha256",
-    "https://frenzynets.com/frenzynet-updates/FrenzyNet-Setup-win-x86.exe.sha256"
-  ],
-  "releaseNotes": "https://frenzynets.com/frenzynet-updates/2026.02.27.001343/release-notes-stable.json",
-  "notes": "If Windows flags the file, verify SHA256 first and use Properties > Unblock when needed."
+  "packages": {
+    "win-x64": {
+      "file": "FrenzyWatchPartyPanel-win-x64.zip",
+      "sha256File": "FrenzyWatchPartyPanel-win-x64.zip.sha256",
+      "url": "https://frenzynets.com/frenzynet-updates/FrenzyWatchPartyPanel-win-x64.zip"
+    },
+    "win-x86": {
+      "file": "FrenzyWatchPartyPanel-win-x86.zip",
+      "sha256File": "FrenzyWatchPartyPanel-win-x86.zip.sha256",
+      "url": "https://frenzynets.com/frenzynet-updates/FrenzyWatchPartyPanel-win-x86.zip"
+    },
+    "win-arm64": {
+      "file": "FrenzyWatchPartyPanel-win-arm64.zip",
+      "sha256File": "FrenzyWatchPartyPanel-win-arm64.zip.sha256",
+      "url": "https://frenzynets.com/frenzynet-updates/FrenzyWatchPartyPanel-win-arm64.zip"
+    }
+  }
 }
