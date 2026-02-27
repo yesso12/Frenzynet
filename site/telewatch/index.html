@@ -599,6 +599,15 @@
                   <label for="inviteMaxUsesInput">Invite Max Uses (0 = Unlimited)</label>
                   <input id="inviteMaxUsesInput" type="number" min="0" max="500" step="1" value="0" />
                 </div>
+                <div class="full">
+                  <label>Invite Presets</label>
+                  <div class="row">
+                    <button class="secondary invite-preset-btn" data-ttl="60" data-uses="1">1h Single</button>
+                    <button class="secondary invite-preset-btn" data-ttl="180" data-uses="10">3h Small Group</button>
+                    <button class="secondary invite-preset-btn" data-ttl="1440" data-uses="0">24h Unlimited</button>
+                    <button class="secondary invite-preset-btn" data-ttl="10080" data-uses="0">7d Unlimited</button>
+                  </div>
+                </div>
               </div>
               <button id="setMediaBtn" class="secondary">Set Media</button>
               <button id="copyLinkBtn" class="secondary">Copy Invite</button>
@@ -833,6 +842,7 @@
       setAccessModeBtn: document.getElementById('setAccessModeBtn'),
       inviteTtlInput: document.getElementById('inviteTtlInput'),
       inviteMaxUsesInput: document.getElementById('inviteMaxUsesInput'),
+      invitePresetButtons: Array.from(document.querySelectorAll('.invite-preset-btn')),
       joinRequestSelect: document.getElementById('joinRequestSelect'),
       approveJoinBtn: document.getElementById('approveJoinBtn'),
       denyJoinBtn: document.getElementById('denyJoinBtn'),
@@ -1507,6 +1517,15 @@
       try {
         localStorage.setItem(INVITE_SETTINGS_KEY, JSON.stringify({ ttlMinutes: ttl, maxUses: uses }));
       } catch (_) {}
+    }
+
+    function applyInvitePreset(ttlMinutes, maxUses) {
+      const ttl = Math.max(5, Math.min(10080, Math.round(Number(ttlMinutes) || 720)));
+      const uses = Math.max(0, Math.min(500, Math.round(Number(maxUses) || 0)));
+      if (els.inviteTtlInput) els.inviteTtlInput.value = String(ttl);
+      if (els.inviteMaxUsesInput) els.inviteMaxUsesInput.value = String(uses);
+      writeInviteSettings(ttl, uses);
+      setStatus(true, `Invite preset set: ${ttl}m, ${uses === 0 ? 'unlimited uses' : uses + ' uses'}.`);
     }
 
     async function setRoomTheme(themeKey) {
@@ -3176,6 +3195,13 @@
       if (els.inviteMaxUsesInput) {
         els.inviteMaxUsesInput.addEventListener('change', () => {
           writeInviteSettings(els.inviteTtlInput ? els.inviteTtlInput.value : 720, els.inviteMaxUsesInput.value);
+        });
+      }
+      for (const btn of (els.invitePresetButtons || [])) {
+        btn.addEventListener('click', () => {
+          const ttl = Number(btn.getAttribute('data-ttl') || 720);
+          const uses = Number(btn.getAttribute('data-uses') || 0);
+          applyInvitePreset(ttl, uses);
         });
       }
       try {
