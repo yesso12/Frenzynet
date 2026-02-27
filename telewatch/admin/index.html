@@ -142,6 +142,64 @@
         <button id="copyMainEventJoinBtn" class="secondary">Copy Public Join Link</button>
       </div>
       <div id="mainEventInfo" class="muted" style="margin-top:6px">No main event room selected.</div>
+      <div id="mainEventHostInfo" class="muted" style="margin-top:4px">Host controls: not attached</div>
+
+      <h3 style="margin:12px 0 8px">Main Event Studio</h3>
+      <div class="row">
+        <div>
+          <label for="studioTitle">Movie / Episode Title</label>
+          <input id="studioTitle" placeholder="Movie Night Title" />
+        </div>
+        <div>
+          <label for="studioMediaUrl">Media URL</label>
+          <input id="studioMediaUrl" placeholder="https://.../video.mp4" />
+        </div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="studioAttachHostBtn" class="secondary">Attach Host Controls</button>
+        <button id="studioSetMediaBtn">Set Movie</button>
+        <button id="studioSetTitleBtn" class="secondary">Set Title Only</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <div>
+          <label for="studioSeekSec">Seek To (seconds)</label>
+          <input id="studioSeekSec" type="number" min="0" step="1" placeholder="0" />
+        </div>
+        <div>
+          <label for="studioTheme">Room Theme</label>
+          <select id="studioTheme">
+            <option value="clean">Clean</option>
+            <option value="anime">Anime</option>
+            <option value="blossom">Blossom</option>
+            <option value="city">City</option>
+            <option value="neon">Neon</option>
+          </select>
+        </div>
+        <div>
+          <label for="studioAccessMode">Access Mode</label>
+          <select id="studioAccessMode">
+            <option value="public">Public</option>
+            <option value="invite">Invite Only</option>
+            <option value="closed">Closed</option>
+          </select>
+        </div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="studioPlayBtn">Play</button>
+        <button id="studioPauseBtn" class="secondary">Pause</button>
+        <button id="studioSeekBtn" class="secondary">Seek</button>
+        <button id="studioThemeBtn" class="secondary">Apply Theme</button>
+        <button id="studioAccessBtn" class="secondary">Apply Access</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <div>
+          <label for="studioMessage">Room Message</label>
+          <input id="studioMessage" placeholder="Main Event is starting now." />
+        </div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="studioMessageBtn" class="secondary">Send Room Message</button>
+      </div>
 
       <h3 style="margin:12px 0 8px">Admin Accounts</h3>
       <div class="row">
@@ -192,6 +250,22 @@
       openMainEventBtn: document.getElementById('openMainEventBtn'),
       copyMainEventJoinBtn: document.getElementById('copyMainEventJoinBtn'),
       mainEventInfo: document.getElementById('mainEventInfo'),
+      mainEventHostInfo: document.getElementById('mainEventHostInfo'),
+      studioTitle: document.getElementById('studioTitle'),
+      studioMediaUrl: document.getElementById('studioMediaUrl'),
+      studioSeekSec: document.getElementById('studioSeekSec'),
+      studioTheme: document.getElementById('studioTheme'),
+      studioAccessMode: document.getElementById('studioAccessMode'),
+      studioMessage: document.getElementById('studioMessage'),
+      studioAttachHostBtn: document.getElementById('studioAttachHostBtn'),
+      studioSetMediaBtn: document.getElementById('studioSetMediaBtn'),
+      studioSetTitleBtn: document.getElementById('studioSetTitleBtn'),
+      studioPlayBtn: document.getElementById('studioPlayBtn'),
+      studioPauseBtn: document.getElementById('studioPauseBtn'),
+      studioSeekBtn: document.getElementById('studioSeekBtn'),
+      studioThemeBtn: document.getElementById('studioThemeBtn'),
+      studioAccessBtn: document.getElementById('studioAccessBtn'),
+      studioMessageBtn: document.getElementById('studioMessageBtn'),
       newAdminUser: document.getElementById('newAdminUser'),
       newAdminPass: document.getElementById('newAdminPass'),
       adminList: document.getElementById('adminList'),
@@ -205,7 +279,7 @@
       refreshBtn: document.getElementById('refreshBtn'),
       removeAdminBtn: document.getElementById('removeAdminBtn'),
     };
-    const state = { token: '', username: '' };
+    const state = { token: '', username: '', mainHostToken: '', mainHostRoomCode: '' };
 
     async function api(path, body) {
       const res = await fetch(API + path, {
@@ -256,11 +330,20 @@
       els.loginCard.classList.toggle('hidden', signed);
       els.toolsCard.classList.toggle('hidden', !signed);
       setStatus(signed ? ('Signed in as ' + state.username) : 'Not signed in');
+      const hostReady = !!(state.mainHostToken && cleanCode(state.mainHostRoomCode));
+      els.mainEventHostInfo.textContent = hostReady
+        ? `Host controls attached to ${cleanCode(state.mainHostRoomCode)}`
+        : 'Host controls: not attached';
     }
     function save() {
       try {
         if (!state.token) return localStorage.removeItem(KEY);
-        localStorage.setItem(KEY, JSON.stringify({ adminToken: state.token, adminUsername: state.username }));
+        localStorage.setItem(KEY, JSON.stringify({
+          adminToken: state.token,
+          adminUsername: state.username,
+          mainHostToken: state.mainHostToken,
+          mainHostRoomCode: state.mainHostRoomCode
+        }));
       } catch (_) {}
     }
     function load() {
@@ -270,7 +353,25 @@
         const s = JSON.parse(raw);
         state.token = String(s.adminToken || '').trim();
         state.username = String(s.adminUsername || '').trim().toLowerCase();
+        state.mainHostToken = String(s.mainHostToken || '').trim();
+        state.mainHostRoomCode = cleanCode(s.mainHostRoomCode || '');
       } catch (_) {}
+    }
+
+    function selectedMainRoomCode() {
+      return cleanCode(els.mainEventRoomCode.value || els.mainEventRooms.value || state.mainHostRoomCode);
+    }
+
+    async function sendMainControl(action, extra) {
+      const roomCode = selectedMainRoomCode();
+      const participantToken = String(state.mainHostToken || '').trim();
+      if (!roomCode) throw new Error('main_event_room_required');
+      if (!participantToken) throw new Error('host_controls_not_attached');
+      return api('/api/watch/control', Object.assign({
+        roomCode,
+        participantToken,
+        action
+      }, extra || {}));
     }
 
     async function refreshAdmins() {
@@ -433,6 +534,8 @@
           mediaMode: String(els.mainEventMode.value || 'broadcast').trim().toLowerCase()
         });
         const code = cleanCode(created.roomCode || roomCode);
+        state.mainHostToken = String(created.participantToken || '').trim();
+        state.mainHostRoomCode = code;
         els.mainEventRoomCode.value = code;
         await api('/api/watch/admin/settings', {
           adminToken: state.token,
@@ -445,6 +548,8 @@
         els.mainEventLockdown.value = '1';
         await refreshAdminRooms();
         await loadMainEventSettings();
+        save();
+        render();
         setStatus(`Main Event started in room ${code}.`);
       } catch (e) {
         setStatus('Create Main Event failed: ' + (e.message || e));
@@ -487,6 +592,105 @@
       }
     });
 
+    els.studioAttachHostBtn.addEventListener('click', async () => {
+      try {
+        const roomCode = selectedMainRoomCode();
+        if (!roomCode) throw new Error('main_event_room_required');
+        const joined = await api('/api/watch/join', {
+          roomCode,
+          displayName: String(els.mainEventHostName.value || '').trim() || 'MainHost'
+        });
+        if (!joined.isHost) throw new Error('host_already_active_in_room');
+        state.mainHostToken = String(joined.participantToken || '').trim();
+        state.mainHostRoomCode = roomCode;
+        save();
+        render();
+        setStatus(`Host controls attached to ${roomCode}.`);
+      } catch (e) {
+        setStatus('Attach failed: ' + (e.message || e));
+      }
+    });
+
+    els.studioSetMediaBtn.addEventListener('click', async () => {
+      try {
+        await sendMainControl('set_media', {
+          title: String(els.studioTitle.value || '').trim(),
+          mediaUrl: String(els.studioMediaUrl.value || '').trim()
+        });
+        setStatus('Movie/media set for Main Event room.');
+      } catch (e) {
+        setStatus('Set movie failed: ' + (e.message || e));
+      }
+    });
+
+    els.studioSetTitleBtn.addEventListener('click', async () => {
+      try {
+        await sendMainControl('set_title', { title: String(els.studioTitle.value || '').trim() });
+        setStatus('Main Event title updated.');
+      } catch (e) {
+        setStatus('Set title failed: ' + (e.message || e));
+      }
+    });
+
+    els.studioPlayBtn.addEventListener('click', async () => {
+      try {
+        await sendMainControl('play', {});
+        setStatus('Playback set to play.');
+      } catch (e) {
+        setStatus('Play failed: ' + (e.message || e));
+      }
+    });
+
+    els.studioPauseBtn.addEventListener('click', async () => {
+      try {
+        await sendMainControl('pause', {});
+        setStatus('Playback paused.');
+      } catch (e) {
+        setStatus('Pause failed: ' + (e.message || e));
+      }
+    });
+
+    els.studioSeekBtn.addEventListener('click', async () => {
+      try {
+        const sec = Number(String(els.studioSeekSec.value || '').trim());
+        if (!Number.isFinite(sec) || sec < 0) throw new Error('seek_seconds_invalid');
+        await sendMainControl('seek', { playbackSec: sec });
+        setStatus(`Seeked to ${Math.floor(sec)}s.`);
+      } catch (e) {
+        setStatus('Seek failed: ' + (e.message || e));
+      }
+    });
+
+    els.studioThemeBtn.addEventListener('click', async () => {
+      try {
+        await sendMainControl('set_theme', { themeKey: String(els.studioTheme.value || 'clean').trim() });
+        setStatus('Theme updated.');
+      } catch (e) {
+        setStatus('Set theme failed: ' + (e.message || e));
+      }
+    });
+
+    els.studioAccessBtn.addEventListener('click', async () => {
+      try {
+        await sendMainControl('set_access_mode', { accessMode: String(els.studioAccessMode.value || 'public').trim() });
+        setStatus('Access mode updated.');
+      } catch (e) {
+        setStatus('Set access failed: ' + (e.message || e));
+      }
+    });
+
+    els.studioMessageBtn.addEventListener('click', async () => {
+      try {
+        const message = String(els.studioMessage.value || '').trim();
+        if (!message) throw new Error('message_required');
+        await sendMainControl('chat', { message });
+        els.studioMessage.value = '';
+        setStatus('Room message sent.');
+      } catch (e) {
+        setStatus('Message send failed: ' + (e.message || e));
+      }
+    });
+
     els.stopMainEventBtn.addEventListener('click', async () => {
       try {
         const code = cleanCode(els.mainEventRoomCode.value || els.mainEventRooms.value);
@@ -505,8 +709,12 @@
         });
         els.mainEventRoomCode.value = '';
         els.mainEventLockdown.value = '0';
+        state.mainHostToken = '';
+        state.mainHostRoomCode = '';
         await refreshAdminRooms();
         await loadMainEventSettings();
+        save();
+        render();
         setStatus(`Main Event stopped and room ${code} removed.`);
       } catch (e) {
         setStatus('Stop failed: ' + (e.message || e));
