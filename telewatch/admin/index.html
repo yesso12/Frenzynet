@@ -75,6 +75,34 @@
         <div style="align-self:end"><button id="deleteRoomBtn" class="danger">Delete Room</button></div>
       </div>
 
+      <h3 style="margin:12px 0 8px">Main Event Control</h3>
+      <div class="row">
+        <div>
+          <label for="mainEventRoomCode">Main Event Room Code</label>
+          <input id="mainEventRoomCode" placeholder="WATCH01 or custom room" />
+        </div>
+        <div>
+          <label for="mainEventLockdown">Main Event Mode</label>
+          <select id="mainEventLockdown">
+            <option value="0">Off</option>
+            <option value="1">Lockdown On (route viewers to main room)</option>
+          </select>
+        </div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <div>
+          <label for="mainEventCountdown">Countdown (UTC)</label>
+          <input id="mainEventCountdown" type="datetime-local" />
+        </div>
+        <div style="align-self:end">
+          <button id="nextSaturdayBtn" class="secondary">Set Next Saturday</button>
+        </div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="loadMainEventBtn" class="secondary">Load Main Event Settings</button>
+        <button id="saveMainEventBtn">Save Main Event Settings</button>
+      </div>
+
       <h3 style="margin:12px 0 8px">Admin Accounts</h3>
       <div class="row">
         <div>
@@ -109,12 +137,18 @@
       password: document.getElementById('password'),
       adminCode: document.getElementById('adminCode'),
       roomCodeDelete: document.getElementById('roomCodeDelete'),
+      mainEventRoomCode: document.getElementById('mainEventRoomCode'),
+      mainEventLockdown: document.getElementById('mainEventLockdown'),
+      mainEventCountdown: document.getElementById('mainEventCountdown'),
       newAdminUser: document.getElementById('newAdminUser'),
       newAdminPass: document.getElementById('newAdminPass'),
       adminList: document.getElementById('adminList'),
       loginBtn: document.getElementById('loginBtn'),
       logoutBtn: document.getElementById('logoutBtn'),
       deleteRoomBtn: document.getElementById('deleteRoomBtn'),
+      loadMainEventBtn: document.getElementById('loadMainEventBtn'),
+      nextSaturdayBtn: document.getElementById('nextSaturdayBtn'),
+      saveMainEventBtn: document.getElementById('saveMainEventBtn'),
       addAdminBtn: document.getElementById('addAdminBtn'),
       refreshBtn: document.getElementById('refreshBtn'),
       removeAdminBtn: document.getElementById('removeAdminBtn'),
@@ -136,6 +170,28 @@
     }
 
     function setStatus(msg) { els.status.textContent = msg; }
+    function toLocalInputValue(iso) {
+      const d = new Date(String(iso || '').trim());
+      if (!Number.isFinite(d.getTime())) return '';
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+    function localInputToIso(v) {
+      const s = String(v || '').trim();
+      if (!s) return '';
+      const d = new Date(s);
+      if (!Number.isFinite(d.getTime())) return '';
+      return d.toISOString().replace(/\.\d{3}Z$/, 'Z');
+    }
+    function nextSaturdayLocalInput() {
+      const now = new Date();
+      const target = new Date(now.getTime());
+      const days = (6 - target.getDay() + 7) % 7;
+      target.setDate(target.getDate() + days);
+      target.setHours(20, 0, 0, 0);
+      if (target.getTime() <= now.getTime()) target.setDate(target.getDate() + 7);
+      return toLocalInputValue(target.toISOString());
+    }
     function render() {
       const signed = !!(state.token && state.username);
       els.loginCard.classList.toggle('hidden', signed);
@@ -176,6 +232,14 @@
       }
     }
 
+    async function loadMainEventSettings() {
+      const data = await api('/api/watch/admin/settings', { adminToken: state.token, action: 'get' });
+      const s = data && data.settings ? data.settings : {};
+      els.mainEventRoomCode.value = String(s.mainEventRoomCode || '').toUpperCase();
+      els.mainEventLockdown.value = s.mainEventLockdown ? '1' : '0';
+      els.mainEventCountdown.value = toLocalInputValue(s.mainEventCountdownIso || '');
+    }
+
     els.loginBtn.addEventListener('click', async () => {
       try {
         const data = await api('/api/watch/admin/login', {
@@ -187,6 +251,7 @@
         save();
         render();
         await refreshAdmins();
+        await loadMainEventSettings();
       } catch (e) {
         setStatus('Login failed: ' + (e.message || e));
       }
@@ -210,6 +275,38 @@
         setStatus('Room deleted.');
       } catch (e) {
         setStatus('Delete failed: ' + (e.message || e));
+      }
+    });
+
+    els.loadMainEventBtn.addEventListener('click', async () => {
+      try {
+        await loadMainEventSettings();
+        setStatus('Main event settings loaded.');
+      } catch (e) {
+        setStatus('Load failed: ' + (e.message || e));
+      }
+    });
+
+    els.nextSaturdayBtn.addEventListener('click', () => {
+      els.mainEventCountdown.value = nextSaturdayLocalInput();
+      setStatus('Countdown set to next Saturday (local time).');
+    });
+
+    els.saveMainEventBtn.addEventListener('click', async () => {
+      try {
+        const payload = {
+          adminToken: state.token,
+          adminCode: String(els.adminCode.value || '').trim(),
+          action: 'set',
+          mainEventRoomCode: String(els.mainEventRoomCode.value || '').trim().toUpperCase(),
+          mainEventLockdown: els.mainEventLockdown.value === '1',
+          mainEventCountdownIso: localInputToIso(els.mainEventCountdown.value)
+        };
+        await api('/api/watch/admin/settings', payload);
+        await loadMainEventSettings();
+        setStatus('Main event settings saved.');
+      } catch (e) {
+        setStatus('Save failed: ' + (e.message || e));
       }
     });
 
@@ -250,8 +347,12 @@
 
     load();
     els.username.value = state.username || 'Trimbledustn@gmail.com';
+    els.mainEventCountdown.value = nextSaturdayLocalInput();
     render();
-    if (state.token) refreshAdmins().catch(() => {});
+    if (state.token) {
+      refreshAdmins().catch(() => {});
+      loadMainEventSettings().catch(() => {});
+    }
   </script>
 </body>
 </html>
