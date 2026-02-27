@@ -8,6 +8,10 @@
     :root {
       --bg: #f4f6fa;
       --bg-gradient: linear-gradient(180deg, #f8f9fc, #f3f6fa);
+      --bg-graphic-image: url('/assets/themes/clean-default.svg');
+      --bg-graphic-size: cover;
+      --bg-graphic-position: center;
+      --bg-graphic-opacity: 0.52;
       --panel: #ffffff;
       --panel-2: #fbfcfe;
       --line: #dbe2ea;
@@ -48,10 +52,21 @@
       z-index: 0;
       overflow: hidden;
     }
+    .bg-graphic {
+      position: absolute;
+      inset: 0;
+      background-image: var(--bg-graphic-image);
+      background-position: var(--bg-graphic-position);
+      background-size: var(--bg-graphic-size);
+      background-repeat: no-repeat;
+      opacity: var(--bg-graphic-opacity);
+      transform: scale(1.02);
+      filter: saturate(1.08) contrast(1.02);
+    }
     .bg-grid {
       position: absolute;
       inset: 0;
-      opacity: 0.2;
+      opacity: 0.16;
       background-image:
         linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px),
         linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px);
@@ -466,6 +481,7 @@
 </head>
 <body>
   <div class="bg-scene" aria-hidden="true">
+    <div class="bg-graphic"></div>
     <div class="bg-grid"></div>
     <div class="bg-noise"></div>
     <div class="bg-orb a"></div>
@@ -835,7 +851,9 @@
       lastRoom: null,
       hostMuted: {},
       adminRooms: [],
-      requests: []
+      requests: [],
+      roomThemeKey: 'clean',
+      localThemeKey: 'clean'
     };
     const SESSION_KEY = 'telewatch_session';
     const ADMIN_SESSION_KEY = 'telewatch_admin_session';
@@ -846,6 +864,8 @@
       clean: {
         label: 'Clean Default',
         vars: {
+          '--bg-graphic-image': "url('/assets/themes/clean-default.svg')",
+          '--bg-graphic-opacity': '0.58',
           '--bg-gradient': 'linear-gradient(180deg, #f8f9fc, #f3f6fa)',
           '--panel': '#ffffff',
           '--panel-2': '#fbfcfe',
@@ -870,6 +890,8 @@
       anime_sakura: {
         label: 'Anime Sakura',
         vars: {
+          '--bg-graphic-image': "url('/assets/themes/anime-sakura.svg')",
+          '--bg-graphic-opacity': '0.74',
           '--bg-gradient': 'linear-gradient(160deg, #fff6fb, #ffe2f2 45%, #ffd7ea)',
           '--panel': '#fff7fb',
           '--panel-2': '#fff1f8',
@@ -894,6 +916,8 @@
       anime_night: {
         label: 'Anime Night',
         vars: {
+          '--bg-graphic-image': "url('/assets/themes/anime-night.svg')",
+          '--bg-graphic-opacity': '0.62',
           '--bg-gradient': 'radial-gradient(circle at 15% 10%, #2f2153, #141028 45%, #0b0a16)',
           '--panel': '#1b1730',
           '--panel-2': '#231b3d',
@@ -918,6 +942,8 @@
       cyberpunk: {
         label: 'Cyberpunk Neon',
         vars: {
+          '--bg-graphic-image': "url('/assets/themes/cyberpunk-neon.svg')",
+          '--bg-graphic-opacity': '0.54',
           '--bg-gradient': 'linear-gradient(140deg, #07090f, #120a26 45%, #061a1e)',
           '--panel': '#121624',
           '--panel-2': '#161b2c',
@@ -942,6 +968,8 @@
       ocean: {
         label: 'Ocean Breeze',
         vars: {
+          '--bg-graphic-image': "url('/assets/themes/ocean-breeze.svg')",
+          '--bg-graphic-opacity': '0.62',
           '--bg-gradient': 'linear-gradient(160deg, #e5f7ff, #d6f0ff 45%, #c0e8fa)',
           '--panel': '#f7fcff',
           '--panel-2': '#eef8fc',
@@ -966,6 +994,8 @@
       forest: {
         label: 'Forest Camp',
         vars: {
+          '--bg-graphic-image': "url('/assets/themes/forest-camp.svg')",
+          '--bg-graphic-opacity': '0.62',
           '--bg-gradient': 'linear-gradient(145deg, #e7f3df, #d3e8c2 50%, #c2ddad)',
           '--panel': '#f4f9ef',
           '--panel-2': '#edf5e5',
@@ -990,6 +1020,8 @@
       sunset: {
         label: 'Sunset Glow',
         vars: {
+          '--bg-graphic-image': "url('/assets/themes/sunset-glow.svg')",
+          '--bg-graphic-opacity': '0.62',
           '--bg-gradient': 'linear-gradient(150deg, #fff1da, #ffd6bf 45%, #ffc0b9)',
           '--panel': '#fff8ef',
           '--panel-2': '#fff3e8',
@@ -1014,6 +1046,8 @@
       nordic_dark: {
         label: 'Nordic Dark',
         vars: {
+          '--bg-graphic-image': "url('/assets/themes/nordic-dark.svg')",
+          '--bg-graphic-opacity': '0.52',
           '--bg-gradient': 'linear-gradient(155deg, #111827, #0f172a 50%, #1e293b)',
           '--panel': '#172033',
           '--panel-2': '#1d2940',
@@ -1038,6 +1072,8 @@
       galaxy: {
         label: 'Galaxy Purple',
         vars: {
+          '--bg-graphic-image': "url('/assets/themes/galaxy-purple.svg')",
+          '--bg-graphic-opacity': '0.54',
           '--bg-gradient': 'radial-gradient(circle at 20% 10%, #39285e, #1a1434 45%, #0e0a1f)',
           '--panel': '#1d1638',
           '--panel-2': '#261d46',
@@ -1062,6 +1098,8 @@
       retro_arcade: {
         label: 'Retro Arcade',
         vars: {
+          '--bg-graphic-image': "url('/assets/themes/retro-arcade.svg')",
+          '--bg-graphic-opacity': '0.58',
           '--bg-gradient': 'linear-gradient(150deg, #121212, #1d1230 45%, #072a2a)',
           '--panel': '#1a1a22',
           '--panel-2': '#22222c',
@@ -1110,14 +1148,42 @@
       els.syncBadge.textContent = 'Sync: ' + text;
     }
 
-    function applyTheme(themeKey) {
+    function applyTheme(themeKey, persistLocal) {
       const key = Object.prototype.hasOwnProperty.call(THEMES, themeKey) ? themeKey : 'clean';
       const cfg = THEMES[key];
       for (const [cssVar, val] of Object.entries(cfg.vars)) {
         document.documentElement.style.setProperty(cssVar, val);
       }
       if (els.themeSelect) els.themeSelect.value = key;
-      try { localStorage.setItem(THEME_KEY, key); } catch (_) {}
+      if (persistLocal) {
+        state.localThemeKey = key;
+        try { localStorage.setItem(THEME_KEY, key); } catch (_) {}
+      }
+      return key;
+    }
+
+    function setThemeControlState() {
+      if (!els.themeSelect) return;
+      const inRoom = !!state.roomCode;
+      if (inRoom && !state.isHost) {
+        els.themeSelect.disabled = true;
+        els.themeSelect.title = 'Host controls room theme';
+      } else {
+        els.themeSelect.disabled = false;
+        els.themeSelect.title = inRoom ? 'Host room theme control' : 'Personal theme preference';
+      }
+    }
+
+    async function setRoomTheme(themeKey) {
+      const clean = Object.prototype.hasOwnProperty.call(THEMES, themeKey) ? themeKey : 'clean';
+      if (!state.roomCode || !state.participantToken || !state.isHost) {
+        applyTheme(clean, true);
+        return;
+      }
+      await sendControl('set_theme', { themeKey: clean });
+      state.roomThemeKey = clean;
+      applyTheme(clean, false);
+      setStatus(true, 'Room theme updated: ' + (THEMES[clean]?.label || clean));
     }
 
     function initThemeSelector() {
@@ -1132,8 +1198,27 @@
       const saved = (() => {
         try { return localStorage.getItem(THEME_KEY) || ''; } catch (_) { return ''; }
       })();
-      applyTheme(saved || 'clean');
-      els.themeSelect.addEventListener('change', () => applyTheme(els.themeSelect.value));
+      state.localThemeKey = Object.prototype.hasOwnProperty.call(THEMES, saved) ? saved : 'clean';
+      applyTheme(state.localThemeKey, true);
+      setThemeControlState();
+      els.themeSelect.addEventListener('change', async () => {
+        const wanted = String(els.themeSelect.value || 'clean');
+        if (state.roomCode) {
+          if (!state.isHost) {
+            applyTheme(state.roomThemeKey || 'clean', false);
+            setStatus(false, 'Only host can change room theme.');
+            return;
+          }
+          try {
+            await setRoomTheme(wanted);
+          } catch (err) {
+            applyTheme(state.roomThemeKey || 'clean', false);
+            setStatus(false, String(err && err.message ? err.message : err));
+          }
+          return;
+        }
+        applyTheme(wanted, true);
+      });
     }
 
     function setWizardStep(step) {
@@ -1890,11 +1975,15 @@
     async function createRoom() {
       const inviteCode = parseInviteRoom(els.inviteInput && els.inviteInput.value);
       const chosenCode = normalizeRoomCode(inviteCode || els.roomInput.value);
+      const selectedTheme = Object.prototype.hasOwnProperty.call(THEMES, String((els.themeSelect && els.themeSelect.value) || ''))
+        ? String(els.themeSelect.value)
+        : (state.localThemeKey || 'clean');
       const payload = {
         roomCode: chosenCode || undefined,
         displayName: els.displayName.value.trim() || 'Host',
         title: els.titleInput.value.trim(),
-        mediaUrl: els.mediaInput.value.trim()
+        mediaUrl: els.mediaInput.value.trim(),
+        themeKey: selectedTheme
       };
       const data = await apiRequest('POST', '/api/watch/create', payload);
       state.roomCode = data.roomCode;
@@ -1902,6 +1991,8 @@
       state.participantId = data.participantId || '';
       state.isHost = true;
       state.sinceEventId = 0;
+      state.roomThemeKey = selectedTheme || 'clean';
+      applyTheme(state.roomThemeKey, false);
       els.roomInput.value = state.roomCode;
       saveRecentRoom(state.roomCode);
       onSessionStart();
@@ -2071,6 +2162,7 @@
 
     function onSessionStart() {
       updateBadges();
+      setThemeControlState();
       els.createBtn.disabled = true;
       els.joinBtn.disabled = true;
       els.setMediaBtn.disabled = !state.isHost;
@@ -2093,6 +2185,10 @@
     function applyRoomState(room, force) {
       if (!room) return;
       state.lastRoom = room;
+      const roomTheme = Object.prototype.hasOwnProperty.call(THEMES, String(room.themeKey || '')) ? String(room.themeKey) : 'clean';
+      state.roomThemeKey = roomTheme;
+      applyTheme(roomTheme, false);
+      setThemeControlState();
       els.nowTitle.textContent = room.title ? ('Now Playing: ' + room.title) : 'Now Playing';
       if (!state.isHost) {
         els.titleInput.value = room.title || '';
@@ -2467,6 +2563,7 @@
         state.participants = [];
         state.isHost = false;
         state.sinceEventId = 0;
+        state.roomThemeKey = '';
         els.roomInput.value = '';
         els.createBtn.disabled = false;
         els.joinBtn.disabled = false;
@@ -2479,6 +2576,8 @@
         els.deleteRoomBtn.disabled = true;
         els.chatBtn.disabled = true;
         updateBadges();
+        applyTheme(state.localThemeKey || 'clean', false);
+        setThemeControlState();
         clearSession();
         setSyncLabel('room deleted');
         setStatus(false, 'Room deleted.');
