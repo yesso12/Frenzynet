@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="sun" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0%" stop-color="#ffd9b5"/>
+      <stop offset="55%" stop-color="#ffb58f"/>
+      <stop offset="100%" stop-color="#ff8b80"/>
+    </linearGradient>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#sun)"/>
+  <circle cx="1510" cy="210" r="130" fill="#fff0b3" opacity="0.82"/>
+  <g fill="#f7c8a6" opacity="0.9">
+    <rect x="120" y="140" width="520" height="380" rx="8"/>
+    <rect x="680" y="140" width="520" height="380" rx="8"/>
+    <rect x="1240" y="140" width="520" height="380" rx="8"/>
+  </g>
+  <g stroke="#dc8f73" stroke-width="10" opacity="0.82">
+    <path d="M640 140 V520"/><path d="M1200 140 V520"/><path d="M1760 140 V520"/>
+  </g>
+  <rect x="0" y="600" width="1920" height="480" fill="#be6a60"/>
+  <g fill="#8f4f48" opacity="0.9">
+    <rect x="250" y="700" width="380" height="80" rx="12"/>
+    <rect x="760" y="700" width="380" height="80" rx="12"/>
+    <rect x="1270" y="700" width="380" height="80" rx="12"/>
+    <rect x="250" y="830" width="380" height="80" rx="12"/>
+    <rect x="760" y="830" width="380" height="80" rx="12"/>
+    <rect x="1270" y="830" width="380" height="80" rx="12"/>
+  </g>
+  <g fill="#4f2f3f" opacity="0.92">
+    <ellipse cx="960" cy="920" rx="150" ry="42"/>
+    <path d="M960 710 C920 720 900 756 910 804 L924 904 L996 904 L1011 818 C1017 776 999 728 960 710 Z"/>
+    <circle cx="960" cy="680" r="42"/>
+  </g>
+</svg>
