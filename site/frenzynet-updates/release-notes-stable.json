@@ -1,8 +1,8 @@
 {
-  "version": "stable",
+  "version": "2026.02.27.001343",
   "channel": "stable",
-  "publishedAt": "2026-02-27T00:10:16Z",
-  "notes": "Auto-published FrenzyNet update (latest local build)",
-  "signature": "PeJ9J2sjSTLDpZMqU4qtieCxDtZb6Q+bKB3LTbQVbUWVW1wpxr0wiyytJOwH0TTXPxkajcEWyDXzPTq5d2cIDg40BW9sDa1zgnOB68dvFmA3RjRVuOwDostIcATkZH5ijbaWmqfJjQQThkU5pN7dWstE/+P0nRglCZ5N++fJB5JwfjGECYLN/PJD83hqPLlPk/+icEVl/I1l0DKDSZAq4u6dE59DIPODTKi1HMi/XWjg9DJnLEznghKQNeqzi2eLr+IYlLMJLnrR69gBvNBsZNMgrg8i/SWOF2QsT8rh7PQbKtNbZ58I4IsVahY7hgUdVdFT55w8+mCQ3qyD/OnoJxaqUxLxPxjqYCv9rtABIwuVQozw/8u92n0e54m9p3DVPQEvQdvjwJIAm6LmLwXtPi5HrNHRGrhrWl36ADl6CeED4xct1SSm8zdOrmCLmKjMZ/YE8BGlH3vKL51DZq+PQJu5DrBW8wjyCsrjN/odiygqaeQTZkxeiRXjANWb3a6S",
+  "publishedAt": "2026-02-27T00:13:46Z",
+  "notes": "Auto-published FrenzyNet update",
+  "signature": "R3Hk1T5ZUzITlkEBaKJnvKC5eoeZPGsofeibENEBg05fMn06ozbPGwD4gYtsOnqIYDic5NhaTauEhg/BGnDuNqWeBS+hA+fLwhrco0Umb49WIEg6BVhjV/yRfYQ/a4my+ZtSOCDsNHlptkUbEniRO8kboa3OJ6e0OhME8CRcY2sRjcwFCk9NWxSkDA1xbmgiBJcv1DcNW0UTwMikLDwwX17oy3+gVPqg1k5zrCaignvFqcy252hkSoSQNfv4BW0VsoYQlokrpuIuKt4HQduii9c1YI45WEE4k7kTyM7K2zpA8oDwe7QZFZ6jwlFMv7Amc7Yujr7PSJkFQCyEgJ0ibVkrUnhld2b6PZ2rH0v9/ud5xL+x86RG91f2cbw1YBKckVqvqUsmXMPDNHn+Ku0QU7NW5eSkM2Q/Auc+kie2bXWuhAtEXY9lJa2TBPEaveInotqrvOz1FcxlAZGCliuMWEXGg2YvcQjomQTkxnKLFJRp7SUVm7z5CSfJkGONp6w3",
   "signatureAlgorithm": "RSA-SHA256"
 }
