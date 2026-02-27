@@ -7,7 +7,9 @@
   <style>
     :root {
       --bg: #f4f6fa;
+      --bg-gradient: linear-gradient(180deg, #f8f9fc, #f3f6fa);
       --panel: #ffffff;
+      --panel-2: #fbfcfe;
       --line: #dbe2ea;
       --line-soft: #e9eef4;
       --text: #18212c;
@@ -18,13 +20,23 @@
       --warn: #9e5d00;
       --danger: #b42318;
       --shadow: 0 10px 28px rgba(16, 24, 40, 0.08);
+      --pill-bg: #f8fafc;
+      --pill-line: #dbe2ea;
+      --pill-text: #314155;
+      --input-bg: #ffffff;
+      --input-line: #d1dae5;
+      --input-focus: #ff925f;
+      --input-focus-glow: rgba(255, 95, 31, 0.15);
+      --tab-active-bg: #fff3ec;
+      --tab-active-text: #a43f12;
+      --tab-active-line: #ff925f;
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
       color: var(--text);
       font-family: "Inter", "Segoe UI", Arial, sans-serif;
-      background: linear-gradient(180deg, #f8f9fc, #f3f6fa);
+      background: var(--bg-gradient);
       min-height: 100vh;
     }
     .wrap {
@@ -63,11 +75,21 @@
       gap: 7px;
       padding: 7px 11px;
       border-radius: 999px;
-      background: #f8fafc;
-      border: 1px solid var(--line);
-      color: #314155;
+      background: var(--pill-bg);
+      border: 1px solid var(--pill-line);
+      color: var(--pill-text);
       font-weight: 700;
       font-size: 12px;
+    }
+    .theme-select {
+      max-width: 230px;
+      min-width: 170px;
+      padding: 8px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--pill-line);
+      background: var(--pill-bg);
+      color: var(--pill-text);
+      font-weight: 700;
     }
     .wizard {
       display: flex;
@@ -85,9 +107,9 @@
       font-weight: 700;
     }
     .wizard-step.active {
-      border-color: #ff925f;
-      background: #fff3ec;
-      color: #a43f12;
+      border-color: var(--tab-active-line);
+      background: var(--tab-active-bg);
+      color: var(--tab-active-text);
     }
     .workspace {
       margin-top: 14px;
@@ -132,16 +154,16 @@
       cursor: pointer;
     }
     .tab-btn.active {
-      border-color: #ff925f;
-      background: #fff3ec;
-      color: #a43f12;
+      border-color: var(--tab-active-line);
+      background: var(--tab-active-bg);
+      color: var(--tab-active-text);
     }
     .tab-pane { display: none; }
     .tab-pane.active { display: grid; gap: 10px; }
     .block {
       border: 1px solid var(--line-soft);
       border-radius: 12px;
-      background: #fbfcfe;
+      background: var(--panel-2);
       padding: 11px;
     }
     .row { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -158,16 +180,16 @@
     input, button, textarea, select {
       width: 100%;
       border-radius: 10px;
-      border: 1px solid #d1dae5;
-      background: #fff;
+      border: 1px solid var(--input-line);
+      background: var(--input-bg);
       color: var(--text);
       padding: 10px 11px;
       font: inherit;
     }
     input:focus, textarea:focus, select:focus {
       outline: none;
-      border-color: #ff925f;
-      box-shadow: 0 0 0 3px rgba(255, 95, 31, 0.15);
+      border-color: var(--input-focus);
+      box-shadow: 0 0 0 3px var(--input-focus-glow);
     }
     textarea { min-height: 70px; resize: vertical; }
     button {
@@ -182,8 +204,8 @@
     }
     button:hover { transform: translateY(-1px); filter: brightness(1.04); }
     button.secondary {
-      background: #fff;
-      border: 1px solid #d1dae5;
+      background: var(--input-bg);
+      border: 1px solid var(--input-line);
       color: #2f3f52;
     }
     button:disabled { opacity: 0.45; cursor: not-allowed; }
@@ -324,6 +346,7 @@
         <span id="roomBadge" class="badge">Room: none</span>
         <span id="roleBadge" class="badge">Role: viewer</span>
         <span id="syncBadge" class="badge">Sync: idle</span>
+        <select id="themeSelect" class="theme-select" aria-label="Theme"></select>
       </div>
     </div>
 
@@ -587,6 +610,7 @@
       roomBadge: document.getElementById('roomBadge'),
       roleBadge: document.getElementById('roleBadge'),
       syncBadge: document.getElementById('syncBadge'),
+      themeSelect: document.getElementById('themeSelect'),
       connState: document.getElementById('connState'),
       liveChip: document.getElementById('liveChip'),
       shareChip: document.getElementById('shareChip'),
@@ -625,6 +649,250 @@
     const SESSION_KEY = 'telewatch_session';
     const ADMIN_SESSION_KEY = 'telewatch_admin_session';
     const RECENT_ROOMS_KEY = 'telewatch_recent_rooms';
+    const THEME_KEY = 'telewatch_theme';
+
+    const THEMES = {
+      clean: {
+        label: 'Clean Default',
+        vars: {
+          '--bg-gradient': 'linear-gradient(180deg, #f8f9fc, #f3f6fa)',
+          '--panel': '#ffffff',
+          '--panel-2': '#fbfcfe',
+          '--line': '#dbe2ea',
+          '--line-soft': '#e9eef4',
+          '--text': '#18212c',
+          '--muted': '#6a7787',
+          '--accent': '#ff5f1f',
+          '--accent-strong': '#e04d11',
+          '--pill-bg': '#f8fafc',
+          '--pill-line': '#dbe2ea',
+          '--pill-text': '#314155',
+          '--input-bg': '#ffffff',
+          '--input-line': '#d1dae5',
+          '--input-focus': '#ff925f',
+          '--input-focus-glow': 'rgba(255, 95, 31, 0.15)',
+          '--tab-active-bg': '#fff3ec',
+          '--tab-active-text': '#a43f12',
+          '--tab-active-line': '#ff925f'
+        }
+      },
+      anime_sakura: {
+        label: 'Anime Sakura',
+        vars: {
+          '--bg-gradient': 'linear-gradient(160deg, #fff6fb, #ffe2f2 45%, #ffd7ea)',
+          '--panel': '#fff7fb',
+          '--panel-2': '#fff1f8',
+          '--line': '#f3c5df',
+          '--line-soft': '#f8d8e9',
+          '--text': '#431f35',
+          '--muted': '#8f5f77',
+          '--accent': '#ff4f9a',
+          '--accent-strong': '#d9317c',
+          '--pill-bg': '#ffeef8',
+          '--pill-line': '#f4bddc',
+          '--pill-text': '#6e2f51',
+          '--input-bg': '#fffafd',
+          '--input-line': '#efbad8',
+          '--input-focus': '#ff4f9a',
+          '--input-focus-glow': 'rgba(255, 79, 154, 0.25)',
+          '--tab-active-bg': '#ffe7f3',
+          '--tab-active-text': '#8f2459',
+          '--tab-active-line': '#ff4f9a'
+        }
+      },
+      anime_night: {
+        label: 'Anime Night',
+        vars: {
+          '--bg-gradient': 'radial-gradient(circle at 15% 10%, #2f2153, #141028 45%, #0b0a16)',
+          '--panel': '#1b1730',
+          '--panel-2': '#231b3d',
+          '--line': '#3d3562',
+          '--line-soft': '#302a4f',
+          '--text': '#f2edff',
+          '--muted': '#b7abd9',
+          '--accent': '#ff66c9',
+          '--accent-strong': '#c74797',
+          '--pill-bg': '#272044',
+          '--pill-line': '#3f3565',
+          '--pill-text': '#f4e8ff',
+          '--input-bg': '#19152d',
+          '--input-line': '#433864',
+          '--input-focus': '#ff66c9',
+          '--input-focus-glow': 'rgba(255, 102, 201, 0.3)',
+          '--tab-active-bg': '#362a58',
+          '--tab-active-text': '#ffd1f0',
+          '--tab-active-line': '#ff66c9'
+        }
+      },
+      cyberpunk: {
+        label: 'Cyberpunk Neon',
+        vars: {
+          '--bg-gradient': 'linear-gradient(140deg, #07090f, #120a26 45%, #061a1e)',
+          '--panel': '#121624',
+          '--panel-2': '#161b2c',
+          '--line': '#2f3d59',
+          '--line-soft': '#253048',
+          '--text': '#eaf4ff',
+          '--muted': '#93a9bf',
+          '--accent': '#08f7fe',
+          '--accent-strong': '#09b5ba',
+          '--pill-bg': '#101c2d',
+          '--pill-line': '#204861',
+          '--pill-text': '#abf9ff',
+          '--input-bg': '#0f1523',
+          '--input-line': '#2e4569',
+          '--input-focus': '#08f7fe',
+          '--input-focus-glow': 'rgba(8, 247, 254, 0.25)',
+          '--tab-active-bg': '#13263a',
+          '--tab-active-text': '#8efeff',
+          '--tab-active-line': '#08f7fe'
+        }
+      },
+      ocean: {
+        label: 'Ocean Breeze',
+        vars: {
+          '--bg-gradient': 'linear-gradient(160deg, #e5f7ff, #d6f0ff 45%, #c0e8fa)',
+          '--panel': '#f7fcff',
+          '--panel-2': '#eef8fc',
+          '--line': '#b9dcea',
+          '--line-soft': '#cfe9f2',
+          '--text': '#173444',
+          '--muted': '#567789',
+          '--accent': '#0098d8',
+          '--accent-strong': '#0076ab',
+          '--pill-bg': '#ebf8ff',
+          '--pill-line': '#b2d9ea',
+          '--pill-text': '#205068',
+          '--input-bg': '#fbfdff',
+          '--input-line': '#a9d0e0',
+          '--input-focus': '#0098d8',
+          '--input-focus-glow': 'rgba(0, 152, 216, 0.2)',
+          '--tab-active-bg': '#deeff8',
+          '--tab-active-text': '#005985',
+          '--tab-active-line': '#0098d8'
+        }
+      },
+      forest: {
+        label: 'Forest Camp',
+        vars: {
+          '--bg-gradient': 'linear-gradient(145deg, #e7f3df, #d3e8c2 50%, #c2ddad)',
+          '--panel': '#f4f9ef',
+          '--panel-2': '#edf5e5',
+          '--line': '#c6d9b0',
+          '--line-soft': '#d7e6c6',
+          '--text': '#2b4122',
+          '--muted': '#627956',
+          '--accent': '#4f8a2f',
+          '--accent-strong': '#3b6d20',
+          '--pill-bg': '#edf6e4',
+          '--pill-line': '#c0d7a8',
+          '--pill-text': '#365227',
+          '--input-bg': '#f7fbf2',
+          '--input-line': '#b8d09d',
+          '--input-focus': '#4f8a2f',
+          '--input-focus-glow': 'rgba(79, 138, 47, 0.2)',
+          '--tab-active-bg': '#e2efd6',
+          '--tab-active-text': '#2d4f1b',
+          '--tab-active-line': '#4f8a2f'
+        }
+      },
+      sunset: {
+        label: 'Sunset Glow',
+        vars: {
+          '--bg-gradient': 'linear-gradient(150deg, #fff1da, #ffd6bf 45%, #ffc0b9)',
+          '--panel': '#fff8ef',
+          '--panel-2': '#fff3e8',
+          '--line': '#f2ccae',
+          '--line-soft': '#f8dfcc',
+          '--text': '#4a2e21',
+          '--muted': '#8f6350',
+          '--accent': '#ff6a3d',
+          '--accent-strong': '#d94b20',
+          '--pill-bg': '#fff0e3',
+          '--pill-line': '#efc8aa',
+          '--pill-text': '#6a3f2d',
+          '--input-bg': '#fffaf4',
+          '--input-line': '#ebc3a5',
+          '--input-focus': '#ff6a3d',
+          '--input-focus-glow': 'rgba(255, 106, 61, 0.2)',
+          '--tab-active-bg': '#ffe5d6',
+          '--tab-active-text': '#9a3a1f',
+          '--tab-active-line': '#ff6a3d'
+        }
+      },
+      nordic_dark: {
+        label: 'Nordic Dark',
+        vars: {
+          '--bg-gradient': 'linear-gradient(155deg, #111827, #0f172a 50%, #1e293b)',
+          '--panel': '#172033',
+          '--panel-2': '#1d2940',
+          '--line': '#334158',
+          '--line-soft': '#28364d',
+          '--text': '#e7edf7',
+          '--muted': '#98a7bd',
+          '--accent': '#5aa9ff',
+          '--accent-strong': '#3a85d8',
+          '--pill-bg': '#1d2a40',
+          '--pill-line': '#38506f',
+          '--pill-text': '#deebff',
+          '--input-bg': '#1a263a',
+          '--input-line': '#3d5270',
+          '--input-focus': '#5aa9ff',
+          '--input-focus-glow': 'rgba(90, 169, 255, 0.2)',
+          '--tab-active-bg': '#243855',
+          '--tab-active-text': '#cde2ff',
+          '--tab-active-line': '#5aa9ff'
+        }
+      },
+      galaxy: {
+        label: 'Galaxy Purple',
+        vars: {
+          '--bg-gradient': 'radial-gradient(circle at 20% 10%, #39285e, #1a1434 45%, #0e0a1f)',
+          '--panel': '#1d1638',
+          '--panel-2': '#261d46',
+          '--line': '#443a6a',
+          '--line-soft': '#342c56',
+          '--text': '#f0e9ff',
+          '--muted': '#b8a9dd',
+          '--accent': '#b574ff',
+          '--accent-strong': '#8a47d1',
+          '--pill-bg': '#271f47',
+          '--pill-line': '#4d4080',
+          '--pill-text': '#f0ddff',
+          '--input-bg': '#1d1738',
+          '--input-line': '#4a3f7d',
+          '--input-focus': '#b574ff',
+          '--input-focus-glow': 'rgba(181, 116, 255, 0.25)',
+          '--tab-active-bg': '#3a2d63',
+          '--tab-active-text': '#efd6ff',
+          '--tab-active-line': '#b574ff'
+        }
+      },
+      retro_arcade: {
+        label: 'Retro Arcade',
+        vars: {
+          '--bg-gradient': 'linear-gradient(150deg, #121212, #1d1230 45%, #072a2a)',
+          '--panel': '#1a1a22',
+          '--panel-2': '#22222c',
+          '--line': '#3b3d4d',
+          '--line-soft': '#2d3140',
+          '--text': '#f7f7f7',
+          '--muted': '#b9bac8',
+          '--accent': '#f4ff52',
+          '--accent-strong': '#c4ca34',
+          '--pill-bg': '#20212a',
+          '--pill-line': '#464960',
+          '--pill-text': '#f8f9b5',
+          '--input-bg': '#181920',
+          '--input-line': '#484b60',
+          '--input-focus': '#f4ff52',
+          '--input-focus-glow': 'rgba(244, 255, 82, 0.22)',
+          '--tab-active-bg': '#2f3140',
+          '--tab-active-text': '#f8f9b5',
+          '--tab-active-line': '#f4ff52'
+        }
+      }
+    };
 
     const rtc = {
       localScreenStream: null,
@@ -648,6 +916,32 @@
 
     function setSyncLabel(text) {
       els.syncBadge.textContent = 'Sync: ' + text;
+    }
+
+    function applyTheme(themeKey) {
+      const key = Object.prototype.hasOwnProperty.call(THEMES, themeKey) ? themeKey : 'clean';
+      const cfg = THEMES[key];
+      for (const [cssVar, val] of Object.entries(cfg.vars)) {
+        document.documentElement.style.setProperty(cssVar, val);
+      }
+      if (els.themeSelect) els.themeSelect.value = key;
+      try { localStorage.setItem(THEME_KEY, key); } catch (_) {}
+    }
+
+    function initThemeSelector() {
+      if (!els.themeSelect) return;
+      els.themeSelect.innerHTML = '';
+      for (const [key, cfg] of Object.entries(THEMES)) {
+        const opt = document.createElement('option');
+        opt.value = key;
+        opt.textContent = cfg.label;
+        els.themeSelect.appendChild(opt);
+      }
+      const saved = (() => {
+        try { return localStorage.getItem(THEME_KEY) || ''; } catch (_) { return ''; }
+      })();
+      applyTheme(saved || 'clean');
+      els.themeSelect.addEventListener('change', () => applyTheme(els.themeSelect.value));
     }
 
     function setWizardStep(step) {
@@ -1821,6 +2115,7 @@
     });
 
     (function init() {
+      initThemeSelector();
       switchTab('session');
       setWizardStep(1);
       updateStatusChips(0);
