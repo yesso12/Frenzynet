@@ -92,6 +92,7 @@
       margin-right:6px;
     }
     .footer { margin-top:14px; font-size:12px; color:var(--muted); }
+    .hidden { display:none !important; }
     @media (max-width:900px) {
       .grid { grid-template-columns:1fr; }
       body { padding:12px; }
@@ -106,7 +107,7 @@
     <h1>FrenzyNets Watch Party Access Center</h1>
     <p class="muted">Relabeled for Watch Party operations. Manage event access, join links, and synced account list in one place.</p>
     <p class="muted" style="margin-bottom:8px">Build: 2026-02-27 09:45 UTC</p>
-    <div class="card" style="margin-bottom:10px;border-color:#4b6fa4">
+    <div class="card hidden" id="adminDownloadsCard" style="margin-bottom:10px;border-color:#4b6fa4">
       <h3 style="margin-bottom:6px">Desktop Downloads (Latest Builds)</h3>
       <p class="muted">Use the newest Watch Party desktop build for your device architecture. These packages are self-contained.</p>
       <div class="row">
@@ -117,16 +118,20 @@
       </div>
     </div>
 
-    <div class="row" style="margin-top:10px">
+    <div class="row hidden" id="adminTopActions" style="margin-top:10px">
       <a class="btn" href="/telewatch/">Open Watch Party</a>
       <a class="btn" href="/frenzynet-updates/FrenzyWatchPartyPanel-win-x64.zip">Download Latest Desktop (x64)</a>
       <a class="btn secondary" href="https://discord.gg/4uRUSAN498" target="_blank" rel="noopener">Open Discord</a>
       <a class="btn secondary" href="/telewatch/admin/">Open Telewatch Admin</a>
       <a class="btn secondary" href="/status/">Live Status</a>
     </div>
+    <div class="card" style="margin-top:10px">
+      <h3 style="margin-bottom:6px">Public Access</h3>
+      <p class="muted">Desktop control and download options are admin-only for now. Public users can join watch parties from <a href="/telewatch/" style="color:#8fdcff">Telewatch</a>.</p>
+    </div>
 
     <div class="grid">
-      <section class="card">
+      <section class="card hidden" id="adminPlatformCard">
         <h2>Platform</h2>
         <p><span class="pill">Channel: stable</span><span class="pill">Watch Party</span></p>
         <p class="muted">Use Telewatch for all rooms, hosting, and one-click Main Event mode. Desktop downloads below are the newest available builds.</p>
@@ -187,6 +192,9 @@
         refreshBtn: document.getElementById('refreshBtn'),
         status: document.getElementById('status'),
         usersBody: document.getElementById('usersBody'),
+        adminDownloadsCard: document.getElementById('adminDownloadsCard'),
+        adminTopActions: document.getElementById('adminTopActions'),
+        adminPlatformCard: document.getElementById('adminPlatformCard'),
       };
       let token = '';
       let timer = null;
@@ -262,6 +270,8 @@
         const d = await api('/api/admin/login', { method: 'POST', body: { username, password } });
         token = String(d.token || '');
         if (!token) throw new Error('admin_token_missing');
+        try { localStorage.setItem('fn_admin_token', token); } catch (_) {}
+        [els.adminDownloadsCard, els.adminTopActions, els.adminPlatformCard].forEach((el) => { if (el) el.classList.remove('hidden'); });
         setStatus('ok', 'Signed in. Auto-refresh active.');
         await refreshUsers();
         if (timer) clearInterval(timer);
@@ -282,6 +292,8 @@
 
       function logout() {
         token = '';
+        try { localStorage.removeItem('fn_admin_token'); } catch (_) {}
+        [els.adminDownloadsCard, els.adminTopActions, els.adminPlatformCard].forEach((el) => { if (el) el.classList.add('hidden'); });
         if (timer) {
           clearInterval(timer);
           timer = null;
@@ -300,6 +312,14 @@
       } catch (_) {
         els.adminUser.value = 'Trimbledustn@gmail.com';
       }
+      try {
+        const existing = localStorage.getItem('fn_admin_token');
+        if (existing) {
+          token = existing;
+          [els.adminDownloadsCard, els.adminTopActions, els.adminPlatformCard].forEach((el) => { if (el) el.classList.remove('hidden'); });
+          refreshUsers().catch(() => {});
+        }
+      } catch (_) {}
     })();
   </script>
 </body>
