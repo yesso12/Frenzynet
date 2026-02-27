@@ -161,6 +161,10 @@
           <button id="setMediaBtn" class="secondary">Set Media</button>
           <button id="copyLinkBtn" class="secondary">Copy Invite Link</button>
         </div>
+        <div class="row">
+          <button id="startShareBtn" class="secondary">Share Monitor / Tab</button>
+          <button id="stopShareBtn" class="secondary" disabled>Stop Share</button>
+        </div>
 
         <h3>Room Chat</h3>
         <textarea id="chatInput" placeholder="Send timestamp notes, e.g. pause at 12:34"></textarea>
@@ -171,6 +175,7 @@
         <h2 id="nowTitle">Now Playing</h2>
         <div id="connState" class="status-warn">Not connected</div>
         <video id="player" controls playsinline></video>
+        <video id="screenView" controls autoplay playsinline muted></video>
         <div class="row">
           <button id="playBtn" class="secondary">Play</button>
           <button id="pauseBtn" class="secondary">Pause</button>
@@ -190,6 +195,7 @@
   <script>
     const API_PREFIXES = ['https://api.frenzynets.com/api/telewatch', '/api/telewatch'];
     const POLL_MS = 1300;
+    const RTC_CFG = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
     const els = {
       displayName: document.getElementById('displayName'),
@@ -200,6 +206,8 @@
       joinBtn: document.getElementById('joinBtn'),
       setMediaBtn: document.getElementById('setMediaBtn'),
       copyLinkBtn: document.getElementById('copyLinkBtn'),
+      startShareBtn: document.getElementById('startShareBtn'),
+      stopShareBtn: document.getElementById('stopShareBtn'),
       chatInput: document.getElementById('chatInput'),
       chatBtn: document.getElementById('chatBtn'),
       playBtn: document.getElementById('playBtn'),
@@ -211,18 +219,28 @@
       connState: document.getElementById('connState'),
       nowTitle: document.getElementById('nowTitle'),
       events: document.getElementById('events'),
-      player: document.getElementById('player')
+      player: document.getElementById('player'),
+      screenView: document.getElementById('screenView')
     };
 
     const state = {
       roomCode: '',
       participantToken: '',
+      participantId: '',
+      participants: [],
       isHost: false,
       sinceEventId: 0,
       pollTimer: null,
       suppressOutbound: false,
       lastSeekSentAt: 0,
       lastRoom: null
+    };
+
+    const rtc = {
+      localScreenStream: null,
+      peers: new Map(),
+      pendingCandidates: new Map(),
+      offeredTo: new Set()
     };
 
     function qp(name) {
@@ -233,6 +251,14 @@
     function setStatus(ok, text) {
       els.connState.className = ok ? 'status-online' : 'status-warn';
       els.connState.textContent = text;
+    }
+
+    function setSyncLabel(text) {
+      els.syncBadge.textContent = 'Sync: ' + text;
+    }
+
+    function normalizeRoomCode(raw) {
+      return String(raw || '').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 24);
     }
 
     function addEventLine(text) {
@@ -274,8 +300,183 @@
       throw lastError || new Error('request_failed');
     }
 
+    async function sendControl(action, extra) {
+      if (!state.roomCode || !state.participantToken) return;
+      const body = Object.assign({
+        roomCode: state.roomCode,
+        participantToken: state.participantToken,
+        action
+      }, extra || {});
+      await apiRequest('POST', '/api/watch/control', body);
+    }
+
+    function upsertIceQueue(participantId, candidate) {
+      const list = rtc.pendingCandidates.get(participantId) || [];
+      list.push(candidate);
+      rtc.pendingCandidates.set(participantId, list);
+    }
+
+    async function flushIceQueue(participantId, pc) {
+      const list = rtc.pendingCandidates.get(participantId) || [];
+      rtc.pendingCandidates.delete(participantId);
+      for (const c of list) {
+        try { await pc.addIceCandidate(c); } catch (_) {}
+      }
+    }
+
+    function closePeer(participantId) {
+      const row = rtc.peers.get(participantId);
+      if (!row) return;
+      try { row.pc.close(); } catch (_) {}
+      rtc.peers.delete(participantId);
+      rtc.pendingCandidates.delete(participantId);
+      rtc.offeredTo.delete(participantId);
+    }
+
+    function ensurePeer(participantId) {
+      const existing = rtc.peers.get(participantId);
+      if (existing) return existing.pc;
+      const pc = new RTCPeerConnection(RTC_CFG);
+      pc.onicecandidate = (ev) => {
+        if (!ev.candidate) return;
+        sendControl('signal', {
+          toParticipantId: participantId,
+          signalType: 'ice',
+          candidate: String(ev.candidate.candidate || '')
+        }).catch(() => {});
+      };
+      pc.onconnectionstatechange = () => {
+        if (['failed', 'closed', 'disconnected'].includes(pc.connectionState)) closePeer(participantId);
+      };
+      pc.ontrack = (ev) => {
+        if (state.isHost) return;
+        if (ev.streams && ev.streams[0]) {
+          els.screenView.srcObject = ev.streams[0];
+          els.screenView.muted = false;
+          setSyncLabel('screen live');
+        }
+      };
+      rtc.peers.set(participantId, { pc });
+      return pc;
+    }
+
+    function getHostParticipantId() {
+      const row = (state.participants || []).find((p) => p && p.isHost);
+      return row ? String(row.participantId || '') : '';
+    }
+
+    function syncHostTrackSenders(participantId, pc) {
+      if (!state.isHost || !rtc.localScreenStream) return;
+      const track = rtc.localScreenStream.getVideoTracks()[0];
+      if (!track) return;
+      const existing = pc.getSenders().find((s) => s.track && s.track.kind === 'video');
+      if (existing) existing.replaceTrack(track).catch(() => {});
+      else pc.addTrack(track, rtc.localScreenStream);
+    }
+
+    async function createOfferFor(participantId) {
+      if (!state.isHost || !rtc.localScreenStream || !participantId) return;
+      const pc = ensurePeer(participantId);
+      syncHostTrackSenders(participantId, pc);
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      await sendControl('signal', {
+        toParticipantId: participantId,
+        signalType: 'offer',
+        sdp: String(offer.sdp || '')
+      });
+      rtc.offeredTo.add(participantId);
+    }
+
+    async function broadcastOffersToViewers() {
+      if (!state.isHost || !rtc.localScreenStream) return;
+      const viewerIds = (state.participants || [])
+        .filter((p) => p && !p.isSelf && !p.isHost)
+        .map((p) => String(p.participantId || ''))
+        .filter(Boolean);
+      const keep = new Set(viewerIds);
+      for (const pid of Array.from(rtc.peers.keys())) {
+        if (!keep.has(pid)) closePeer(pid);
+      }
+      for (const pid of viewerIds) {
+        if (!rtc.offeredTo.has(pid)) {
+          try { await createOfferFor(pid); } catch (_) {}
+        }
+      }
+    }
+
+    async function startScreenShare() {
+      if (!state.isHost) return;
+      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+      rtc.localScreenStream = stream;
+      els.screenView.srcObject = stream;
+      els.screenView.muted = true;
+      els.startShareBtn.disabled = true;
+      els.stopShareBtn.disabled = false;
+      setSyncLabel('sharing monitor/tab');
+      const track = stream.getVideoTracks()[0];
+      if (track) {
+        track.addEventListener('ended', () => {
+          stopScreenShare().catch(() => {});
+        });
+      }
+      await broadcastOffersToViewers();
+    }
+
+    async function stopScreenShare() {
+      if (rtc.localScreenStream) {
+        for (const t of rtc.localScreenStream.getTracks()) {
+          try { t.stop(); } catch (_) {}
+        }
+      }
+      rtc.localScreenStream = null;
+      els.startShareBtn.disabled = !state.isHost;
+      els.stopShareBtn.disabled = true;
+      if (state.isHost) {
+        els.screenView.srcObject = null;
+      }
+      for (const pid of Array.from(rtc.peers.keys())) closePeer(pid);
+      setSyncLabel('share stopped');
+    }
+
+    async function processSignal(payload) {
+      const toId = String(payload.toParticipantId || '');
+      if (!toId || toId !== state.participantId) return;
+      const fromId = String(payload.fromParticipantId || '');
+      const kind = String(payload.signalType || '').toLowerCase();
+      if (!fromId || !kind) return;
+      const pc = ensurePeer(fromId);
+      if (state.isHost) syncHostTrackSenders(fromId, pc);
+      if (kind === 'offer') {
+        if (state.isHost) return;
+        await pc.setRemoteDescription({ type: 'offer', sdp: String(payload.sdp || '') });
+        await flushIceQueue(fromId, pc);
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        await sendControl('signal', {
+          toParticipantId: fromId,
+          signalType: 'answer',
+          sdp: String(answer.sdp || '')
+        });
+      } else if (kind === 'answer') {
+        await pc.setRemoteDescription({ type: 'answer', sdp: String(payload.sdp || '') });
+        await flushIceQueue(fromId, pc);
+      } else if (kind === 'ice') {
+        const candidate = String(payload.candidate || '');
+        if (!candidate) return;
+        const iceObj = { candidate, sdpMid: '0', sdpMLineIndex: 0 };
+        if (pc.remoteDescription) {
+          try { await pc.addIceCandidate(iceObj); } catch (_) {}
+        } else {
+          upsertIceQueue(fromId, iceObj);
+        }
+      }
+    }
+
     async function createRoom() {
+      const chosenCode = normalizeRoomCode(els.roomInput.value);
       const payload = {
+        roomCode: chosenCode || undefined,
         displayName: els.displayName.value.trim() || 'Host',
         title: els.titleInput.value.trim(),
         mediaUrl: els.mediaInput.value.trim()
@@ -283,6 +484,7 @@
       const data = await apiRequest('POST', '/api/watch/create', payload);
       state.roomCode = data.roomCode;
       state.participantToken = data.participantToken;
+      state.participantId = data.participantId || '';
       state.isHost = true;
       state.sinceEventId = 0;
       els.roomInput.value = state.roomCode;
@@ -292,13 +494,14 @@
 
     async function joinRoom() {
       const payload = {
-        roomCode: (els.roomInput.value || '').trim().toUpperCase(),
+        roomCode: normalizeRoomCode(els.roomInput.value),
         displayName: els.displayName.value.trim() || ''
       };
       const data = await apiRequest('POST', '/api/watch/join', payload);
       state.roomCode = payload.roomCode;
       state.participantToken = data.participantToken;
-      state.isHost = false;
+      state.participantId = data.participantId || '';
+      state.isHost = !!data.isHost;
       state.sinceEventId = 0;
       onSessionStart();
       applyRoomState(data.room || null, true);
@@ -317,14 +520,12 @@
       els.setMediaBtn.disabled = !state.isHost;
       els.playBtn.disabled = !state.isHost;
       els.pauseBtn.disabled = !state.isHost;
+      els.startShareBtn.disabled = !state.isHost;
+      els.stopShareBtn.disabled = true;
       els.chatBtn.disabled = false;
       if (state.pollTimer) clearInterval(state.pollTimer);
       state.pollTimer = setInterval(pollState, POLL_MS);
       pollState();
-    }
-
-    function setSyncLabel(text) {
-      els.syncBadge.textContent = 'Sync: ' + text;
     }
 
     function applyRoomState(room, force) {
@@ -371,41 +572,6 @@
       }
     }
 
-    async function sendControl(action, extra) {
-      if (!state.roomCode || !state.participantToken) return;
-      const body = Object.assign({
-        roomCode: state.roomCode,
-        participantToken: state.participantToken,
-        action
-      }, extra || {});
-      await apiRequest('POST', '/api/watch/control', body);
-    }
-
-    async function pollState() {
-      if (!state.roomCode || !state.participantToken) return;
-      try {
-        const data = await apiRequest('GET', '/api/watch/state', null, {
-          roomCode: state.roomCode,
-          participantToken: state.participantToken,
-          sinceEventId: state.sinceEventId
-        });
-        setStatus(true, 'Connected · active viewers: ' + (data.activeCount || 0));
-        applyRoomState(data.room || null, false);
-        for (const ev of (data.events || [])) {
-          state.sinceEventId = Math.max(state.sinceEventId, Number(ev.id) || 0);
-          const actor = ev.actor || 'user';
-          if (ev.type === 'chat') {
-            addEventLine(actor + ': ' + String(ev.payload?.message || ''));
-          } else {
-            addEventLine(actor + ' · ' + ev.type.replace('_', ' '));
-          }
-        }
-      } catch (err) {
-        setStatus(false, 'Reconnect pending: ' + (err?.message || 'network_error'));
-        setSyncLabel('retrying');
-      }
-    }
-
     async function setupMedia() {
       if (!state.isHost) return;
       await sendControl('set_media', {
@@ -433,24 +599,57 @@
       }
     }
 
+    async function pollState() {
+      if (!state.roomCode || !state.participantToken) return;
+      try {
+        const data = await apiRequest('GET', '/api/watch/state', null, {
+          roomCode: state.roomCode,
+          participantToken: state.participantToken,
+          sinceEventId: state.sinceEventId
+        });
+        state.participantId = data.selfParticipantId || state.participantId;
+        state.participants = Array.isArray(data.participants) ? data.participants : [];
+        setStatus(true, 'Connected · active viewers: ' + (data.activeCount || 0));
+        applyRoomState(data.room || null, false);
+        if (state.isHost && rtc.localScreenStream) {
+          await broadcastOffersToViewers();
+        }
+        for (const ev of (data.events || [])) {
+          state.sinceEventId = Math.max(state.sinceEventId, Number(ev.id) || 0);
+          const actor = ev.actor || 'user';
+          if (ev.type === 'signal') {
+            await processSignal(ev.payload || {});
+            continue;
+          }
+          if (ev.type === 'chat') addEventLine(actor + ': ' + String(ev.payload?.message || ''));
+          else addEventLine(actor + ' · ' + ev.type.replace('_', ' '));
+        }
+      } catch (err) {
+        setStatus(false, 'Reconnect pending: ' + (err?.message || 'network_error'));
+        setSyncLabel('retrying');
+      }
+    }
+
     els.createBtn.addEventListener('click', async () => {
       try { await createRoom(); } catch (err) { setStatus(false, String(err.message || err)); }
     });
-
     els.joinBtn.addEventListener('click', async () => {
       try { await joinRoom(); } catch (err) { setStatus(false, String(err.message || err)); }
     });
-
     els.setMediaBtn.addEventListener('click', async () => {
       try { await setupMedia(); } catch (err) { setStatus(false, String(err.message || err)); }
     });
-
     els.chatBtn.addEventListener('click', async () => {
       try { await sendChat(); } catch (err) { setStatus(false, String(err.message || err)); }
     });
-
     els.copyLinkBtn.addEventListener('click', copyInviteLink);
-
+    els.startShareBtn.addEventListener('click', async () => {
+      if (!state.isHost) return;
+      try { await startScreenShare(); } catch (err) { setStatus(false, String(err.message || err)); }
+    });
+    els.stopShareBtn.addEventListener('click', async () => {
+      try { await stopScreenShare(); } catch (err) { setStatus(false, String(err.message || err)); }
+    });
     els.playBtn.addEventListener('click', async () => {
       if (!state.isHost) return;
       try {
@@ -458,7 +657,6 @@
         await els.player.play().catch(() => {});
       } catch (err) { setStatus(false, String(err.message || err)); }
     });
-
     els.pauseBtn.addEventListener('click', async () => {
       if (!state.isHost) return;
       try {
@@ -466,19 +664,16 @@
         els.player.pause();
       } catch (err) { setStatus(false, String(err.message || err)); }
     });
-
     els.resyncBtn.addEventListener('click', () => applyRoomState(state.lastRoom, true));
 
     els.player.addEventListener('play', async () => {
       if (!state.isHost || state.suppressOutbound) return;
       try { await sendControl('play', { playbackSec: Number(els.player.currentTime) || 0 }); } catch (_) {}
     });
-
     els.player.addEventListener('pause', async () => {
       if (!state.isHost || state.suppressOutbound) return;
       try { await sendControl('pause', { playbackSec: Number(els.player.currentTime) || 0 }); } catch (_) {}
     });
-
     els.player.addEventListener('seeked', async () => {
       if (!state.isHost || state.suppressOutbound) return;
       const now = Date.now();
@@ -488,8 +683,11 @@
     });
 
     (function init() {
-      const roomFromQuery = (qp('room') || '').trim().toUpperCase();
+      const roomFromQuery = normalizeRoomCode(qp('room') || '');
       if (roomFromQuery) els.roomInput.value = roomFromQuery;
+      els.roomInput.addEventListener('input', () => {
+        els.roomInput.value = normalizeRoomCode(els.roomInput.value);
+      });
       try {
         const savedName = localStorage.getItem('telewatch_name') || '';
         if (savedName) els.displayName.value = savedName;

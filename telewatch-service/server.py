@@ -35,6 +35,13 @@ def room_code(length: int = 6) -> str:
     return ''.join(secrets.choice(alphabet) for _ in range(length))
 
 
+def normalize_room_code(raw: str, fallback: str = '') -> str:
+    cleaned = ''.join(ch for ch in str(raw or '').strip().upper() if ch.isalnum() or ch in {'-', '_'})
+    if len(cleaned) < 3:
+        return fallback
+    return cleaned[:24]
+
+
 def public_room_codes() -> list[str]:
     return [f'{PUBLIC_ROOM_PREFIX}{i:02d}' for i in range(1, PUBLIC_ROOM_COUNT + 1)]
 
@@ -67,6 +74,7 @@ def ensure_schema() -> None:
             );
             CREATE TABLE IF NOT EXISTS watch_participants (
               participant_token TEXT PRIMARY KEY,
+              participant_id TEXT UNIQUE,
               room_code TEXT NOT NULL,
               display_name TEXT NOT NULL,
               is_host INTEGER NOT NULL DEFAULT 0,
@@ -85,6 +93,17 @@ def ensure_schema() -> None:
             );
             CREATE INDEX IF NOT EXISTS idx_watch_participants_room ON watch_participants(room_code, last_seen_at);
             CREATE INDEX IF NOT EXISTS idx_watch_events_room ON watch_events(room_code, id);
+            '''
+        )
+        try:
+            conn.execute("ALTER TABLE watch_participants ADD COLUMN participant_id TEXT")
+        except sqlite3.OperationalError:
+            pass
+        conn.execute(
+            '''
+            UPDATE watch_participants
+            SET participant_id = lower(hex(randomblob(6)))
+            WHERE participant_id IS NULL OR trim(participant_id)=''
             '''
         )
         ensure_public_rooms(conn)
@@ -218,7 +237,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             self._json(HTTPStatus.NOT_FOUND, {'error': 'not_found'})
             return
 
-        room_code_val = str((q.get('roomCode') or [''])[0]).strip().upper()[:12]
+        room_code_val = normalize_room_code((q.get('roomCode') or [''])[0], '')
         participant_token = str((q.get('participantToken') or [''])[0]).strip()[:128]
         try:
             since_event_id = int(str((q.get('sinceEventId') or ['0'])[0]).strip() or '0')
@@ -233,7 +252,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             ensure_public_rooms(conn)
             cleanup_rooms(conn)
             part = conn.execute(
-                'SELECT display_name, is_host FROM watch_participants WHERE participant_token=? AND room_code=?',
+                'SELECT participant_id, display_name, is_host FROM watch_participants WHERE participant_token=? AND room_code=?',
                 (participant_token, room_code_val),
             ).fetchone()
             if part is None:
@@ -249,6 +268,16 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             if room is None:
                 self._json(HTTPStatus.NOT_FOUND, {'error': 'room_not_found'})
                 return
+
+            participants_rows = conn.execute(
+                '''
+                SELECT participant_id, display_name, is_host
+                FROM watch_participants
+                WHERE room_code=? AND last_seen_at >= datetime('now', '-30 minutes')
+                ORDER BY is_host DESC, created_at ASC
+                ''',
+                (room_code_val,),
+            ).fetchall()
 
             rows = conn.execute(
                 '''
@@ -293,6 +322,16 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                 'ok': True,
                 'room': room_payload(room),
                 'participant': {'displayName': part['display_name'], 'isHost': bool(part['is_host'])},
+                'selfParticipantId': part['participant_id'],
+                'participants': [
+                    {
+                        'participantId': r['participant_id'],
+                        'displayName': r['display_name'],
+                        'isHost': bool(r['is_host']),
+                        'isSelf': bool(r['participant_id'] == part['participant_id']),
+                    }
+                    for r in participants_rows
+                ],
                 'activeCount': int(active_count),
                 'events': events,
                 'serverNow': utc_iso(),
@@ -315,20 +354,29 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             display_name = clean_name(payload.get('displayName', ''), 'Host')
             title = str(payload.get('title', '')).strip()[:160]
             media_url = str(payload.get('mediaUrl', '')).strip()[:600]
+            requested_code = normalize_room_code(payload.get('roomCode', ''), '')
             with get_db() as conn:
                 ensure_public_rooms(conn)
                 cleanup_rooms(conn)
                 code = ''
-                for _ in range(12):
-                    candidate = room_code()
-                    exists = conn.execute('SELECT 1 FROM watch_rooms WHERE room_code=?', (candidate,)).fetchone()
-                    if exists is None:
-                        code = candidate
-                        break
+                if requested_code:
+                    exists = conn.execute('SELECT 1 FROM watch_rooms WHERE room_code=?', (requested_code,)).fetchone()
+                    if exists is not None:
+                        self._json(HTTPStatus.CONFLICT, {'error': 'room_code_taken'})
+                        return
+                    code = requested_code
+                else:
+                    for _ in range(12):
+                        candidate = room_code()
+                        exists = conn.execute('SELECT 1 FROM watch_rooms WHERE room_code=?', (candidate,)).fetchone()
+                        if exists is None:
+                            code = candidate
+                            break
                 if not code:
                     self._json(HTTPStatus.INTERNAL_SERVER_ERROR, {'error': 'room_create_failed'})
                     return
                 host_token = secrets.token_urlsafe(32)
+                participant_id = secrets.token_hex(6)
                 conn.execute(
                     '''
                     INSERT INTO watch_rooms(room_code, host_token, title, media_url, playback_sec, is_playing, created_at, updated_at)
@@ -338,10 +386,10 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                 )
                 conn.execute(
                     '''
-                    INSERT INTO watch_participants(participant_token, room_code, display_name, is_host, created_at, last_seen_at)
-                    VALUES(?,?,?,1,datetime('now'),datetime('now'))
+                    INSERT INTO watch_participants(participant_token, participant_id, room_code, display_name, is_host, created_at, last_seen_at)
+                    VALUES(?,?,?,?,1,datetime('now'),datetime('now'))
                     ''',
-                    (host_token, code, display_name),
+                    (host_token, participant_id, code, display_name),
                 )
                 conn.execute(
                     '''
@@ -357,6 +405,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     'ok': True,
                     'roomCode': code,
                     'participantToken': host_token,
+                    'participantId': participant_id,
                     'isHost': True,
                     'joinUrl': f'/telewatch/?room={code}',
                 },
@@ -364,7 +413,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             return
 
         if path in join_paths:
-            room_code_val = str(payload.get('roomCode', '')).strip().upper()[:12]
+            room_code_val = normalize_room_code(payload.get('roomCode', ''), '')
             display_name = clean_name(payload.get('displayName', ''), f"Guest-{secrets.randbelow(900) + 100}")
             if not room_code_val:
                 self._json(HTTPStatus.BAD_REQUEST, {'error': 'roomCode_required'})
@@ -387,12 +436,13 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                 ).fetchone()
                 join_is_host = bool(is_public_room(room_code_val) and host_exists is None)
                 participant_token = secrets.token_urlsafe(32)
+                participant_id = secrets.token_hex(6)
                 conn.execute(
                     '''
-                    INSERT INTO watch_participants(participant_token, room_code, display_name, is_host, created_at, last_seen_at)
-                    VALUES(?,?,?,0,datetime('now'),datetime('now'))
+                    INSERT INTO watch_participants(participant_token, participant_id, room_code, display_name, is_host, created_at, last_seen_at)
+                    VALUES(?,?,?,?,0,datetime('now'),datetime('now'))
                     ''',
-                    (participant_token, room_code_val, display_name),
+                    (participant_token, participant_id, room_code_val, display_name),
                 )
                 if join_is_host:
                     conn.execute(
@@ -421,6 +471,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                 {
                     'ok': True,
                     'participantToken': participant_token,
+                    'participantId': participant_id,
                     'isHost': bool(join_is_host),
                     'room': room_payload(room),
                 },
@@ -428,7 +479,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             return
 
         if path in control_paths:
-            room_code_val = str(payload.get('roomCode', '')).strip().upper()[:12]
+            room_code_val = normalize_room_code(payload.get('roomCode', ''), '')
             participant_token = str(payload.get('participantToken', '')).strip()[:128]
             action = str(payload.get('action', '')).strip().lower()[:32]
             if not room_code_val or not participant_token or not action:
@@ -439,7 +490,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                 ensure_public_rooms(conn)
                 cleanup_rooms(conn)
                 part = conn.execute(
-                    'SELECT display_name, is_host FROM watch_participants WHERE participant_token=? AND room_code=?',
+                    'SELECT participant_id, display_name, is_host FROM watch_participants WHERE participant_token=? AND room_code=?',
                     (participant_token, room_code_val),
                 ).fetchone()
                 if part is None:
@@ -511,6 +562,26 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                         self._json(HTTPStatus.BAD_REQUEST, {'error': 'message_required'})
                         return
                     event_payload['message'] = msg[:280]
+                elif action == 'signal':
+                    to_participant_id = str(payload.get('toParticipantId', '')).strip().lower()[:24]
+                    signal_type = str(payload.get('signalType', '')).strip().lower()[:16]
+                    if not to_participant_id or signal_type not in {'offer', 'answer', 'ice'}:
+                        self._json(HTTPStatus.BAD_REQUEST, {'error': 'invalid_signal_payload'})
+                        return
+                    target = conn.execute(
+                        'SELECT participant_id FROM watch_participants WHERE room_code=? AND participant_id=? LIMIT 1',
+                        (room_code_val, to_participant_id),
+                    ).fetchone()
+                    if target is None:
+                        self._json(HTTPStatus.NOT_FOUND, {'error': 'target_participant_not_found'})
+                        return
+                    event_payload['fromParticipantId'] = str(part['participant_id'] or '')
+                    event_payload['toParticipantId'] = to_participant_id
+                    event_payload['signalType'] = signal_type
+                    if signal_type in {'offer', 'answer'}:
+                        event_payload['sdp'] = str(payload.get('sdp', ''))[:20000]
+                    if signal_type == 'ice':
+                        event_payload['candidate'] = str(payload.get('candidate', ''))[:4000]
                 elif action == 'ping':
                     event_payload = {}
                 else:
