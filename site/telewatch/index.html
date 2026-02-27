@@ -631,7 +631,17 @@
     }
 
     els.createBtn.addEventListener('click', async () => {
-      try { await createRoom(); } catch (err) { setStatus(false, String(err.message || err)); }
+      try {
+        await createRoom();
+      } catch (err) {
+        const msg = String(err && err.message ? err.message : err);
+        if (msg.includes('room_code_taken') || msg.includes('409')) {
+          setStatus(false, 'Room code already taken. Use a new code or click Join Room.');
+          addEventLine('Room code already exists. Try Join Room for that code.');
+          return;
+        }
+        setStatus(false, msg);
+      }
     });
     els.joinBtn.addEventListener('click', async () => {
       try { await joinRoom(); } catch (err) { setStatus(false, String(err.message || err)); }
