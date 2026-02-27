@@ -532,6 +532,16 @@
               <input id="inviteInput" placeholder="https://frenzynets.com/telewatch/?room=CODE" />
             </div>
             <div class="row">
+              <div>
+                <label for="clientModeSelect">Watch Mode</label>
+                <select id="clientModeSelect">
+                  <option value="web">Web Browser</option>
+                  <option value="desktop">Desktop App</option>
+                </select>
+              </div>
+              <button id="openDesktopBtn" class="secondary">Open Desktop App</button>
+            </div>
+            <div class="row">
               <button id="createBtn">Create Room</button>
               <button id="joinBtn" class="secondary">Join Room</button>
             </div>
@@ -802,6 +812,8 @@
       displayName: document.getElementById('displayName'),
       roomInput: document.getElementById('roomInput'),
       inviteInput: document.getElementById('inviteInput'),
+      clientModeSelect: document.getElementById('clientModeSelect'),
+      openDesktopBtn: document.getElementById('openDesktopBtn'),
       quickHostBtn: document.getElementById('quickHostBtn'),
       recentJoinBtn: document.getElementById('recentJoinBtn'),
       recentRoomsSelect: document.getElementById('recentRoomsSelect'),
@@ -887,6 +899,7 @@
       stepSession: document.getElementById('stepSession'),
       stepRoom: document.getElementById('stepRoom'),
       stepShare: document.getElementById('stepShare'),
+      joinHint: document.getElementById('joinHint'),
       tabButtons: Array.from(document.querySelectorAll('[data-tab-btn]')),
       tabPanes: Array.from(document.querySelectorAll('[data-tab-pane]'))
     };
@@ -913,7 +926,8 @@
       pendingJoinRequests: [],
       pendingJoinToken: '',
       inviteToken: '',
-      autoRejoinTried: false
+      autoRejoinTried: false,
+      clientMode: 'web'
     };
     const SESSION_KEY = 'telewatch_session';
     const ADMIN_SESSION_KEY = 'telewatch_admin_session';
@@ -921,6 +935,7 @@
     const THEME_KEY = 'telewatch_theme';
     const JOIN_REQUEST_KEY = 'telewatch_join_request';
     const INVITE_SETTINGS_KEY = 'telewatch_invite_settings';
+    const CLIENT_MODE_KEY = 'telewatch_client_mode';
 
     const THEMES = {
       clean: {
@@ -1407,6 +1422,33 @@
     function qp(name) {
       const u = new URL(window.location.href);
       return u.searchParams.get(name) || '';
+    }
+
+    function applyClientMode(mode) {
+      const clean = String(mode || '').trim().toLowerCase() === 'desktop' ? 'desktop' : 'web';
+      state.clientMode = clean;
+      if (els.clientModeSelect) els.clientModeSelect.value = clean;
+      if (els.joinHint) {
+        els.joinHint.textContent = clean === 'desktop'
+          ? 'Desktop mode selected. Create/join opens the FrenzyNet desktop app.'
+          : 'Share your room code in Discord voice chat. Everyone runs their own stream account.';
+      }
+      try { localStorage.setItem(CLIENT_MODE_KEY, clean); } catch (_) {}
+    }
+
+    function openDesktopApp(actionHint) {
+      const action = String(actionHint || 'join').trim().toLowerCase();
+      const room = normalizeRoomCode(els.roomInput && els.roomInput.value);
+      const name = String((els.displayName && els.displayName.value) || '').trim();
+      const title = String((els.titleInput && els.titleInput.value) || '').trim();
+      const u = new URL('frenzynet://telewatch');
+      u.searchParams.set('action', action);
+      if (room) u.searchParams.set('room', room);
+      if (name) u.searchParams.set('name', name);
+      if (title) u.searchParams.set('title', title);
+      if (state.inviteToken) u.searchParams.set('invite', String(state.inviteToken));
+      window.location.href = u.toString();
+      setStatus(true, 'Opening desktop app...');
     }
 
     function setStatus(ok, text) {
@@ -2859,6 +2901,10 @@
     }
 
     els.createBtn.addEventListener('click', async () => {
+      if (state.clientMode === 'desktop') {
+        openDesktopApp('create');
+        return;
+      }
       try {
         await createRoom();
       } catch (err) {
@@ -2876,6 +2922,10 @@
       }
     });
     els.joinBtn.addEventListener('click', async () => {
+      if (state.clientMode === 'desktop') {
+        openDesktopApp('join');
+        return;
+      }
       try {
         await joinRoom();
       } catch (err) {
@@ -2906,6 +2956,10 @@
     });
     if (els.quickHostBtn) {
       els.quickHostBtn.addEventListener('click', async () => {
+        if (state.clientMode === 'desktop') {
+          openDesktopApp('quick_host');
+          return;
+        }
         try {
           await quickHost();
         } catch (err) {
@@ -2921,6 +2975,10 @@
           return;
         }
         els.roomInput.value = selected;
+        if (state.clientMode === 'desktop') {
+          openDesktopApp('join');
+          return;
+        }
         try {
           await joinRoom();
         } catch (err) {
@@ -3191,6 +3249,7 @@
       openPartyTimer = setInterval(refreshOpenParties, 15000);
       const roomFromQuery = normalizeRoomCode(qp('room') || '');
       const inviteFromQuery = String(qp('invite') || '').trim();
+      const modeFromQuery = String(qp('mode') || '').trim().toLowerCase();
       if (inviteFromQuery) state.inviteToken = inviteFromQuery;
       if (roomFromQuery) els.roomInput.value = roomFromQuery;
       els.roomInput.addEventListener('input', () => {
@@ -3201,6 +3260,16 @@
           const code = parseInviteRoom(els.inviteInput.value);
           if (code) els.roomInput.value = code;
         });
+      }
+      const savedClientMode = (() => {
+        try { return localStorage.getItem(CLIENT_MODE_KEY) || 'web'; } catch (_) { return 'web'; }
+      })();
+      applyClientMode(modeFromQuery === 'desktop' ? 'desktop' : savedClientMode);
+      if (els.clientModeSelect) {
+        els.clientModeSelect.addEventListener('change', () => applyClientMode(els.clientModeSelect.value));
+      }
+      if (els.openDesktopBtn) {
+        els.openDesktopBtn.addEventListener('click', () => openDesktopApp('open'));
       }
       renderRecentRooms();
       try {
