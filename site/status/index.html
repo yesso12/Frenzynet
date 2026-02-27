@@ -3,9 +3,6 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-  <meta http-equiv="Pragma" content="no-cache" />
-  <meta http-equiv="Expires" content="0" />
   <title>FrenzyNets Status</title>
   <style>
     body { margin: 0; background: #070d1c; color: #e8f2ff; font-family: Segoe UI, Arial, sans-serif; }
@@ -36,17 +33,12 @@
     </div>
   </div>
   <script>
-    const API_BASE = String(window.__FRNZ_API_HOST || 'https://api.frenzynets.com').replace(/\/+$/,'');
-    function apiUrl(path) {
-      const p = path.startsWith('/') ? path : `/${path}`;
-      return `${API_BASE}${p}`;
-    }
     async function load() {
-      const endpoints = ['/api/public/status'];
+      const endpoints = ['/api/public/status', '/api/frenzynet/api/public/status'];
       let data = null;
       for (const ep of endpoints) {
         try {
-          const r = await fetch(apiUrl(ep), { cache: 'no-store' });
+          const r = await fetch(ep, { cache: 'no-store' });
           if (r.ok) {
             data = await r.json();
             break;

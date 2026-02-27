@@ -3,9 +3,6 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-  <meta http-equiv="Pragma" content="no-cache" />
-  <meta http-equiv="Expires" content="0" />
   <title>FrenzyNets | Performance VPN</title>
   <meta name="description" content="FrenzyNets Performance VPN for competitive gaming. Fast routes, self-healing, one-click setup, and direct Discord support." />
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -700,36 +697,22 @@
       <div id="downloadGateInfo" class="countdown-msg" style="margin-top:10px">Installer requirements: .NET Desktop Runtime, WireGuard, and admin permission for network setup.</div>
       <div class="k" style="margin-top:12px">Verify Download (PowerShell)</div>
       <pre>Get-FileHash .\FrenzyNet-Setup.exe -Algorithm SHA256
-# Compare with: https://github.com/yesso12/Frenzynet/releases/download/stable/FrenzyNet-Setup.exe.sha256</pre>
+# Compare with: /frenzynet-updates/FrenzyNet-Setup.exe.sha256</pre>
       <div class="cta-row" style="margin-top:12px">
-        <a class="btn btn-secondary" href="https://github.com/yesso12/Frenzynet/releases/download/stable/FrenzyNet-Setup.exe.sha256">Setup SHA256</a>
-        <a class="btn btn-secondary" href="https://github.com/yesso12/Frenzynet/releases/download/stable/FrenzyNet-win-x64.zip.sha256">ZIP SHA256</a>
+        <a class="btn btn-secondary" href="/frenzynet-updates/FrenzyNet-Setup.exe.sha256">Setup SHA256</a>
+        <a class="btn btn-secondary" href="/frenzynet-updates/FrenzyNet-win-x64.zip.sha256">ZIP SHA256</a>
       </div>
     </section>
 
     <div class="footer">&copy; 2026 FrenzyNets. All rights reserved. | FrenzyNets Control Plane | <a href="/legal/terms.html">Terms</a> | <a href="/legal/privacy.html">Privacy</a> | <a href="/legal/refund.html">Refunds</a></div>
   </div>
 
-  <script>window.__FRNZ_API_HOST = window.__FRNZ_API_HOST || 'https://api.frenzynets.com';</script>
-
   <script>
-    const FRNZ_API_BASE = String(window.__FRNZ_API_HOST || 'https://api.frenzynets.com').replace(/\/+$/,'');
-    function resolveApi(endpoint) {
-      if (/^https?:\\/\\//i.test(endpoint)) return endpoint;
-      const prefix = endpoint.startsWith('/') ? endpoint : '/' + endpoint;
-      return FRNZ_API_BASE + prefix;
-    }
-    async function getJson(url){ const resolved = resolveApi(url); const r = await fetch(resolved, { cache: 'no-store' }); if(!r.ok) throw new Error(String(r.status)); return r.json(); }
-    async function getStaticJson(path) {
-      const url = path.startsWith('/') ? path : `/${path}`;
-      const r = await fetch(url, { cache: 'no-store' });
-      if (!r.ok) throw new Error(String(r.status));
-      return r.json();
-    }
+    async function getJson(url){ const r = await fetch(url, { cache: 'no-store' }); if(!r.ok) throw new Error(String(r.status)); return r.json(); }
     function ago(min){ if(min==null) return 'n/a'; if(min<1) return 'just now'; if(min<60) return `${min} min ago`; const h=Math.floor(min/60); const m=min%60; return `${h}h ${m}m ago`; }
 
     async function getStatusWithFallback(){
-      const endpoints = ['/api/public/status'];
+      const endpoints = ['/api/public/status', '/api/frenzynet/api/public/status'];
       const attempts = 3;
       for (let i = 0; i < attempts; i++) {
         for (const ep of endpoints) {
@@ -748,17 +731,17 @@
       throw new Error('status_unreachable');
     }
 
-      async function loadLivePricing() {
-        const endpoints = ['/api/billing/providers'];
-        let data = null;
-        for (const ep of endpoints) {
-          try {
-            const r = await fetch(resolveApi(ep), { cache: 'no-store' });
-            if (!r.ok) continue;
-            data = await r.json();
-            break;
-          } catch (_) { }
-        }
+    async function loadLivePricing() {
+      const endpoints = ['/api/frenzynet/api/billing/providers', '/api/billing/providers'];
+      let data = null;
+      for (const ep of endpoints) {
+        try {
+          const r = await fetch(ep, { cache: 'no-store' });
+          if (!r.ok) continue;
+          data = await r.json();
+          break;
+        } catch (_) { }
+      }
       const plansGrid = document.getElementById('plansGrid');
       const addonsGrid = document.getElementById('addonsGrid');
       const bundleGrid = document.getElementById('bundleGrid');
@@ -949,8 +932,7 @@
     }
 
     async function loadSiteConfig() {
-      if (window.__FRNZ_USE_API === false) return;
-      const endpoints = ['/api/public/site-config'];
+      const endpoints = ['/api/public/site-config', '/api/frenzynet/api/public/site-config'];
       for (const ep of endpoints) {
         try {
           const d = await getJson(ep);
@@ -976,13 +958,16 @@
       async function heartbeatTick() {
         const endpoints = [
           '/api/public/ping',
+          '/api/frenzynet/api/public/ping',
           '/api/public/status',
-          '/api/health'
+          '/api/frenzynet/api/public/status',
+          '/api/health',
+          '/api/frenzynet/api/health'
         ];
         let ok = false;
         for (const ep of endpoints) {
           try {
-            const r = await fetch(resolveApi(ep), { cache: 'no-store' });
+            const r = await fetch(ep, { cache: 'no-store' });
             if (r.ok) { ok = true; break; }
           } catch (_) { }
         }
@@ -1035,7 +1020,7 @@
       }
 
       try {
-        const rn = await getStaticJson('/frenzynet-updates/release-notes-stable.json');
+        const rn = await getJson('/frenzynet-updates/release-notes-stable.json');
         document.getElementById('releaseNotes').textContent =
 `version: ${rn.version}\nchannel: ${rn.channel}\npublishedAt: ${rn.publishedAt}\nnotes: ${rn.notes}\nsignatureAlgorithm: ${rn.signatureAlgorithm}`;
       } catch {
@@ -1108,10 +1093,10 @@
             return;
           }
         } catch (_) { }
-        const endpoints = ['/api/public/site-config'];
+        const endpoints = ['/api/public/site-config', '/api/frenzynet/api/public/site-config'];
         for (const ep of endpoints) {
           try {
-            const r = await fetch(resolveApi(ep), { cache: 'no-store' });
+            const r = await fetch(ep, { cache: 'no-store' });
             if (!r.ok) continue;
             const d = await r.json();
             const fromApi = d?.siteConfig?.betaCountdownEndIso;
