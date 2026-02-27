@@ -393,11 +393,12 @@
 
     function syncHostTrackSenders(participantId, pc) {
       if (!state.isHost || !rtc.localScreenStream) return;
-      const track = rtc.localScreenStream.getVideoTracks()[0];
-      if (!track) return;
-      const existing = pc.getSenders().find((s) => s.track && s.track.kind === 'video');
-      if (existing) existing.replaceTrack(track).catch(() => {});
-      else pc.addTrack(track, rtc.localScreenStream);
+      const tracks = rtc.localScreenStream.getTracks().filter((t) => t.kind === 'video' || t.kind === 'audio');
+      for (const track of tracks) {
+        const existing = pc.getSenders().find((s) => s.track && s.track.kind === track.kind);
+        if (existing) existing.replaceTrack(track).catch(() => {});
+        else pc.addTrack(track, rtc.localScreenStream);
+      }
     }
 
     async function createOfferFor(participantId) {
@@ -452,6 +453,12 @@
         track.addEventListener('ended', () => {
           stopScreenShare().catch(() => {});
         });
+      }
+      const hasAudio = stream.getAudioTracks().length > 0;
+      if (hasAudio) {
+        addEventLine('Screen share audio detected and will be sent to viewers.');
+      } else {
+        addEventLine('No share audio detected. In picker enable tab/system audio.');
       }
       await broadcastOffersToViewers();
     }
