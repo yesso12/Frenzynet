@@ -89,6 +89,7 @@
         <button data-tab="runbooks">Runbooks</button>
         <button data-tab="provisioning">Provisioning Hub</button>
         <button data-tab="actions">Actions</button>
+        <button data-tab="users">Users</button>
       </div>
 
       <div>
@@ -962,6 +963,64 @@
                 <button id="qRestore" class="danger">Queue Restore Latest</button>
               </div>
               <div id="backupList" class="list muted" style="margin-top:8px;max-height:170px"></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="tab-users" class="section card">
+          <h2>Users</h2>
+          <div class="muted">Add, edit, lock/unlock, and delete users from one place.</div>
+          <div class="grid grid-2" style="margin-top:10px">
+            <div class="card" style="background:#0b1730">
+              <h3>Create User</h3>
+              <div class="row">
+                <input id="usersNewUser" placeholder="username" />
+                <input id="usersNewPass" placeholder="temporary password" />
+              </div>
+              <div class="row">
+                <select id="usersNewPlan"><option value="standard">standard</option><option value="premium">premium</option></select>
+                <select id="usersNewChannel"><option value="stable">stable</option><option value="beta">beta</option><option value="auto">auto</option></select>
+                <button id="usersCreateBtn" class="secondary">Create User</button>
+              </div>
+            </div>
+
+            <div class="card" style="background:#0b1730">
+              <h3>User Directory</h3>
+              <div class="row">
+                <input id="usersSearch" placeholder="search username/role/plan/channel" />
+                <button id="usersSearchClear" class="secondary">Clear</button>
+              </div>
+              <div id="usersDirectoryList" class="list muted" style="margin-top:8px">No users loaded.</div>
+            </div>
+          </div>
+
+          <div class="card" style="background:#0b1730; margin-top:10px">
+            <h3>Edit User</h3>
+            <div class="row">
+              <select id="usersTarget"><option value="">(select user)</option></select>
+              <select id="usersRole"><option value="user">user</option><option value="operator">operator</option><option value="admin">admin</option></select>
+              <button id="usersSetRoleBtn" class="secondary">Set Role</button>
+            </div>
+            <div class="row">
+              <input id="usersPassword" placeholder="new password" />
+              <button id="usersSetPasswordBtn" class="secondary">Set Password</button>
+              <button id="usersForceResetBtn" class="secondary">Force Reset</button>
+            </div>
+            <div class="row">
+              <select id="usersPlan"><option value="standard">standard</option><option value="premium">premium</option></select>
+              <button id="usersSetPlanBtn" class="secondary">Set Plan</button>
+              <select id="usersChannel"><option value="stable">stable</option><option value="beta">beta</option><option value="auto">auto</option></select>
+              <button id="usersSetChannelBtn" class="secondary">Set Channel</button>
+            </div>
+            <div class="row">
+              <input id="usersSubscriptionExpiry" placeholder="subscription expiry ISO (optional)" />
+              <input id="usersSubscriptionNote" placeholder="subscription note" />
+              <button id="usersSetSubscriptionBtn" class="secondary">Set Subscription</button>
+            </div>
+            <div class="row">
+              <button id="usersLockBtn" class="secondary">Lock 60m</button>
+              <button id="usersUnlockBtn" class="secondary">Unlock</button>
+              <button id="usersDeleteBtn" class="danger">Delete User</button>
             </div>
           </div>
         </section>
@@ -1983,6 +2042,69 @@
     byId('securityUser').innerHTML = options;
     byId('quickUser').innerHTML = options;
     byId('pvUserTarget').innerHTML = options;
+    if (byId('usersTarget')) byId('usersTarget').innerHTML = options;
+  }
+
+  function renderUsersDirectory() {
+    const host = byId('usersDirectoryList');
+    if (!host) return;
+    const q = String(byId('usersSearch')?.value || '').trim().toLowerCase();
+    const rows = users
+      .filter(u => {
+        if (!q) return true;
+        const hay = [u.username, u.role, u.plan, u.updateChannel].map(x => String(x || '').toLowerCase()).join(' ');
+        return hay.includes(q);
+      })
+      .sort((a, b) => String(a.username || '').localeCompare(String(b.username || '')));
+
+    if (!rows.length) {
+      host.innerHTML = '<div class="item muted">No users match your filter.</div>';
+      return;
+    }
+
+    host.innerHTML = `<table class="table"><thead><tr><th>User</th><th>Role</th><th>Plan</th><th>Channel</th><th>Actions</th></tr></thead><tbody>${
+      rows.map(u => `<tr>
+        <td><strong>${esc(u.username)}</strong></td>
+        <td>${esc(u.role || (u.isAdmin ? 'admin' : 'user'))}</td>
+        <td>${esc(u.plan || 'standard')}</td>
+        <td>${esc(u.updateChannel || 'stable')}</td>
+        <td class="row">
+          <button class="secondary" data-users-select="${esc(u.username)}">Select</button>
+          <button class="danger" data-users-delete="${esc(u.username)}">Delete</button>
+        </td>
+      </tr>`).join('')
+    }</tbody></table>`;
+
+    document.querySelectorAll('[data-users-select]').forEach(btn => btn.onclick = () => {
+      const username = btn.dataset.usersSelect;
+      byId('usersTarget').value = username;
+      const row = users.find(u => String(u.username || '').toLowerCase() === String(username || '').toLowerCase());
+      if (row) {
+        byId('usersRole').value = row.role || (row.isAdmin ? 'admin' : 'user');
+        byId('usersPlan').value = row.plan || 'standard';
+        byId('usersChannel').value = row.updateChannel || 'stable';
+        byId('usersSubscriptionExpiry').value = row.subscriptionExpiresAt || '';
+        byId('usersSubscriptionNote').value = row.subscriptionNote || '';
+      }
+      setStatus(`Selected ${username}`, true);
+    });
+
+    document.querySelectorAll('[data-users-delete]').forEach(btn => btn.onclick = async () => {
+      if (!requirePerm('users.delete')) return;
+      const username = btn.dataset.usersDelete;
+      const ok = await confirmDanger(`delete user ${username}`);
+      if (!ok) return;
+      const allow = await guardAction('users.delete', `delete user ${username}`, {
+        ownerOnly: true,
+        request: { path:'/api/admin/users/delete', method:'POST', body:{ username }, postAction:'refreshAll' }
+      });
+      if (!allow) return;
+      await api('/api/admin/users/delete', { method:'POST', body:JSON.stringify({ username }) });
+      appendImmutableAudit('users.delete', `deleted ${username} from users tab (reason: ${ok.reason})`, 'warn');
+      await savePanelState();
+      await refreshAll();
+      setStatus(`Deleted ${username}`, true);
+    });
   }
 
   async function loadSecurityForUser() {
@@ -2431,6 +2553,7 @@
     renderRevenue();
     renderSupportBoard();
     renderLifecycle();
+    renderUsersDirectory();
     renderProvisioningUsers();
     renderPresets();
     renderFleet();
@@ -2450,6 +2573,119 @@
     byId('pvUserSearchClear').onclick = () => {
       byId('pvUserSearch').value = '';
       renderProvisioningUsers();
+    };
+    if (byId('usersSearch')) byId('usersSearch').oninput = renderUsersDirectory;
+    if (byId('usersSearchClear')) byId('usersSearchClear').onclick = () => {
+      byId('usersSearch').value = '';
+      renderUsersDirectory();
+    };
+
+    if (byId('usersCreateBtn')) byId('usersCreateBtn').onclick = async () => {
+      if (!requirePerm('users.create')) return;
+      const username = byId('usersNewUser').value.trim().toLowerCase();
+      const password = byId('usersNewPass').value;
+      if (!username || !password) return setStatus('Create user requires username/password', false);
+      await api('/api/admin/users/create', { method:'POST', body:JSON.stringify({
+        username, password, role:'user', isAdmin:false,
+        plan: byId('usersNewPlan').value,
+        updateChannel: byId('usersNewChannel').value,
+        allowedProfiles: []
+      })});
+      await refreshAll();
+      setStatus(`Created user ${username}`, true);
+    };
+
+    if (byId('usersSetRoleBtn')) byId('usersSetRoleBtn').onclick = async () => {
+      if (!requirePerm('users.role')) return;
+      const username = byId('usersTarget').value;
+      const role = byId('usersRole').value;
+      if (!username) return setStatus('Select user first.', false);
+      await api('/api/admin/users/set-role', { method:'POST', body:JSON.stringify({ username, role, isAdmin: role === 'admin' }) });
+      await refreshAll();
+      setStatus(`Updated role for ${username} -> ${role}`, true);
+    };
+
+    if (byId('usersSetPasswordBtn')) byId('usersSetPasswordBtn').onclick = async () => {
+      if (!requirePerm('users.password')) return;
+      const username = byId('usersTarget').value;
+      const password = byId('usersPassword').value;
+      if (!username || !password) return setStatus('Select user and provide password', false);
+      await api('/api/admin/users/set-password', { method:'POST', body:JSON.stringify({ username, password }) });
+      setStatus(`Password updated for ${username}`, true);
+    };
+
+    if (byId('usersForceResetBtn')) byId('usersForceResetBtn').onclick = async () => {
+      if (!requirePerm('users.reset')) return;
+      const username = byId('usersTarget').value;
+      if (!username) return setStatus('Select user first.', false);
+      await api('/api/admin/users/set-reset-required', { method:'POST', body:JSON.stringify({ username, required:true }) });
+      await refreshAll();
+      setStatus(`Reset required for ${username}`, true);
+    };
+
+    if (byId('usersSetPlanBtn')) byId('usersSetPlanBtn').onclick = async () => {
+      if (!requirePerm('users.plan')) return;
+      const username = byId('usersTarget').value;
+      if (!username) return setStatus('Select user first.', false);
+      await api('/api/admin/users/set-plan', { method:'POST', body:JSON.stringify({ username, plan: byId('usersPlan').value }) });
+      await refreshAll();
+      setStatus(`Plan updated for ${username}`, true);
+    };
+
+    if (byId('usersSetChannelBtn')) byId('usersSetChannelBtn').onclick = async () => {
+      if (!requirePerm('users.channel')) return;
+      const username = byId('usersTarget').value;
+      if (!username) return setStatus('Select user first.', false);
+      await api('/api/admin/users/set-channel', { method:'POST', body:JSON.stringify({ username, updateChannel: byId('usersChannel').value }) });
+      await refreshAll();
+      setStatus(`Channel updated for ${username}`, true);
+    };
+
+    if (byId('usersSetSubscriptionBtn')) byId('usersSetSubscriptionBtn').onclick = async () => {
+      if (!requirePerm('users.subscription')) return;
+      const username = byId('usersTarget').value;
+      if (!username) return setStatus('Select user first.', false);
+      const subscriptionExpiresAt = byId('usersSubscriptionExpiry').value.trim();
+      const subscriptionNote = byId('usersSubscriptionNote').value.trim();
+      await api('/api/admin/users/set-subscription', { method:'POST', body:JSON.stringify({ username, subscriptionExpiresAt, subscriptionNote }) });
+      await refreshAll();
+      setStatus(`Subscription updated for ${username}`, true);
+    };
+
+    if (byId('usersLockBtn')) byId('usersLockBtn').onclick = async () => {
+      if (!requirePerm('users.lock')) return;
+      const username = byId('usersTarget').value;
+      if (!username) return setStatus('Select user first.', false);
+      await api('/api/admin/users/lock', { method:'POST', body:JSON.stringify({ username, minutes:60, reason:'users tab lock' }) });
+      await refreshAll();
+      setStatus(`Locked ${username}`, true);
+    };
+
+    if (byId('usersUnlockBtn')) byId('usersUnlockBtn').onclick = async () => {
+      if (!requirePerm('users.unlock')) return;
+      const username = byId('usersTarget').value;
+      if (!username) return setStatus('Select user first.', false);
+      await api('/api/admin/users/unlock', { method:'POST', body:JSON.stringify({ username }) });
+      await refreshAll();
+      setStatus(`Unlocked ${username}`, true);
+    };
+
+    if (byId('usersDeleteBtn')) byId('usersDeleteBtn').onclick = async () => {
+      if (!requirePerm('users.delete')) return;
+      const username = byId('usersTarget').value;
+      if (!username) return setStatus('Select user first.', false);
+      const ok = await confirmDanger(`delete user ${username}`);
+      if (!ok) return;
+      const allow = await guardAction('users.delete', `delete user ${username}`, {
+        ownerOnly: true,
+        request: { path:'/api/admin/users/delete', method:'POST', body:{ username }, postAction:'refreshAll' }
+      });
+      if (!allow) return;
+      await api('/api/admin/users/delete', { method:'POST', body:JSON.stringify({ username }) });
+      appendImmutableAudit('users.delete', `deleted ${username} from users tab (reason: ${ok.reason})`, 'warn');
+      await savePanelState();
+      await refreshAll();
+      setStatus(`Deleted ${username}`, true);
     };
 
     byId('revokeAllAccess').onclick = async () => {
