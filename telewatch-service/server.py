@@ -96,6 +96,15 @@ def clean_name(raw: str, fallback: str = 'Guest') -> str:
     return (keep[:32] or fallback)
 
 
+def clean_donation_tier(raw: str, fallback: str = 'free') -> str:
+    val = str(raw or '').strip().lower()
+    if val not in {'free', 'supporter', 'pro'}:
+        val = str(fallback or 'free').strip().lower()
+    if val not in {'free', 'supporter', 'pro'}:
+        return 'free'
+    return val
+
+
 def clean_username(raw: str) -> str:
     val = str(raw or '').strip().lower()
     return val[:160]
@@ -242,6 +251,7 @@ def ensure_schema() -> None:
               username TEXT PRIMARY KEY,
               password_hash TEXT NOT NULL,
               display_name TEXT NOT NULL,
+              donation_tier TEXT NOT NULL DEFAULT 'free',
               created_at TEXT NOT NULL DEFAULT (datetime('now')),
               updated_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
@@ -333,6 +343,10 @@ def ensure_schema() -> None:
             conn.execute("ALTER TABLE watch_rooms ADD COLUMN media_mode TEXT NOT NULL DEFAULT 'webrtc'")
         except sqlite3.OperationalError:
             pass
+        try:
+            conn.execute("ALTER TABLE watch_users ADD COLUMN donation_tier TEXT NOT NULL DEFAULT 'free'")
+        except sqlite3.OperationalError:
+            pass
         conn.execute(
             '''
             UPDATE watch_rooms
@@ -354,6 +368,13 @@ def ensure_schema() -> None:
             WHERE media_mode IS NULL OR trim(media_mode)='' OR lower(media_mode) NOT IN ('webrtc','sfu')
             ''',
             (clean_media_mode(TELEWATCH_SFU_DEFAULT_MODE, 'webrtc'),),
+        )
+        conn.execute(
+            '''
+            UPDATE watch_users
+            SET donation_tier='free'
+            WHERE donation_tier IS NULL OR trim(donation_tier)='' OR lower(donation_tier) NOT IN ('free','supporter','pro')
+            '''
         )
         conn.execute(
             '''
@@ -528,7 +549,7 @@ def validate_user_session(conn: sqlite3.Connection, session_token: str) -> sqlit
         return None
     row = conn.execute(
         '''
-        SELECT s.session_token, s.username, u.display_name
+        SELECT s.session_token, s.username, u.display_name, u.donation_tier
         FROM watch_user_sessions s
         JOIN watch_users u ON u.username=s.username
         WHERE s.session_token=? AND s.last_seen_at >= datetime('now', ?)
@@ -1058,6 +1079,18 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             '/api/telewatch/watch/admin/user-block/list',
             '/api/telewatch/api/watch/admin/user-block/list',
         }
+        admin_user_tier_set_paths = {
+            '/watch/admin/user-tier/set',
+            '/api/watch/admin/user-tier/set',
+            '/api/telewatch/watch/admin/user-tier/set',
+            '/api/telewatch/api/watch/admin/user-tier/set',
+        }
+        admin_user_tier_get_paths = {
+            '/watch/admin/user-tier/get',
+            '/api/watch/admin/user-tier/get',
+            '/api/telewatch/watch/admin/user-tier/get',
+            '/api/telewatch/api/watch/admin/user-tier/get',
+        }
         delete_paths = {'/watch/delete', '/api/watch/delete', '/api/telewatch/watch/delete', '/api/telewatch/api/watch/delete'}
         control_paths = {'/watch/control', '/api/watch/control', '/api/telewatch/watch/control', '/api/telewatch/api/watch/control'}
         client_ip = self._client_ip()
@@ -1160,14 +1193,14 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     return
                 conn.execute(
                     '''
-                    INSERT INTO watch_users(username, password_hash, display_name, created_at, updated_at)
-                    VALUES(?,?,?,datetime('now'),datetime('now'))
+                    INSERT INTO watch_users(username, password_hash, display_name, donation_tier, created_at, updated_at)
+                    VALUES(?,?,?,'free',datetime('now'),datetime('now'))
                     ''',
                     (username, hash_password(password), display_name),
                 )
                 token = create_user_session(conn, username)
                 conn.commit()
-            self._json(HTTPStatus.OK, {'ok': True, 'userToken': token, 'username': username, 'displayName': display_name})
+            self._json(HTTPStatus.OK, {'ok': True, 'userToken': token, 'username': username, 'displayName': display_name, 'donationTier': 'free'})
             return
 
         if path in user_login_paths:
@@ -1186,7 +1219,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     self._json(HTTPStatus.FORBIDDEN, {'error': 'user_blocked'})
                     return
                 row = conn.execute(
-                    'SELECT username, password_hash, display_name FROM watch_users WHERE username=? LIMIT 1',
+                    'SELECT username, password_hash, display_name, donation_tier FROM watch_users WHERE username=? LIMIT 1',
                     (username,),
                 ).fetchone()
                 if row is None or not verify_password(password, row['password_hash']):
@@ -1196,7 +1229,13 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                 conn.commit()
             self._json(
                 HTTPStatus.OK,
-                {'ok': True, 'userToken': token, 'username': username, 'displayName': str(row['display_name'] or username)},
+                {
+                    'ok': True,
+                    'userToken': token,
+                    'username': username,
+                    'displayName': str(row['display_name'] or username),
+                    'donationTier': clean_donation_tier(row['donation_tier'] if 'donation_tier' in row.keys() else 'free', 'free'),
+                },
             )
             return
 
@@ -1212,7 +1251,12 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                 conn.commit()
             self._json(
                 HTTPStatus.OK,
-                {'ok': True, 'username': str(row['username'] or ''), 'displayName': str(row['display_name'] or '')},
+                {
+                    'ok': True,
+                    'username': str(row['username'] or ''),
+                    'displayName': str(row['display_name'] or ''),
+                    'donationTier': clean_donation_tier(row['donation_tier'] if 'donation_tier' in row.keys() else 'free', 'free'),
+                },
             )
             return
 
@@ -1492,6 +1536,74 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                         }
                         for r in rows
                     ],
+                },
+            )
+            return
+
+        if path in admin_user_tier_set_paths:
+            admin_token = str(payload.get('adminToken', '')).strip()
+            admin_code = str(payload.get('adminCode', '')).strip()
+            username = clean_username(payload.get('username', ''))
+            donation_tier = clean_donation_tier(payload.get('donationTier', 'free'), 'free')
+            if not admin_token:
+                self._json(HTTPStatus.UNAUTHORIZED, {'error': 'admin_auth_required'})
+                return
+            if not username:
+                self._json(HTTPStatus.BAD_REQUEST, {'error': 'username_required'})
+                return
+            if TELEWATCH_ADMIN_CODE and admin_code != TELEWATCH_ADMIN_CODE:
+                self._json(HTTPStatus.FORBIDDEN, {'error': 'admin_code_invalid'})
+                return
+            with get_db() as conn:
+                actor = validate_admin_session(conn, admin_token)
+                if actor is None:
+                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'admin_auth_invalid'})
+                    return
+                row = conn.execute('SELECT username FROM watch_users WHERE username=? LIMIT 1', (username,)).fetchone()
+                if row is None:
+                    self._json(HTTPStatus.NOT_FOUND, {'error': 'user_not_found'})
+                    return
+                conn.execute(
+                    '''
+                    UPDATE watch_users
+                    SET donation_tier=?, updated_at=datetime('now')
+                    WHERE username=?
+                    ''',
+                    (donation_tier, username),
+                )
+                conn.execute('DELETE FROM watch_user_sessions WHERE username=?', (username,))
+                conn.commit()
+            self._json(HTTPStatus.OK, {'ok': True, 'username': username, 'donationTier': donation_tier})
+            return
+
+        if path in admin_user_tier_get_paths:
+            admin_token = str(payload.get('adminToken', '')).strip()
+            username = clean_username(payload.get('username', ''))
+            if not admin_token:
+                self._json(HTTPStatus.UNAUTHORIZED, {'error': 'admin_auth_required'})
+                return
+            if not username:
+                self._json(HTTPStatus.BAD_REQUEST, {'error': 'username_required'})
+                return
+            with get_db() as conn:
+                actor = validate_admin_session(conn, admin_token)
+                if actor is None:
+                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'admin_auth_invalid'})
+                    return
+                row = conn.execute(
+                    'SELECT username, donation_tier FROM watch_users WHERE username=? LIMIT 1',
+                    (username,),
+                ).fetchone()
+                if row is None:
+                    self._json(HTTPStatus.NOT_FOUND, {'error': 'user_not_found'})
+                    return
+                conn.commit()
+            self._json(
+                HTTPStatus.OK,
+                {
+                    'ok': True,
+                    'username': str(row['username'] or ''),
+                    'donationTier': clean_donation_tier(row['donation_tier'] if 'donation_tier' in row.keys() else 'free', 'free'),
                 },
             )
             return
