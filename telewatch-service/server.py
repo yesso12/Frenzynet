@@ -45,6 +45,11 @@ def clean_username(raw: str) -> str:
     return val[:160]
 
 
+def clean_theme_key(raw: str, fallback: str = 'clean') -> str:
+    keep = ''.join(ch for ch in str(raw or '').strip().lower() if ch.isalnum() or ch in {'_', '-'})
+    return (keep[:32] or fallback)
+
+
 def hash_password(password: str) -> str:
     body = f'{TELEWATCH_AUTH_SALT}:{str(password or "")}'.encode('utf-8', errors='replace')
     return hashlib.sha256(body).hexdigest()
@@ -92,6 +97,7 @@ def ensure_schema() -> None:
               host_token TEXT NOT NULL UNIQUE,
               title TEXT,
               media_url TEXT,
+              theme_key TEXT NOT NULL DEFAULT 'clean',
               is_private INTEGER NOT NULL DEFAULT 0,
               delete_on_host_leave INTEGER NOT NULL DEFAULT 1,
               playback_sec REAL NOT NULL DEFAULT 0,
@@ -163,6 +169,17 @@ def ensure_schema() -> None:
             conn.execute("ALTER TABLE watch_rooms ADD COLUMN delete_on_host_leave INTEGER NOT NULL DEFAULT 1")
         except sqlite3.OperationalError:
             pass
+        try:
+            conn.execute("ALTER TABLE watch_rooms ADD COLUMN theme_key TEXT NOT NULL DEFAULT 'clean'")
+        except sqlite3.OperationalError:
+            pass
+        conn.execute(
+            '''
+            UPDATE watch_rooms
+            SET theme_key='clean'
+            WHERE theme_key IS NULL OR trim(theme_key)=''
+            '''
+        )
         conn.execute(
             '''
             UPDATE watch_participants
@@ -205,6 +222,7 @@ def room_payload(room_row: sqlite3.Row) -> dict:
         'roomCode': room_row['room_code'],
         'title': room_row['title'] or '',
         'mediaUrl': room_row['media_url'] or '',
+        'themeKey': clean_theme_key(room_row['theme_key'] if 'theme_key' in room_row.keys() else 'clean'),
         'isPrivate': bool(room_row['is_private']),
         'deleteOnHostLeave': bool(room_row['delete_on_host_leave']),
         'playbackSec': float(room_row['playback_sec'] or 0.0),
@@ -220,10 +238,10 @@ def ensure_public_rooms(conn: sqlite3.Connection) -> None:
             continue
         conn.execute(
             '''
-            INSERT INTO watch_rooms(room_code, host_token, title, media_url, is_private, delete_on_host_leave, playback_sec, is_playing, created_at, updated_at)
-            VALUES(?,?,?,?,0,1,0,0,datetime('now'),datetime('now'))
+            INSERT INTO watch_rooms(room_code, host_token, title, media_url, theme_key, is_private, delete_on_host_leave, playback_sec, is_playing, created_at, updated_at)
+            VALUES(?,?,?,?,?,0,1,0,0,datetime('now'),datetime('now'))
             ''',
-            (code, secrets.token_urlsafe(32), f'Public Room {code[-2:]}', ''),
+            (code, secrets.token_urlsafe(32), f'Public Room {code[-2:]}', '', 'clean'),
         )
         conn.execute(
             '''
@@ -317,7 +335,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                 rooms = []
                 for code in public_room_codes():
                     room = conn.execute(
-                        'SELECT room_code, title, media_url, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
+                        'SELECT room_code, title, media_url, theme_key, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
                         (code,),
                     ).fetchone()
                     if room is None:
@@ -334,6 +352,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                         {
                             'roomCode': code,
                             'title': room['title'] or f'Public Room {code[-2:]}',
+                            'themeKey': clean_theme_key(room['theme_key']),
                             'activeCount': int(active_count),
                             'isLive': bool(active_count > 0),
                             'joinUrl': f'/telewatch/?room={code}',
@@ -372,7 +391,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             conn.execute("UPDATE watch_participants SET last_seen_at=datetime('now') WHERE participant_token=?", (participant_token,))
 
             room = conn.execute(
-                'SELECT room_code, title, media_url, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
+                'SELECT room_code, title, media_url, theme_key, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
                 (room_code_val,),
             ).fetchone()
             if room is None:
@@ -717,7 +736,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     conn.execute(
                         '''
                         UPDATE watch_rooms
-                        SET title=?, media_url='', is_private=0, delete_on_host_leave=1, playback_sec=0, is_playing=0, updated_at=datetime('now')
+                        SET title=?, media_url='', theme_key='clean', is_private=0, delete_on_host_leave=1, playback_sec=0, is_playing=0, updated_at=datetime('now')
                         WHERE room_code=?
                         ''',
                         (f'Public Room {room_code_val[-2:]}', room_code_val),
@@ -743,6 +762,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             display_name = clean_name(payload.get('displayName', ''), 'Host')
             title = str(payload.get('title', '')).strip()[:160]
             media_url = str(payload.get('mediaUrl', '')).strip()[:600]
+            theme_key = clean_theme_key(payload.get('themeKey', 'clean'), 'clean')
             requested_code = normalize_room_code(payload.get('roomCode', ''), '')
             with get_db() as conn:
                 ensure_public_rooms(conn)
@@ -775,10 +795,10 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                 participant_id = secrets.token_hex(6)
                 conn.execute(
                     '''
-                    INSERT INTO watch_rooms(room_code, host_token, title, media_url, is_private, delete_on_host_leave, playback_sec, is_playing, created_at, updated_at)
-                    VALUES(?,?,?,?,0,1,0,0,datetime('now'),datetime('now'))
+                    INSERT INTO watch_rooms(room_code, host_token, title, media_url, theme_key, is_private, delete_on_host_leave, playback_sec, is_playing, created_at, updated_at)
+                    VALUES(?,?,?,?,?,0,1,0,0,datetime('now'),datetime('now'))
                     ''',
-                    (code, host_token, title, media_url),
+                    (code, host_token, title, media_url, theme_key),
                 )
                 conn.execute(
                     '''
@@ -792,7 +812,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     INSERT INTO watch_events(room_code, actor_name, event_type, payload_json, created_at)
                     VALUES(?,?,?,?,datetime('now'))
                     ''',
-                    (code, display_name, 'room_created', stable_json({'title': title, 'mediaUrl': media_url})),
+                    (code, display_name, 'room_created', stable_json({'title': title, 'mediaUrl': media_url, 'themeKey': theme_key})),
                 )
                 conn.commit()
             self._json(
@@ -819,7 +839,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                 ensure_public_rooms(conn)
                 cleanup_rooms(conn)
                 room = conn.execute(
-                    'SELECT room_code, title, media_url, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
+                    'SELECT room_code, title, media_url, theme_key, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
                     (room_code_val,),
                 ).fetchone()
                 if room is None:
@@ -909,14 +929,14 @@ class TelewatchHandler(BaseHTTPRequestHandler):
 
                 conn.execute("UPDATE watch_participants SET last_seen_at=datetime('now') WHERE participant_token=?", (participant_token,))
                 room = conn.execute(
-                    'SELECT room_code, title, media_url, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
+                    'SELECT room_code, title, media_url, theme_key, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
                     (room_code_val,),
                 ).fetchone()
                 if room is None:
                     self._json(HTTPStatus.NOT_FOUND, {'error': 'room_not_found'})
                     return
 
-                if action in {'play', 'pause', 'seek', 'set_media', 'set_title', 'delete_room', 'reset_room', 'mute_user', 'resolve_request'} and not bool(part['is_host']):
+                if action in {'play', 'pause', 'seek', 'set_media', 'set_title', 'set_theme', 'delete_room', 'reset_room', 'mute_user', 'resolve_request'} and not bool(part['is_host']):
                     self._json(HTTPStatus.FORBIDDEN, {'error': 'host_required'})
                     return
 
@@ -966,6 +986,13 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     title = str(payload.get('title', '')).strip()[:160]
                     conn.execute('UPDATE watch_rooms SET title=?, updated_at=datetime(\'now\') WHERE room_code=?', (title, room_code_val))
                     event_payload['title'] = title
+                elif action == 'set_theme':
+                    theme_key = clean_theme_key(payload.get('themeKey', ''), 'clean')
+                    conn.execute(
+                        'UPDATE watch_rooms SET theme_key=?, updated_at=datetime(\'now\') WHERE room_code=?',
+                        (theme_key, room_code_val),
+                    )
+                    event_payload['themeKey'] = theme_key
                 elif action == 'reset_room':
                     title = str(payload.get('title', '')).strip()[:160]
                     if not title:
@@ -1056,7 +1083,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                         conn.execute(
                             '''
                             UPDATE watch_rooms
-                            SET title=?, media_url='', is_private=0, delete_on_host_leave=1, playback_sec=0, is_playing=0, updated_at=datetime('now')
+                            SET title=?, media_url='', theme_key='clean', is_private=0, delete_on_host_leave=1, playback_sec=0, is_playing=0, updated_at=datetime('now')
                             WHERE room_code=?
                             ''',
                             (f'Public Room {room_code_val[-2:]}', room_code_val),
@@ -1092,7 +1119,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     event_id = int(cur.lastrowid or 0)
 
                 room_after = conn.execute(
-                    'SELECT room_code, title, media_url, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
+                    'SELECT room_code, title, media_url, theme_key, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
                     (room_code_val,),
                 ).fetchone()
                 conn.commit()

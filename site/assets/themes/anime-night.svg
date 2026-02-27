@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="night" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#231a44"/>
+      <stop offset="55%" stop-color="#14122f"/>
+      <stop offset="100%" stop-color="#0a0a1d"/>
+    </linearGradient>
+    <linearGradient id="city" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0%" stop-color="#2f2f5a"/>
+      <stop offset="100%" stop-color="#1d1f3b"/>
+    </linearGradient>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#night)"/>
+  <circle cx="1470" cy="220" r="110" fill="#d5d0ff" opacity="0.85"/>
+  <g fill="#fff1b3" opacity="0.85">
+    <circle cx="430" cy="200" r="2"/><circle cx="560" cy="280" r="2"/><circle cx="700" cy="160" r="1.6"/>
+    <circle cx="890" cy="250" r="2"/><circle cx="1020" cy="180" r="1.8"/><circle cx="1200" cy="260" r="2"/>
+  </g>
+  <g fill="url(#city)">
+    <rect x="0" y="560" width="120" height="520"/>
+    <rect x="105" y="500" width="130" height="580"/>
+    <rect x="230" y="620" width="110" height="460"/>
+    <rect x="340" y="470" width="150" height="610"/>
+    <rect x="490" y="540" width="120" height="540"/>
+    <rect x="610" y="440" width="150" height="640"/>
+    <rect x="760" y="590" width="120" height="490"/>
+    <rect x="880" y="500" width="130" height="580"/>
+    <rect x="1010" y="610" width="110" height="470"/>
+    <rect x="1120" y="460" width="140" height="620"/>
+    <rect x="1260" y="560" width="130" height="520"/>
+    <rect x="1390" y="500" width="150" height="580"/>
+    <rect x="1540" y="620" width="120" height="460"/>
+    <rect x="1660" y="470" width="150" height="610"/>
+    <rect x="1810" y="560" width="110" height="520"/>
+  </g>
+  <rect x="0" y="810" width="1920" height="270" fill="#0b1125"/>
+  <g fill="#11172f" opacity="0.95">
+    <ellipse cx="1270" cy="888" rx="180" ry="50"/>
+    <path d="M1270 650 C1210 664 1182 720 1200 790 L1225 885 L1320 885 L1338 760 C1346 704 1320 666 1270 650 Z"/>
+    <circle cx="1270" cy="605" r="56"/>
+  </g>
+</svg>
