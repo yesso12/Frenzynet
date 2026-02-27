@@ -581,7 +581,7 @@
       <div class="top-links">
         <a class="link-btn" data-track="nav_watch_party" href="/telewatch/">Watch Party</a>
         <a class="link-btn" data-track="nav_discord" href="https://discord.gg/4uRUSAN498" target="_blank" rel="noopener">Join Discord</a>
-        <a class="link-btn" data-track="nav_billing" href="/billing/">Subscribe / Pay</a>
+        <a class="link-btn" data-track="nav_sales" href="https://discord.gg/4uRUSAN498" target="_blank" rel="noopener">Direct Sales</a>
         <a class="link-btn" data-track="nav_setup" href="/setup/">Setup Guide</a>
         <a class="link-btn" data-track="nav_downloads" href="/frenzynet-updates/">Download Portal</a>
         <a class="link-btn" href="/frenzynet-updates/trust-info.json">Trust Info</a>
@@ -605,11 +605,11 @@
             <span id="trustChipD" class="chip">Discord Support</span>
           </div>
           <div class="cta-row">
-            <a id="heroCtaPrimary" data-track="hero_primary" class="btn btn-primary" href="/billing/">Start Subscription</a>
+            <a id="heroCtaPrimary" data-track="hero_primary" class="btn btn-primary" href="https://discord.gg/4uRUSAN498" target="_blank" rel="noopener">Contact Direct Sales</a>
             <a id="heroCtaSecondary" data-track="hero_secondary" class="btn btn-primary" href="https://discord.gg/4uRUSAN498" target="_blank" rel="noopener">Join Discord Sales</a>
             <a data-track="hero_watch" class="btn btn-primary" href="/telewatch/">Start Watch Party</a>
-            <a data-track="hero_download" class="btn btn-secondary" href="/frenzynet-updates/">Download Client Files</a>
-            <a data-track="hero_checkout" class="btn btn-secondary" href="/billing/">Open Checkout</a>
+            <a data-track="hero_download" class="btn btn-secondary" href="/telewatch/">Open Watch Party</a>
+            <a data-track="hero_sales" class="btn btn-secondary" href="https://discord.gg/4uRUSAN498" target="_blank" rel="noopener">Request Direct Purchase</a>
           </div>
         </div>
         <div class="status-card">
@@ -639,8 +639,8 @@
       </div>
       <div id="betaMsg" class="countdown-msg">Intro pricing is active for the first 3 months (beta).</div>
       <div class="cta-row" style="margin-top:10px">
-        <a class="btn btn-primary" href="/billing/?plan=quarterly">Lock In Beta Deal</a>
-        <a class="btn btn-secondary" href="/billing/?plan=competitive&addons=anti_ddos,premium_presets">Get Popular Stack</a>
+        <a class="btn btn-primary" href="https://discord.gg/4uRUSAN498" target="_blank" rel="noopener">Lock In Beta Deal</a>
+        <a class="btn btn-secondary" href="https://discord.gg/4uRUSAN498" target="_blank" rel="noopener">Request Popular Stack</a>
       </div>
     </section>
 
@@ -656,7 +656,7 @@
       <div style="height:8px"></div>
       <div id="addonsGrid" class="grid"></div>
       <div class="cta-row" style="margin-top:12px">
-        <a class="btn btn-primary" href="/billing/">Subscribe & Pay Now</a>
+        <a class="btn btn-primary" href="https://discord.gg/4uRUSAN498" target="_blank" rel="noopener">Contact Sales For Pricing</a>
       </div>
     </section>
 
@@ -664,8 +664,8 @@
       <h2>Beta Bundle Deals (First 3 Months)</h2>
       <div id="bundleGrid" class="upsell-grid"></div>
       <div class="cta-row" style="margin-top:12px">
-        <a class="btn btn-primary" href="/billing/?plan=quarterly">Get Quarterly Discount</a>
-        <a class="btn btn-secondary" href="/billing/?plan=semiannual">Get Semiannual Discount</a>
+        <a class="btn btn-primary" href="https://discord.gg/4uRUSAN498" target="_blank" rel="noopener">Request Quarterly Discount</a>
+        <a class="btn btn-secondary" href="https://discord.gg/4uRUSAN498" target="_blank" rel="noopener">Request Semiannual Discount</a>
       </div>
     </section>
 
@@ -673,7 +673,7 @@
       <h2>Premium Add-on Store</h2>
       <div id="addonWall" class="addon-wall"></div>
       <div class="cta-row" style="margin-top:12px">
-        <a class="btn btn-primary" href="/billing/?plan=competitive">Build My Custom Stack</a>
+        <a class="btn btn-primary" href="https://discord.gg/4uRUSAN498" target="_blank" rel="noopener">Build My Custom Stack</a>
       </div>
     </section>
 
@@ -681,7 +681,7 @@
       <h2>Most Popular Stacks</h2>
       <div id="stackGrid" class="stack-grid"></div>
       <div class="cta-row" style="margin-top:12px">
-        <a class="btn btn-primary" href="/billing/?plan=competitive&addons=anti_ddos,premium_presets">Start Popular Stack</a>
+        <a class="btn btn-primary" href="https://discord.gg/4uRUSAN498" target="_blank" rel="noopener">Start Popular Stack</a>
       </div>
     </section>
 
@@ -806,94 +806,48 @@
     }
 
     async function loadLivePricing() {
-      const endpoints = ['/api/frenzynet/api/billing/providers', '/api/billing/providers'];
-      let data = null;
-      for (const ep of endpoints) {
-        try {
-          const r = await fetch(ep, { cache: 'no-store' });
-          if (!r.ok) continue;
-          data = await r.json();
-          break;
-        } catch (_) { }
-      }
       const plansGrid = document.getElementById('plansGrid');
       const addonsGrid = document.getElementById('addonsGrid');
       const bundleGrid = document.getElementById('bundleGrid');
       const addonWall = document.getElementById('addonWall');
       const stackGrid = document.getElementById('stackGrid');
       if (!plansGrid || !addonsGrid) return;
-      if (!data || !Array.isArray(data.plans)) {
-        plansGrid.innerHTML = '<article class="game-card"><h4>Pricing unavailable</h4><p>Open checkout for current live pricing.</p><span class="tag">Live API</span></article>';
-        addonsGrid.innerHTML = '';
-        if (bundleGrid) bundleGrid.innerHTML = '<article class="upsell-card"><h4>Bundle data unavailable</h4><p>Open checkout to view current bundle discounts.</p></article>';
-        if (addonWall) addonWall.innerHTML = '';
-        if (stackGrid) stackGrid.innerHTML = '';
-        return;
-      }
-      const money = (c, cc='USD') => new Intl.NumberFormat('en-US', { style:'currency', currency:cc }).format((Number(c || 0))/100);
-      plansGrid.innerHTML = data.plans.map(p => `<article class="game-card"><h4>${p.name || p.code}</h4><p>${p.description || 'FrenzyNet subscription plan'}</p><span class="tag">${money(p.amountCents, p.currency || 'USD')} / ${p.interval || 'month'}</span></article>`).join('');
-      const addons = Array.isArray(data.addons) ? data.addons : [];
-      addonsGrid.innerHTML = addons.length
-        ? addons.map(a => `<article class="panel"><h3>${a.name || a.code}</h3><p>${a.description || 'Optional performance add-on'}</p><div class="v">${money(a.amountCents, a.currency || 'USD')}</div></article>`).join('')
-        : '<article class="panel"><h3>Add-ons</h3><p>No add-ons currently enabled.</p></article>';
+
+      plansGrid.innerHTML = [
+        '<article class="game-card"><h4>Starter Direct Plan</h4><p>Tell us your game, region, and goals. We will match the right route profile.</p><span class="tag">Direct quote</span></article>',
+        '<article class="game-card"><h4>Competitive Direct Plan</h4><p>Higher-priority routing and tuning for ranked players and teams.</p><span class="tag">Direct quote</span></article>',
+        '<article class="game-card"><h4>Creator Direct Plan</h4><p>Balanced profile for gaming + streaming quality.</p><span class="tag">Direct quote</span></article>'
+      ].join('');
+
+      addonsGrid.innerHTML = [
+        '<article class="panel"><h3>Anti-DDoS Shield</h3><p>Extra protection for competitive sessions.</p><div class="v">Ask sales</div></article>',
+        '<article class="panel"><h3>Premium Presets</h3><p>Game-specific route and stability profiles.</p><div class="v">Ask sales</div></article>',
+        '<article class="panel"><h3>Priority Support</h3><p>Faster troubleshooting and setup help.</p><div class="v">Ask sales</div></article>'
+      ].join('');
 
       if (bundleGrid) {
-        const planByCode = new Map(data.plans.map(p => [String(p.code || '').toLowerCase(), p]));
-        const monthly = planByCode.get('monthly') || planByCode.get('competitive') || null;
-        const quarterly = planByCode.get('quarterly') || null;
-        const semiannual = planByCode.get('semiannual') || null;
-        const yearly = planByCode.get('yearly') || planByCode.get('elite_yearly') || null;
-        const cards = [];
-        if (monthly && quarterly) {
-          const save = Math.max(0, (Number(monthly.amountCents || 0) * 3) - Number(quarterly.amountCents || 0));
-          cards.push(`<article class="upsell-card"><span class="ribbon">BETA</span><h4>Quarterly Bundle</h4><p>3-month prepaid with locked beta pricing.</p><div class="upsell-price">${money(quarterly.amountCents, quarterly.currency || 'USD')}</div><div class="upsell-meta">Save ${money(save, quarterly.currency || 'USD')} vs 3x monthly</div><a class="btn btn-secondary" style="margin-top:8px" href="/billing/?plan=${encodeURIComponent(quarterly.code || 'quarterly')}">Select</a></article>`);
-        }
-        if (monthly && semiannual) {
-          const save = Math.max(0, (Number(monthly.amountCents || 0) * 6) - Number(semiannual.amountCents || 0));
-          cards.push(`<article class="upsell-card"><span class="ribbon">BETA</span><h4>Semiannual Bundle</h4><p>6-month prepaid with deeper intro discount.</p><div class="upsell-price">${money(semiannual.amountCents, semiannual.currency || 'USD')}</div><div class="upsell-meta">Save ${money(save, semiannual.currency || 'USD')} vs 6x monthly</div><a class="btn btn-secondary" style="margin-top:8px" href="/billing/?plan=${encodeURIComponent(semiannual.code || 'semiannual')}">Select</a></article>`);
-        }
-        if (yearly) {
-          cards.push(`<article class="upsell-card"><h4>Yearly Value Lock</h4><p>Best long-term rate for players staying competitive year-round.</p><div class="upsell-price">${money(yearly.amountCents, yearly.currency || 'USD')}</div><div class="upsell-meta">Max value plan</div><a class="btn btn-secondary" style="margin-top:8px" href="/billing/?plan=${encodeURIComponent(yearly.code || 'yearly')}">Select</a></article>`);
-        }
-        bundleGrid.innerHTML = cards.length ? cards.join('') : '<article class="upsell-card"><h4>Bundle deals loading</h4><p>Open checkout to compare plans.</p></article>';
+        bundleGrid.innerHTML = [
+          '<article class="upsell-card"><span class="ribbon">BETA</span><h4>Quarterly Bundle</h4><p>3-month intro package handled directly by sales.</p><div class="upsell-meta">Custom quote</div><a class="btn btn-secondary" style="margin-top:8px" href="https://discord.gg/4uRUSAN498" target="_blank" rel="noopener">Request</a></article>',
+          '<article class="upsell-card"><span class="ribbon">BETA</span><h4>Semiannual Bundle</h4><p>6-month package with direct setup support.</p><div class="upsell-meta">Custom quote</div><a class="btn btn-secondary" style="margin-top:8px" href="https://discord.gg/4uRUSAN498" target="_blank" rel="noopener">Request</a></article>',
+          '<article class="upsell-card"><h4>Yearly Value Lock</h4><p>Best long-term value sold directly.</p><div class="upsell-meta">Custom quote</div><a class="btn btn-secondary" style="margin-top:8px" href="https://discord.gg/4uRUSAN498" target="_blank" rel="noopener">Request</a></article>'
+        ].join('');
       }
 
       if (addonWall) {
-        const featuredCodes = ['anti_ddos', 'premium_presets', 'priority_support', 'dedicated_ip', 'tournament_priority', 'advanced_analytics', 'geo_unlock', 'anti_spike_guard', 'adblock_streaming'];
-        const addonByCode = new Map(addons.map(a => [String(a.code || '').toLowerCase(), a]));
-        const featured = featuredCodes.map(c => addonByCode.get(c)).filter(Boolean);
-        const rows = (featured.length ? featured : addons).slice(0, 12);
-        addonWall.innerHTML = rows.length
-          ? rows.map(a => `<article class="addon-chip"><h5>${a.name || a.code}</h5><p>${a.description || 'Performance add-on'}</p><div class="m">+${money(a.amountCents, a.currency || 'USD')} / month</div></article>`).join('')
-          : '<article class="addon-chip"><h5>No add-ons</h5><p>Add-ons will appear here when enabled.</p></article>';
+        addonWall.innerHTML = [
+          '<article class="addon-chip"><h5>Dedicated IP</h5><p>Private endpoint option for stable sessions.</p><div class="m">Ask sales</div></article>',
+          '<article class="addon-chip"><h5>Tournament Priority</h5><p>Profile built for event windows.</p><div class="m">Ask sales</div></article>',
+          '<article class="addon-chip"><h5>Advanced Analytics</h5><p>Detailed diagnostics and route insights.</p><div class="m">Ask sales</div></article>',
+          '<article class="addon-chip"><h5>Anti-Spike Guard</h5><p>Mitigates sudden jitter bursts.</p><div class="m">Ask sales</div></article>'
+        ].join('');
       }
 
       if (stackGrid) {
-        const planByCode = new Map(data.plans.map(p => [String(p.code || '').toLowerCase(), p]));
-        const addonByCode = new Map(addons.map(a => [String(a.code || '').toLowerCase(), a]));
-        const pickPlan = (...codes) => {
-          for (const c of codes) {
-            const row = planByCode.get(String(c).toLowerCase());
-            if (row) return row;
-          }
-          return null;
-        };
-        const stackDefs = [
-          { name:'Popular Ranked Stack', badge:'TOP SELLER', plan: pickPlan('competitive','monthly'), addons:['anti_ddos','premium_presets'], note:'Best balance of protection + latency consistency.' },
-          { name:'Tournament Pro Stack', badge:'PRO', plan: pickPlan('elite','elite_monthly','monthly'), addons:['tournament_priority','dedicated_ip','anti_spike_guard'], note:'Built for scrims/tournaments with priority routing.' },
-          { name:'Creator + Gaming Stack', badge:'CREATOR', plan: pickPlan('competitive','monthly'), addons:['stream_mode','priority_support','advanced_analytics'], note:'Smooth gameplay and stream stability together.' }
-        ];
-        const cards = [];
-        for (const s of stackDefs) {
-          if (!s.plan) continue;
-          const addRows = s.addons.map(c => addonByCode.get(String(c).toLowerCase())).filter(Boolean);
-          const addonTotal = addRows.reduce((sum, a) => sum + Number(a.amountCents || 0), 0);
-          const total = Number(s.plan.amountCents || 0) + addonTotal;
-          const addonCodes = addRows.map(a => encodeURIComponent(String(a.code || ''))).join(',');
-          const link = `/billing/?plan=${encodeURIComponent(String(s.plan.code || ''))}${addonCodes ? `&addons=${addonCodes}` : ''}`;
-          cards.push(`<article class="stack-card"><span class="stack-badge">${s.badge}</span><h4>${s.name}</h4><p>${s.note}</p><div class="stack-list">Plan: ${s.plan.name || s.plan.code}<br>Add-ons: ${addRows.map(a => a.name || a.code).join(', ') || 'None'}</div><div class="stack-price">${money(total, s.plan.currency || 'USD')} / month</div><a class="btn btn-secondary" style="margin-top:8px" href="${link}">Choose Stack</a></article>`);
-        }
-        stackGrid.innerHTML = cards.length ? cards.join('') : '<article class="stack-card"><h4>Stacks unavailable</h4><p>Open checkout to configure manually.</p></article>';
+        stackGrid.innerHTML = [
+          '<article class="stack-card"><span class="stack-badge">TOP SELLER</span><h4>Popular Ranked Stack</h4><p>Best balance of protection and latency stability.</p><div class="stack-list">Includes: Anti-DDoS + Premium Presets</div><div class="stack-price">Direct quote</div><a class="btn btn-secondary" style="margin-top:8px" href="https://discord.gg/4uRUSAN498" target="_blank" rel="noopener">Choose Stack</a></article>',
+          '<article class="stack-card"><span class="stack-badge">PRO</span><h4>Tournament Pro Stack</h4><p>Built for scrims and events.</p><div class="stack-list">Includes: Tournament Priority + Dedicated IP + Anti-Spike Guard</div><div class="stack-price">Direct quote</div><a class="btn btn-secondary" style="margin-top:8px" href="https://discord.gg/4uRUSAN498" target="_blank" rel="noopener">Choose Stack</a></article>',
+          '<article class="stack-card"><span class="stack-badge">CREATOR</span><h4>Creator + Gaming Stack</h4><p>Optimized for stream + game consistency.</p><div class="stack-list">Includes: Priority Support + Advanced Analytics</div><div class="stack-price">Direct quote</div><a class="btn btn-secondary" style="margin-top:8px" href="https://discord.gg/4uRUSAN498" target="_blank" rel="noopener">Choose Stack</a></article>'
+        ].join('');
       }
     }
 

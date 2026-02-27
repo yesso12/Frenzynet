@@ -3,38 +3,287 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>FrenzyNet Download</title>
+  <title>FrenzyNets Watch Party Access</title>
   <style>
-    body{font-family:Segoe UI,Arial,sans-serif;background:#0b1220;color:#e6eeff;margin:0;padding:28px}
-    .card{max-width:980px;margin:0 auto;background:#111c33;border:1px solid #284069;border-radius:12px;padding:22px}
-    a.btn{display:inline-block;background:#28d0ff;color:#02101b;padding:10px 14px;border-radius:8px;text-decoration:none;font-weight:700;margin:4px 8px 4px 0}
-    code{background:#081224;padding:2px 6px;border-radius:6px}
-    .muted{color:#9fb2d8}
-    h1{margin-top:0}
+    :root {
+      --bg:#07111f;
+      --panel:#0f1c31;
+      --panel-2:#132743;
+      --line:#2e4a73;
+      --text:#e8f0ff;
+      --muted:#9eb4d7;
+      --accent:#2bd6ff;
+      --ok:#74f0b6;
+      --warn:#ffd166;
+      --bad:#ff8aa0;
+    }
+    * { box-sizing:border-box; }
+    body {
+      margin:0;
+      font-family: "Segoe UI", Tahoma, Arial, sans-serif;
+      background: radial-gradient(circle at 20% 20%, #15345a 0, var(--bg) 42%), linear-gradient(145deg, #07111f, #0a1525);
+      color:var(--text);
+      padding:20px;
+    }
+    .shell {
+      max-width:1080px;
+      margin:0 auto;
+      background:linear-gradient(160deg, rgba(15,28,49,.96), rgba(9,18,33,.97));
+      border:1px solid var(--line);
+      border-radius:14px;
+      padding:18px;
+      box-shadow:0 18px 50px rgba(0,0,0,.35);
+    }
+    h1,h2,h3 { margin:0 0 10px; }
+    p { margin:0 0 10px; }
+    .muted { color:var(--muted); }
+    .row { display:flex; gap:10px; flex-wrap:wrap; }
+    .btn {
+      display:inline-block;
+      border:1px solid #4f79ad;
+      border-radius:10px;
+      padding:10px 14px;
+      color:#081422;
+      text-decoration:none;
+      font-weight:700;
+      background:linear-gradient(135deg, #72e7ff, var(--accent));
+      cursor:pointer;
+    }
+    .btn.secondary {
+      color:var(--text);
+      background:linear-gradient(135deg, #1a3255, #193152);
+    }
+    .grid {
+      display:grid;
+      grid-template-columns:repeat(2, minmax(0, 1fr));
+      gap:12px;
+      margin-top:14px;
+    }
+    .card {
+      background:linear-gradient(155deg, rgba(19,39,67,.95), rgba(12,26,47,.96));
+      border:1px solid var(--line);
+      border-radius:12px;
+      padding:14px;
+    }
+    label { display:block; font-size:13px; color:var(--muted); margin-bottom:4px; }
+    input {
+      width:100%;
+      border:1px solid #33527d;
+      background:#0b1a2e;
+      color:var(--text);
+      border-radius:10px;
+      padding:10px;
+      margin-bottom:10px;
+    }
+    .status { font-size:13px; min-height:18px; margin-top:6px; }
+    .status.ok { color:var(--ok); }
+    .status.warn { color:var(--warn); }
+    .status.bad { color:var(--bad); }
+    table { width:100%; border-collapse:collapse; margin-top:8px; font-size:13px; }
+    th,td { border-bottom:1px solid #2d466d; padding:8px; text-align:left; }
+    th { color:#cfe3ff; font-weight:700; }
+    .pill {
+      display:inline-block;
+      border:1px solid #3f628f;
+      border-radius:999px;
+      padding:3px 9px;
+      font-size:12px;
+      color:#b8d6ff;
+      margin-right:6px;
+    }
+    .footer { margin-top:14px; font-size:12px; color:var(--muted); }
+    @media (max-width:900px) {
+      .grid { grid-template-columns:1fr; }
+      body { padding:12px; }
+      .shell { padding:12px; }
+      .btn { width:100%; text-align:center; }
+      .row .btn { width:auto; }
+    }
   </style>
 </head>
 <body>
-  <div class="card">
-    <h1>FrenzyNet Download</h1>
-    <p class="muted">Version: <strong>2026.02.27.001343</strong> | Channel: <strong>stable</strong> | Published: <strong>2026-02-27T00:13:46Z</strong></p>
-    <p>
-      <a class="btn" href="FrenzyNet-Setup.exe">Setup (auto arch)</a>
-      <a class="btn" href="FrenzyNet-Setup-win-x64.exe">Setup win-x64</a>
-      <a class="btn" href="FrenzyNet-Setup-win-arm64.exe">Setup win-arm64</a>
-      <a class="btn" href="FrenzyNet-Setup-win-x86.exe">Setup win-x86</a>
-      <a class="btn" href="FrenzyNet-win-x64.zip">Full ZIP (x64)</a>
-    </p>
-    <h3>SHA256</h3>
-    <p><strong>FrenzyNet-Setup.exe</strong><br><code>2a9f1d3bb0fb77aaf35625d65f562f8d56b82b71c2ffd49d30370d524e7cc020</code></p>
-    <p><strong>FrenzyNet-Setup-win-x64.exe</strong><br><code>2a9f1d3bb0fb77aaf35625d65f562f8d56b82b71c2ffd49d30370d524e7cc020</code></p>
-    <p><strong>FrenzyNet-Setup-win-arm64.exe</strong><br><code>3f78929d5de94270c67b126736618f51e84cb76535253377de46c4cb00b9a664</code></p>
-    <p><strong>FrenzyNet-Setup-win-x86.exe</strong><br><code>461e0ab519b1e2a684026104070bd7a9f69616e8596d585dba635029fc3dff0a</code></p>
-    <p><strong>FrenzyNet-win-x64.zip</strong><br><code>51bbdd1f76d96ffb00ee3cccb52d54313a71c936e35989e5f93c93cc94cfc068</code></p>
-    <p class="muted">Hash files: <a href="FrenzyNet-Setup.exe.sha256">FrenzyNet-Setup.exe.sha256</a> | <a href="FrenzyNet-win-x64.zip.sha256">FrenzyNet-win-x64.zip.sha256</a> | <a href="FrenzyNet-Setup-win-x64.exe.sha256">win-x64</a> | <a href="FrenzyNet-Setup-win-arm64.exe.sha256">win-arm64</a> | <a href="FrenzyNet-Setup-win-x86.exe.sha256">win-x86</a></p>
-    <h3>If Windows warns</h3>
-    <p>1) Verify hash matches this page. 2) Right click file -> <code>Properties</code> -> <code>Unblock</code> -> Apply. 3) Run as admin.</p>
-    <h3>Signed Release Notes</h3>
-    <p><a href="release-notes-stable.json">release-notes-stable.json</a></p>
+  <div class="shell">
+    <h1>FrenzyNets Watch Party Access Center</h1>
+    <p class="muted">Relabeled for Watch Party operations. Manage event access, join links, and synced account list in one place.</p>
+
+    <div class="row" style="margin-top:10px">
+      <a class="btn" href="/telewatch/">Open Watch Party</a>
+      <a class="btn secondary" href="https://discord.gg/4uRUSAN498" target="_blank" rel="noopener">Open Discord</a>
+      <a class="btn secondary" href="/telewatch/admin/">Open Telewatch Admin</a>
+      <a class="btn secondary" href="/status/">Live Status</a>
+    </div>
+
+    <div class="grid">
+      <section class="card">
+        <h2>Platform</h2>
+        <p><span class="pill">Channel: stable</span><span class="pill">Watch Party</span></p>
+        <p class="muted">Use Telewatch for all rooms, hosting, and one-click Main Event mode. VPN binary download actions are removed from this page.</p>
+      </section>
+
+      <section class="card">
+        <h2>Admin Login Sync</h2>
+        <label for="adminUser">Admin Username</label>
+        <input id="adminUser" type="email" placeholder="Trimbledustn@gmail.com" />
+        <label for="adminPass">Admin Password</label>
+        <input id="adminPass" type="password" placeholder="Admin password" />
+        <div class="row">
+          <button id="loginBtn" class="btn secondary" type="button">Sign In</button>
+          <button id="logoutBtn" class="btn secondary" type="button">Sign Out</button>
+          <button id="refreshBtn" class="btn secondary" type="button">Refresh Users</button>
+        </div>
+        <div id="status" class="status warn">Not signed in</div>
+      </section>
+    </div>
+
+    <section class="card" style="margin-top:12px">
+      <h3>User Logins (Auto-Updated)</h3>
+      <p class="muted">List refreshes every 20 seconds while signed in. New users appear automatically after they are added in admin tools.</p>
+      <div style="overflow:auto">
+        <table>
+          <thead>
+            <tr>
+              <th>Username</th>
+              <th>Role</th>
+              <th>Plan</th>
+              <th>Channel</th>
+              <th>Subscription</th>
+            </tr>
+          </thead>
+          <tbody id="usersBody">
+            <tr><td colspan="5" class="muted">Sign in to load users.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <div class="footer">&copy; 2026 FrenzyNets. All rights reserved. FrenzyNets is a protected brand and service platform.</div>
   </div>
+
+  <script>
+    (() => {
+      const API_BASES = ['/api/frenzynet', '/api'];
+      const els = {
+        adminUser: document.getElementById('adminUser'),
+        adminPass: document.getElementById('adminPass'),
+        loginBtn: document.getElementById('loginBtn'),
+        logoutBtn: document.getElementById('logoutBtn'),
+        refreshBtn: document.getElementById('refreshBtn'),
+        status: document.getElementById('status'),
+        usersBody: document.getElementById('usersBody'),
+      };
+      let token = '';
+      let timer = null;
+
+      async function api(path, opts = {}) {
+        let lastErr = null;
+        for (const base of API_BASES) {
+          try {
+            const url = base + path;
+            const headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
+            if (token) headers.Authorization = 'Bearer ' + token;
+            const res = await fetch(url, {
+              method: opts.method || 'GET',
+              headers,
+              body: opts.body ? JSON.stringify(opts.body) : undefined,
+              cache: 'no-store'
+            });
+            const txt = await res.text();
+            let data = {};
+            try { data = txt ? JSON.parse(txt) : {}; } catch (_) {}
+            if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+            return data;
+          } catch (err) {
+            lastErr = err;
+          }
+        }
+        throw lastErr || new Error('request_failed');
+      }
+
+      function setStatus(kind, msg) {
+        els.status.className = 'status ' + kind;
+        els.status.textContent = msg;
+      }
+
+      function renderUsers(rows) {
+        const users = Array.isArray(rows) ? rows : [];
+        if (!users.length) {
+          els.usersBody.innerHTML = '<tr><td colspan="5" class="muted">No users found.</td></tr>';
+          return;
+        }
+        els.usersBody.innerHTML = users.map((u) => {
+          const username = String(u.username || '');
+          const role = String(u.role || (u.isAdmin ? 'admin' : 'user'));
+          const plan = String(u.plan || 'standard');
+          const channel = String(u.updateChannel || 'stable');
+          const sub = String(u.subscriptionExpiresAt || 'none');
+          return '<tr>' +
+            '<td>' + esc(username) + '</td>' +
+            '<td>' + esc(role) + '</td>' +
+            '<td>' + esc(plan) + '</td>' +
+            '<td>' + esc(channel) + '</td>' +
+            '<td>' + esc(sub) + '</td>' +
+          '</tr>';
+        }).join('');
+      }
+
+      function esc(v) {
+        return String(v || '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      async function login() {
+        const username = String(els.adminUser.value || '').trim().toLowerCase();
+        const password = String(els.adminPass.value || '').trim();
+        if (!username || !password) {
+          setStatus('bad', 'Enter admin username and password.');
+          return;
+        }
+        const d = await api('/api/admin/login', { method: 'POST', body: { username, password } });
+        token = String(d.token || '');
+        if (!token) throw new Error('admin_token_missing');
+        setStatus('ok', 'Signed in. Auto-refresh active.');
+        await refreshUsers();
+        if (timer) clearInterval(timer);
+        timer = setInterval(() => { refreshUsers().catch(() => {}); }, 20000);
+        try { localStorage.setItem('fn_updates_admin_user', username); } catch (_) {}
+      }
+
+      async function refreshUsers() {
+        if (!token) {
+          renderUsers([]);
+          setStatus('warn', 'Not signed in');
+          return;
+        }
+        const d = await api('/api/admin/users');
+        renderUsers(d.users || []);
+        setStatus('ok', 'Users synced: ' + String((d.users || []).length));
+      }
+
+      function logout() {
+        token = '';
+        if (timer) {
+          clearInterval(timer);
+          timer = null;
+        }
+        renderUsers([]);
+        setStatus('warn', 'Signed out');
+      }
+
+      els.loginBtn.addEventListener('click', () => { login().catch((e) => setStatus('bad', String(e.message || e))); });
+      els.logoutBtn.addEventListener('click', logout);
+      els.refreshBtn.addEventListener('click', () => { refreshUsers().catch((e) => setStatus('bad', String(e.message || e))); });
+
+      try {
+        const saved = localStorage.getItem('fn_updates_admin_user') || 'Trimbledustn@gmail.com';
+        if (saved) els.adminUser.value = saved;
+      } catch (_) {
+        els.adminUser.value = 'Trimbledustn@gmail.com';
+      }
+    })();
+  </script>
 </body>
 </html>

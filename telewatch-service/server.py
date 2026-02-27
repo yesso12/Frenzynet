@@ -8,10 +8,15 @@ import hmac
 import base64
 import datetime as dt
 import time
+import smtplib
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
+from urllib.error import HTTPError, URLError
+from email.message import EmailMessage
 
 HOST = os.getenv('TELEWATCH_HOST', '127.0.0.1')
 PORT = int(os.getenv('TELEWATCH_PORT', '9191'))
@@ -33,6 +38,24 @@ TELEWATCH_SFU_URL = os.getenv('TELEWATCH_SFU_URL', '').strip()
 TELEWATCH_SFU_API_KEY = os.getenv('TELEWATCH_SFU_API_KEY', '').strip()
 TELEWATCH_SFU_API_SECRET = os.getenv('TELEWATCH_SFU_API_SECRET', '').strip()
 TELEWATCH_SFU_DEFAULT_MODE = str(os.getenv('TELEWATCH_SFU_DEFAULT_MODE', 'webrtc')).strip().lower()
+TELEWATCH_ORIGIN = os.getenv('TELEWATCH_ORIGIN', 'https://frenzynets.com').strip().rstrip('/')
+TELEWATCH_API_PUBLIC = os.getenv('TELEWATCH_API_PUBLIC', 'https://api.frenzynets.com').strip().rstrip('/')
+TELEWATCH_INTERNAL_API_KEY = os.getenv('TELEWATCH_INTERNAL_API_KEY', '').strip()
+DISCORD_CLIENT_ID = os.getenv('TELEWATCH_DISCORD_CLIENT_ID', '').strip()
+DISCORD_CLIENT_SECRET = os.getenv('TELEWATCH_DISCORD_CLIENT_SECRET', '').strip()
+DISCORD_REDIRECT_URI = os.getenv('TELEWATCH_DISCORD_REDIRECT_URI', f'{TELEWATCH_API_PUBLIC}/api/telewatch/api/watch/user/discord/callback').strip()
+DISCORD_OAUTH_SCOPE = os.getenv('TELEWATCH_DISCORD_OAUTH_SCOPE', 'identify').strip() or 'identify'
+DISCORD_BOT_TOKEN = os.getenv('TELEWATCH_DISCORD_BOT_TOKEN', '').strip()
+DISCORD_GUILD_ID = os.getenv('TELEWATCH_DISCORD_GUILD_ID', '').strip()
+DISCORD_ROLE_SUPPORTER = os.getenv('TELEWATCH_DISCORD_ROLE_SUPPORTER', '').strip()
+DISCORD_ROLE_PRO = os.getenv('TELEWATCH_DISCORD_ROLE_PRO', '').strip()
+DISCORD_ROLE_LIFETIME = os.getenv('TELEWATCH_DISCORD_ROLE_LIFETIME', '').strip()
+TELEWATCH_SMTP_HOST = os.getenv('TELEWATCH_SMTP_HOST', '').strip()
+TELEWATCH_SMTP_PORT = int(str(os.getenv('TELEWATCH_SMTP_PORT', '587')).strip() or '587')
+TELEWATCH_SMTP_USER = os.getenv('TELEWATCH_SMTP_USER', '').strip()
+TELEWATCH_SMTP_PASS = os.getenv('TELEWATCH_SMTP_PASS', '').strip()
+TELEWATCH_SMTP_FROM = os.getenv('TELEWATCH_SMTP_FROM', TELEWATCH_SMTP_USER or 'no-reply@frenzynets.com').strip()
+TELEWATCH_SMTP_TLS = str(os.getenv('TELEWATCH_SMTP_TLS', '1')).strip().lower() not in {'0', 'false', 'no'}
 
 
 def utc_iso() -> str:
@@ -45,9 +68,9 @@ def stable_json(value) -> str:
 
 def clean_media_mode(raw: str, fallback: str = 'webrtc') -> str:
     val = str(raw or '').strip().lower()
-    if val not in {'webrtc', 'sfu'}:
+    if val not in {'webrtc', 'sfu', 'broadcast'}:
         val = str(fallback or 'webrtc').strip().lower()
-    if val not in {'webrtc', 'sfu'}:
+    if val not in {'webrtc', 'sfu', 'broadcast'}:
         return 'webrtc'
     if val == 'sfu' and not sfu_enabled():
         return 'webrtc'
@@ -105,6 +128,66 @@ def clean_donation_tier(raw: str, fallback: str = 'free') -> str:
     return val
 
 
+def donation_rank(tier: str) -> int:
+    return {'free': 0, 'supporter': 1, 'pro': 2}.get(clean_donation_tier(tier, 'free'), 0)
+
+
+def tier_for_rank(rank: int) -> str:
+    if rank >= 2:
+        return 'pro'
+    if rank >= 1:
+        return 'supporter'
+    return 'free'
+
+
+def active_entitlement(pricing_mode: str, expires_at: str) -> bool:
+    mode = str(pricing_mode or '').strip().lower()
+    if mode == 'lifetime':
+        return True
+    if not expires_at:
+        return False
+    try:
+        exp = dt.datetime.fromisoformat(str(expires_at).replace('Z', '+00:00'))
+    except Exception:
+        return False
+    now = dt.datetime.now(dt.timezone.utc)
+    return exp > now
+
+
+def json_post(url: str, payload: dict, headers: dict | None = None, timeout_sec: int = 12) -> dict:
+    body = json.dumps(payload, ensure_ascii=True).encode('utf-8')
+    req = Request(url, data=body, method='POST')
+    req.add_header('Content-Type', 'application/json')
+    req.add_header('Accept', 'application/json')
+    for k, v in (headers or {}).items():
+        req.add_header(str(k), str(v))
+    with urlopen(req, timeout=timeout_sec) as resp:
+        raw = resp.read().decode('utf-8', errors='replace')
+        return json.loads(raw or '{}')
+
+
+def form_post(url: str, payload: dict, headers: dict | None = None, timeout_sec: int = 12) -> dict:
+    body = urlencode(payload).encode('utf-8')
+    req = Request(url, data=body, method='POST')
+    req.add_header('Content-Type', 'application/x-www-form-urlencoded')
+    req.add_header('Accept', 'application/json')
+    for k, v in (headers or {}).items():
+        req.add_header(str(k), str(v))
+    with urlopen(req, timeout=timeout_sec) as resp:
+        raw = resp.read().decode('utf-8', errors='replace')
+        return json.loads(raw or '{}')
+
+
+def json_get(url: str, headers: dict | None = None, timeout_sec: int = 12) -> dict:
+    req = Request(url, method='GET')
+    req.add_header('Accept', 'application/json')
+    for k, v in (headers or {}).items():
+        req.add_header(str(k), str(v))
+    with urlopen(req, timeout=timeout_sec) as resp:
+        raw = resp.read().decode('utf-8', errors='replace')
+        return json.loads(raw or '{}')
+
+
 def clean_username(raw: str) -> str:
     val = str(raw or '').strip().lower()
     return val[:160]
@@ -123,6 +206,35 @@ def hash_password(password: str) -> str:
 def verify_password(password: str, expected_hash: str) -> bool:
     actual = hash_password(password)
     return hmac.compare_digest(actual, str(expected_hash or '').strip().lower())
+
+
+def smtp_configured() -> bool:
+    return bool(TELEWATCH_SMTP_HOST and TELEWATCH_SMTP_FROM)
+
+
+def send_password_reset_email(to_email: str, reset_url: str) -> None:
+    msg = EmailMessage()
+    msg['Subject'] = 'Frenzy Telewatch password reset'
+    msg['From'] = TELEWATCH_SMTP_FROM
+    msg['To'] = to_email
+    msg.set_content(
+        (
+            'A password reset was requested for your Frenzy Telewatch account.\n\n'
+            f'Reset link: {reset_url}\n\n'
+            'This link expires in 30 minutes. If you did not request this, you can ignore this email.\n'
+        )
+    )
+    if TELEWATCH_SMTP_TLS:
+        with smtplib.SMTP(TELEWATCH_SMTP_HOST, TELEWATCH_SMTP_PORT, timeout=20) as smtp:
+            smtp.starttls()
+            if TELEWATCH_SMTP_USER:
+                smtp.login(TELEWATCH_SMTP_USER, TELEWATCH_SMTP_PASS)
+            smtp.send_message(msg)
+    else:
+        with smtplib.SMTP(TELEWATCH_SMTP_HOST, TELEWATCH_SMTP_PORT, timeout=20) as smtp:
+            if TELEWATCH_SMTP_USER:
+                smtp.login(TELEWATCH_SMTP_USER, TELEWATCH_SMTP_PASS)
+            smtp.send_message(msg)
 
 
 def room_code(length: int = 6) -> str:
@@ -147,9 +259,14 @@ def is_public_room(code: str) -> bool:
 
 def get_db() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
     conn.row_factory = sqlite3.Row
     conn.execute('PRAGMA foreign_keys=ON')
+    conn.execute('PRAGMA busy_timeout=30000')
+    try:
+        conn.execute('PRAGMA journal_mode=WAL')
+    except Exception:
+        pass
     return conn
 
 
@@ -252,14 +369,49 @@ def ensure_schema() -> None:
               password_hash TEXT NOT NULL,
               display_name TEXT NOT NULL,
               donation_tier TEXT NOT NULL DEFAULT 'free',
+              discord_user_id TEXT NOT NULL DEFAULT '',
+              discord_username TEXT NOT NULL DEFAULT '',
               created_at TEXT NOT NULL DEFAULT (datetime('now')),
               updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            CREATE TABLE IF NOT EXISTS watch_user_entitlements (
+              username TEXT NOT NULL,
+              entitlement_code TEXT NOT NULL,
+              title TEXT NOT NULL DEFAULT '',
+              donation_tier TEXT NOT NULL DEFAULT 'free',
+              billing_mode TEXT NOT NULL DEFAULT 'monthly',
+              amount_usd REAL NOT NULL DEFAULT 0,
+              currency TEXT NOT NULL DEFAULT 'USD',
+              source TEXT NOT NULL DEFAULT 'manual',
+              status TEXT NOT NULL DEFAULT 'active',
+              expires_at TEXT NOT NULL DEFAULT '',
+              discord_role_id TEXT NOT NULL DEFAULT '',
+              created_at TEXT NOT NULL DEFAULT (datetime('now')),
+              updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+              PRIMARY KEY(username, entitlement_code),
+              FOREIGN KEY (username) REFERENCES watch_users(username) ON DELETE CASCADE
+            );
+            CREATE TABLE IF NOT EXISTS watch_discord_link_states (
+              state_token TEXT PRIMARY KEY,
+              username TEXT NOT NULL,
+              created_at TEXT NOT NULL DEFAULT (datetime('now')),
+              expires_at TEXT NOT NULL,
+              FOREIGN KEY (username) REFERENCES watch_users(username) ON DELETE CASCADE
             );
             CREATE TABLE IF NOT EXISTS watch_user_sessions (
               session_token TEXT PRIMARY KEY,
               username TEXT NOT NULL,
               created_at TEXT NOT NULL DEFAULT (datetime('now')),
               last_seen_at TEXT NOT NULL DEFAULT (datetime('now')),
+              FOREIGN KEY (username) REFERENCES watch_users(username) ON DELETE CASCADE
+            );
+            CREATE TABLE IF NOT EXISTS watch_password_resets (
+              reset_token TEXT PRIMARY KEY,
+              username TEXT NOT NULL,
+              requested_ip TEXT NOT NULL DEFAULT '',
+              created_at TEXT NOT NULL DEFAULT (datetime('now')),
+              expires_at TEXT NOT NULL,
+              used_at TEXT NOT NULL DEFAULT '',
               FOREIGN KEY (username) REFERENCES watch_users(username) ON DELETE CASCADE
             );
             CREATE TABLE IF NOT EXISTS watch_user_saved_rooms (
@@ -293,6 +445,8 @@ def ensure_schema() -> None:
             CREATE INDEX IF NOT EXISTS idx_watch_admin_sessions_last_seen ON watch_admin_sessions(last_seen_at);
             CREATE INDEX IF NOT EXISTS idx_watch_user_sessions_last_seen ON watch_user_sessions(last_seen_at);
             CREATE INDEX IF NOT EXISTS idx_watch_user_saved_rooms_user ON watch_user_saved_rooms(username, updated_at);
+            CREATE INDEX IF NOT EXISTS idx_watch_user_entitlements_user ON watch_user_entitlements(username, updated_at);
+            CREATE INDEX IF NOT EXISTS idx_watch_password_resets_user ON watch_password_resets(username, created_at);
             '''
         )
         try:
@@ -347,6 +501,14 @@ def ensure_schema() -> None:
             conn.execute("ALTER TABLE watch_users ADD COLUMN donation_tier TEXT NOT NULL DEFAULT 'free'")
         except sqlite3.OperationalError:
             pass
+        try:
+            conn.execute("ALTER TABLE watch_users ADD COLUMN discord_user_id TEXT NOT NULL DEFAULT ''")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            conn.execute("ALTER TABLE watch_users ADD COLUMN discord_username TEXT NOT NULL DEFAULT ''")
+        except sqlite3.OperationalError:
+            pass
         conn.execute(
             '''
             UPDATE watch_rooms
@@ -365,7 +527,7 @@ def ensure_schema() -> None:
             '''
             UPDATE watch_rooms
             SET media_mode=?
-            WHERE media_mode IS NULL OR trim(media_mode)='' OR lower(media_mode) NOT IN ('webrtc','sfu')
+            WHERE media_mode IS NULL OR trim(media_mode)='' OR lower(media_mode) NOT IN ('webrtc','sfu','broadcast')
             ''',
             (clean_media_mode(TELEWATCH_SFU_DEFAULT_MODE, 'webrtc'),),
         )
@@ -376,6 +538,14 @@ def ensure_schema() -> None:
             WHERE donation_tier IS NULL OR trim(donation_tier)='' OR lower(donation_tier) NOT IN ('free','supporter','pro')
             '''
         )
+        conn.execute(
+            '''
+            UPDATE watch_user_entitlements
+            SET donation_tier='free'
+            WHERE donation_tier IS NULL OR trim(donation_tier)='' OR lower(donation_tier) NOT IN ('free','supporter','pro')
+            '''
+        )
+        conn.execute("DELETE FROM watch_discord_link_states WHERE expires_at <= datetime('now')")
         conn.execute(
             '''
             UPDATE watch_participants
@@ -413,8 +583,23 @@ def ensure_schema() -> None:
             ''',
             (str(EMPTY_ROOM_TTL_MINUTES),),
         )
+        conn.execute(
+            '''
+            INSERT INTO watch_settings(setting_key, setting_value, updated_at)
+            VALUES('main_event_lockdown', '0', datetime('now'))
+            ON CONFLICT(setting_key) DO NOTHING
+            '''
+        )
+        conn.execute(
+            '''
+            INSERT INTO watch_settings(setting_key, setting_value, updated_at)
+            VALUES('main_event_room_code', '', datetime('now'))
+            ON CONFLICT(setting_key) DO NOTHING
+            '''
+        )
         conn.execute("DELETE FROM watch_room_bans WHERE expires_at <= datetime('now')")
         conn.execute("DELETE FROM watch_room_invites WHERE expires_at <= datetime('now') OR (max_uses > 0 AND used_count >= max_uses)")
+        conn.execute("DELETE FROM watch_password_resets WHERE expires_at <= datetime('now') OR (used_at IS NOT NULL AND trim(used_at) != '')")
         ensure_public_rooms(conn)
         conn.commit()
 
@@ -429,6 +614,52 @@ def get_empty_room_ttl_minutes(conn: sqlite3.Connection) -> int:
     except Exception:
         val = EMPTY_ROOM_TTL_MINUTES
     return max(10, min(1440, val))
+
+
+def get_setting(conn: sqlite3.Connection, key: str, default: str = '') -> str:
+    row = conn.execute(
+        'SELECT setting_value FROM watch_settings WHERE setting_key=? LIMIT 1',
+        (str(key),),
+    ).fetchone()
+    if row is None:
+        return str(default)
+    return str(row['setting_value'] or default)
+
+
+def set_setting(conn: sqlite3.Connection, key: str, value: str) -> None:
+    conn.execute(
+        '''
+        INSERT INTO watch_settings(setting_key, setting_value, updated_at)
+        VALUES(?,?,datetime('now'))
+        ON CONFLICT(setting_key) DO UPDATE SET
+          setting_value=excluded.setting_value,
+          updated_at=datetime('now')
+        ''',
+        (str(key), str(value)),
+    )
+
+
+def get_main_event_lockdown(conn: sqlite3.Connection) -> bool:
+    raw = get_setting(conn, 'main_event_lockdown', '0').strip().lower()
+    return raw in {'1', 'true', 'yes', 'on'}
+
+
+def get_main_event_room_code(conn: sqlite3.Connection) -> str:
+    return normalize_room_code(get_setting(conn, 'main_event_room_code', ''), '')
+
+
+def get_room_audience_mode(conn: sqlite3.Connection, room_code_val: str) -> bool:
+    raw = get_setting(conn, f'room:{room_code_val}:audience_mode', '0').strip().lower()
+    return raw in {'1', 'true', 'yes', 'on'}
+
+
+def get_room_slowmode_sec(conn: sqlite3.Connection, room_code_val: str) -> int:
+    raw = get_setting(conn, f'room:{room_code_val}:slowmode_sec', '0').strip()
+    try:
+        val = int(raw)
+    except Exception:
+        val = 0
+    return max(0, min(120, val))
 
 
 def cleanup_rooms(conn: sqlite3.Connection) -> None:
@@ -474,6 +705,8 @@ def room_payload(room_row: sqlite3.Row) -> dict:
         'deleteOnHostLeave': bool(room_row['delete_on_host_leave']),
         'playbackSec': float(room_row['playback_sec'] or 0.0),
         'isPlaying': bool(room_row['is_playing']),
+        'audienceMode': bool(room_row['audience_mode']) if 'audience_mode' in room_row.keys() else False,
+        'slowmodeSec': int(room_row['slowmode_sec']) if 'slowmode_sec' in room_row.keys() else 0,
         'updatedAt': room_row['updated_at'],
     }
 
@@ -563,6 +796,120 @@ def validate_user_session(conn: sqlite3.Connection, session_token: str) -> sqlit
     return row
 
 
+def pricing_catalog() -> list[dict]:
+    # Baseline donation pricing aligned with common creator-support tiers.
+    return [
+        {'code': 'monthly_supporter', 'title': 'Supporter Monthly', 'donationTier': 'supporter', 'billingMode': 'monthly', 'amountUsd': 4.99, 'currency': 'USD'},
+        {'code': 'monthly_pro', 'title': 'Pro Monthly', 'donationTier': 'pro', 'billingMode': 'monthly', 'amountUsd': 9.99, 'currency': 'USD'},
+        {'code': 'lifetime_supporter', 'title': 'Supporter Lifetime', 'donationTier': 'supporter', 'billingMode': 'lifetime', 'amountUsd': 79.00, 'currency': 'USD'},
+        {'code': 'lifetime_pro', 'title': 'Pro Lifetime', 'donationTier': 'pro', 'billingMode': 'lifetime', 'amountUsd': 149.00, 'currency': 'USD'},
+        {'code': 'lifetime_vip_addon', 'title': 'VIP Badge Lifetime', 'donationTier': 'free', 'billingMode': 'lifetime', 'amountUsd': 29.00, 'currency': 'USD'},
+    ]
+
+
+def entitlement_rows(conn: sqlite3.Connection, username: str) -> list[sqlite3.Row]:
+    return conn.execute(
+        '''
+        SELECT entitlement_code, title, donation_tier, billing_mode, amount_usd, currency, source, status, expires_at, discord_role_id
+        FROM watch_user_entitlements
+        WHERE username=?
+        ORDER BY updated_at DESC
+        ''',
+        (clean_username(username),),
+    ).fetchall()
+
+
+def compute_effective_tier(conn: sqlite3.Connection, username: str, base_tier: str) -> tuple[str, list[dict]]:
+    tier_rank = donation_rank(base_tier)
+    active_items: list[dict] = []
+    rows = entitlement_rows(conn, username)
+    for r in rows:
+        status = str(r['status'] or 'active').strip().lower()
+        if status != 'active':
+            continue
+        if not active_entitlement(str(r['billing_mode'] or ''), str(r['expires_at'] or '')):
+            continue
+        item = {
+            'code': str(r['entitlement_code'] or ''),
+            'title': str(r['title'] or ''),
+            'donationTier': clean_donation_tier(r['donation_tier'], 'free'),
+            'billingMode': str(r['billing_mode'] or 'monthly').strip().lower() or 'monthly',
+            'amountUsd': float(r['amount_usd'] or 0),
+            'currency': str(r['currency'] or 'USD'),
+            'expiresAt': str(r['expires_at'] or ''),
+            'discordRoleId': str(r['discord_role_id'] or ''),
+        }
+        tier_rank = max(tier_rank, donation_rank(item['donationTier']))
+        active_items.append(item)
+    return tier_for_rank(tier_rank), active_items
+
+
+def discord_role_targets(tier: str, entitlements: list[dict]) -> set[str]:
+    want: set[str] = set()
+    if clean_donation_tier(tier, 'free') == 'supporter' and DISCORD_ROLE_SUPPORTER:
+        want.add(DISCORD_ROLE_SUPPORTER)
+    if clean_donation_tier(tier, 'free') == 'pro' and DISCORD_ROLE_PRO:
+        want.add(DISCORD_ROLE_PRO)
+    for item in entitlements:
+        role_id = str(item.get('discordRoleId') or '').strip()
+        if role_id:
+            want.add(role_id)
+    if any(str(i.get('billingMode') or '').lower() == 'lifetime' for i in entitlements) and DISCORD_ROLE_LIFETIME:
+        want.add(DISCORD_ROLE_LIFETIME)
+    return {r for r in want if r}
+
+
+def sync_discord_roles(conn: sqlite3.Connection, username: str) -> tuple[bool, str]:
+    if not (DISCORD_BOT_TOKEN and DISCORD_GUILD_ID):
+        return False, 'discord_bot_not_configured'
+    row = conn.execute(
+        'SELECT discord_user_id, donation_tier FROM watch_users WHERE username=? LIMIT 1',
+        (clean_username(username),),
+    ).fetchone()
+    if row is None:
+        return False, 'user_not_found'
+    discord_user_id = str(row['discord_user_id'] or '').strip()
+    if not discord_user_id:
+        return False, 'discord_not_linked'
+    effective_tier, active_items = compute_effective_tier(conn, username, str(row['donation_tier'] or 'free'))
+    target_roles = discord_role_targets(effective_tier, active_items)
+    auth = {'Authorization': f'Bot {DISCORD_BOT_TOKEN}'}
+    try:
+        member = json_get(
+            f'https://discord.com/api/v10/guilds/{DISCORD_GUILD_ID}/members/{discord_user_id}',
+            headers=auth,
+            timeout_sec=12,
+        )
+        current_roles = set(str(x) for x in (member.get('roles') or []))
+    except Exception as ex:
+        return False, f'discord_member_fetch_failed:{ex}'
+    managed = {r for r in [DISCORD_ROLE_SUPPORTER, DISCORD_ROLE_PRO, DISCORD_ROLE_LIFETIME] if r}
+    managed.update(str(i.get('discordRoleId') or '').strip() for i in active_items if str(i.get('discordRoleId') or '').strip())
+    to_add = sorted(target_roles - current_roles)
+    to_remove = sorted((current_roles & managed) - target_roles)
+    try:
+        for role_id in to_add:
+            req = Request(
+                f'https://discord.com/api/v10/guilds/{DISCORD_GUILD_ID}/members/{discord_user_id}/roles/{role_id}',
+                method='PUT',
+            )
+            req.add_header('Authorization', f'Bot {DISCORD_BOT_TOKEN}')
+            req.add_header('Content-Length', '0')
+            with urlopen(req, timeout=10):
+                pass
+        for role_id in to_remove:
+            req = Request(
+                f'https://discord.com/api/v10/guilds/{DISCORD_GUILD_ID}/members/{discord_user_id}/roles/{role_id}',
+                method='DELETE',
+            )
+            req.add_header('Authorization', f'Bot {DISCORD_BOT_TOKEN}')
+            with urlopen(req, timeout=10):
+                pass
+    except Exception as ex:
+        return False, f'discord_role_sync_failed:{ex}'
+    return True, 'ok'
+
+
 class TelewatchHandler(BaseHTTPRequestHandler):
     server_version = 'Telewatch/1.0'
 
@@ -621,6 +968,12 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             '/api/telewatch/public-rooms',
             '/api/telewatch/api/public-rooms',
         }
+        discord_callback_paths = {
+            '/watch/user/discord/callback',
+            '/api/watch/user/discord/callback',
+            '/api/telewatch/watch/user/discord/callback',
+            '/api/telewatch/api/watch/user/discord/callback',
+        }
         state_paths = {'/watch/state', '/api/watch/state', '/api/telewatch/watch/state', '/api/telewatch/api/watch/state'}
         if path in sfu_config_paths:
             self._json(
@@ -667,6 +1020,85 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     )
                 conn.commit()
             self._json(HTTPStatus.OK, {'ok': True, 'rooms': rooms, 'serverNow': utc_iso()})
+            return
+        if path in discord_callback_paths:
+            state_token = str((q.get('state') or [''])[0]).strip()[:128]
+            oauth_code = str((q.get('code') or [''])[0]).strip()
+            if not state_token or not oauth_code:
+                self.send_response(HTTPStatus.BAD_REQUEST)
+                self.send_header('Content-Type', 'text/html; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(b'<h3>Discord link failed: missing state/code</h3>')
+                return
+            if not (DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET and DISCORD_REDIRECT_URI):
+                self.send_response(HTTPStatus.SERVICE_UNAVAILABLE)
+                self.send_header('Content-Type', 'text/html; charset=utf-8')
+                self.end_headers()
+                self.wfile.write(b'<h3>Discord link is not configured on server</h3>')
+                return
+            try:
+                with get_db() as conn:
+                    row = conn.execute(
+                        '''
+                        SELECT username
+                        FROM watch_discord_link_states
+                        WHERE state_token=? AND expires_at > datetime('now')
+                        LIMIT 1
+                        ''',
+                        (state_token,),
+                    ).fetchone()
+                    if row is None:
+                        raise ValueError('invalid_or_expired_state')
+                    username = clean_username(row['username'])
+                    token_data = form_post(
+                        'https://discord.com/api/v10/oauth2/token',
+                        {
+                            'client_id': DISCORD_CLIENT_ID,
+                            'client_secret': DISCORD_CLIENT_SECRET,
+                            'grant_type': 'authorization_code',
+                            'code': oauth_code,
+                            'redirect_uri': DISCORD_REDIRECT_URI,
+                        },
+                    )
+                    access_token = str(token_data.get('access_token') or '').strip()
+                    if not access_token:
+                        raise ValueError('discord_token_exchange_failed')
+                    profile = json_get(
+                        'https://discord.com/api/v10/users/@me',
+                        headers={'Authorization': f'Bearer {access_token}'},
+                    )
+                    discord_id = str(profile.get('id') or '').strip()
+                    discord_name = str(profile.get('username') or '').strip()
+                    if not discord_id:
+                        raise ValueError('discord_profile_missing_id')
+                    conn.execute(
+                        '''
+                        UPDATE watch_users
+                        SET discord_user_id=?, discord_username=?, updated_at=datetime('now')
+                        WHERE username=?
+                        ''',
+                        (discord_id, discord_name, username),
+                    )
+                    conn.execute('DELETE FROM watch_discord_link_states WHERE state_token=?', (state_token,))
+                    sync_discord_roles(conn, username)
+                    conn.commit()
+            except Exception as ex:
+                self.send_response(HTTPStatus.BAD_REQUEST)
+                self.send_header('Content-Type', 'text/html; charset=utf-8')
+                self.end_headers()
+                msg = f'<h3>Discord link failed: {str(ex)}</h3>'
+                self.wfile.write(msg.encode('utf-8', errors='replace'))
+                return
+            self.send_response(HTTPStatus.OK)
+            self.send_header('Content-Type', 'text/html; charset=utf-8')
+            self.end_headers()
+            self.wfile.write(
+                f"""<!doctype html><html><body style="font-family:system-ui;background:#0b1020;color:#d6f6ff;padding:24px">
+                <h3>Discord linked successfully.</h3>
+                <p>You can close this tab and return to Telewatch.</p>
+                <script>setTimeout(function(){{window.location.href='{TELEWATCH_ORIGIN}/telewatch/?discordLinked=1';}}, 1200);</script>
+                </body></html>""".encode('utf-8')
+            )
             return
 
         if path not in state_paths:
@@ -917,13 +1349,16 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     }
                     for r in req_rows
                 ]
+            room_out = room_payload(room)
+            room_out['audienceMode'] = bool(get_room_audience_mode(conn, room_code_val))
+            room_out['slowmodeSec'] = int(get_room_slowmode_sec(conn, room_code_val))
             conn.commit()
 
         self._json(
             HTTPStatus.OK,
             {
                 'ok': True,
-                'room': room_payload(room),
+                'room': room_out,
                 'participant': {'displayName': part['display_name'], 'isHost': bool(part['is_host']), 'isCohost': bool(part['is_cohost'])},
                 'selfParticipantId': part['participant_id'],
                 'participants': [
@@ -1036,6 +1471,60 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             '/api/watch/user/logout',
             '/api/telewatch/watch/user/logout',
             '/api/telewatch/api/watch/user/logout',
+        }
+        user_password_reset_request_paths = {
+            '/watch/user/password-reset/request',
+            '/api/watch/user/password-reset/request',
+            '/api/telewatch/watch/user/password-reset/request',
+            '/api/telewatch/api/watch/user/password-reset/request',
+        }
+        user_password_reset_confirm_paths = {
+            '/watch/user/password-reset/confirm',
+            '/api/watch/user/password-reset/confirm',
+            '/api/telewatch/watch/user/password-reset/confirm',
+            '/api/telewatch/api/watch/user/password-reset/confirm',
+        }
+        user_discord_link_start_paths = {
+            '/watch/user/discord/link-start',
+            '/api/watch/user/discord/link-start',
+            '/api/telewatch/watch/user/discord/link-start',
+            '/api/telewatch/api/watch/user/discord/link-start',
+        }
+        user_discord_status_paths = {
+            '/watch/user/discord/status',
+            '/api/watch/user/discord/status',
+            '/api/telewatch/watch/user/discord/status',
+            '/api/telewatch/api/watch/user/discord/status',
+        }
+        user_discord_unlink_paths = {
+            '/watch/user/discord/unlink',
+            '/api/watch/user/discord/unlink',
+            '/api/telewatch/watch/user/discord/unlink',
+            '/api/telewatch/api/watch/user/discord/unlink',
+        }
+        donation_catalog_paths = {
+            '/watch/donations/catalog',
+            '/api/watch/donations/catalog',
+            '/api/telewatch/watch/donations/catalog',
+            '/api/telewatch/api/watch/donations/catalog',
+        }
+        admin_user_entitlement_set_paths = {
+            '/watch/admin/user-entitlement/set',
+            '/api/watch/admin/user-entitlement/set',
+            '/api/telewatch/watch/admin/user-entitlement/set',
+            '/api/telewatch/api/watch/admin/user-entitlement/set',
+        }
+        admin_user_entitlement_list_paths = {
+            '/watch/admin/user-entitlement/list',
+            '/api/watch/admin/user-entitlement/list',
+            '/api/telewatch/watch/admin/user-entitlement/list',
+            '/api/telewatch/api/watch/admin/user-entitlement/list',
+        }
+        internal_entitlement_upsert_paths = {
+            '/watch/internal/entitlement/upsert',
+            '/api/watch/internal/entitlement/upsert',
+            '/api/telewatch/watch/internal/entitlement/upsert',
+            '/api/telewatch/api/watch/internal/entitlement/upsert',
         }
         sfu_token_paths = {
             '/watch/sfu/token',
@@ -1200,7 +1689,19 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                 )
                 token = create_user_session(conn, username)
                 conn.commit()
-            self._json(HTTPStatus.OK, {'ok': True, 'userToken': token, 'username': username, 'displayName': display_name, 'donationTier': 'free'})
+            self._json(
+                HTTPStatus.OK,
+                {
+                    'ok': True,
+                    'userToken': token,
+                    'username': username,
+                    'displayName': display_name,
+                    'donationTier': 'free',
+                    'discordLinked': False,
+                    'discordUsername': '',
+                    'entitlements': [],
+                },
+            )
             return
 
         if path in user_login_paths:
@@ -1219,13 +1720,19 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     self._json(HTTPStatus.FORBIDDEN, {'error': 'user_blocked'})
                     return
                 row = conn.execute(
-                    'SELECT username, password_hash, display_name, donation_tier FROM watch_users WHERE username=? LIMIT 1',
+                    'SELECT username, password_hash, display_name, donation_tier, discord_user_id, discord_username FROM watch_users WHERE username=? LIMIT 1',
                     (username,),
                 ).fetchone()
                 if row is None or not verify_password(password, row['password_hash']):
                     self._json(HTTPStatus.UNAUTHORIZED, {'error': 'user_login_invalid'})
                     return
                 token = create_user_session(conn, username)
+                effective_tier, active_items = compute_effective_tier(
+                    conn,
+                    username,
+                    clean_donation_tier(row['donation_tier'] if 'donation_tier' in row.keys() else 'free', 'free'),
+                )
+                sync_discord_roles(conn, username)
                 conn.commit()
             self._json(
                 HTTPStatus.OK,
@@ -1234,7 +1741,10 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     'userToken': token,
                     'username': username,
                     'displayName': str(row['display_name'] or username),
-                    'donationTier': clean_donation_tier(row['donation_tier'] if 'donation_tier' in row.keys() else 'free', 'free'),
+                    'donationTier': effective_tier,
+                    'discordLinked': bool(str(row['discord_user_id'] if 'discord_user_id' in row.keys() else '').strip()),
+                    'discordUsername': str(row['discord_username'] if 'discord_username' in row.keys() else ''),
+                    'entitlements': active_items,
                 },
             )
             return
@@ -1248,6 +1758,16 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                 if row is None:
                     self._json(HTTPStatus.UNAUTHORIZED, {'error': 'user_auth_invalid'})
                     return
+                effective_tier, active_items = compute_effective_tier(
+                    conn,
+                    str(row['username'] or ''),
+                    clean_donation_tier(row['donation_tier'] if 'donation_tier' in row.keys() else 'free', 'free'),
+                )
+                profile = conn.execute(
+                    'SELECT discord_user_id, discord_username FROM watch_users WHERE username=? LIMIT 1',
+                    (str(row['username'] or ''),),
+                ).fetchone()
+                sync_discord_roles(conn, str(row['username'] or ''))
                 conn.commit()
             self._json(
                 HTTPStatus.OK,
@@ -1255,7 +1775,10 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     'ok': True,
                     'username': str(row['username'] or ''),
                     'displayName': str(row['display_name'] or ''),
-                    'donationTier': clean_donation_tier(row['donation_tier'] if 'donation_tier' in row.keys() else 'free', 'free'),
+                    'donationTier': effective_tier,
+                    'discordLinked': bool(str(profile['discord_user_id'] if profile and 'discord_user_id' in profile.keys() else '').strip()),
+                    'discordUsername': str(profile['discord_username'] if profile and 'discord_username' in profile.keys() else ''),
+                    'entitlements': active_items,
                 },
             )
             return
@@ -1357,6 +1880,195 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                 conn.execute('DELETE FROM watch_user_sessions WHERE session_token=?', (user_token,))
                 conn.commit()
             self._json(HTTPStatus.OK, {'ok': True, 'loggedOut': True})
+            return
+
+        if path in user_password_reset_request_paths:
+            username = clean_username(payload.get('username', ''))
+            if not username or '@' not in username:
+                self._json(HTTPStatus.OK, {'ok': True, 'requested': True})
+                return
+            reset_link = ''
+            with get_db() as conn:
+                ensure_public_rooms(conn)
+                cleanup_rooms(conn)
+                row = conn.execute(
+                    'SELECT username FROM watch_users WHERE username=? LIMIT 1',
+                    (username,),
+                ).fetchone()
+                if row is not None:
+                    token = secrets.token_urlsafe(36)
+                    conn.execute(
+                        '''
+                        INSERT INTO watch_password_resets(reset_token, username, requested_ip, created_at, expires_at, used_at)
+                        VALUES(?,?,?,datetime('now'),datetime('now','+30 minutes'),'')
+                        ''',
+                        (token, username, str(client_ip or '')[:64]),
+                    )
+                    reset_link = f'{TELEWATCH_ORIGIN}/telewatch/?resetToken={token}'
+                    if smtp_configured():
+                        try:
+                            send_password_reset_email(username, reset_link)
+                        except Exception:
+                            pass
+                conn.commit()
+            self._json(
+                HTTPStatus.OK,
+                {
+                    'ok': True,
+                    'requested': True,
+                    'emailSent': bool(reset_link and smtp_configured()),
+                    # fallback for environments without SMTP so admins can still reset quickly
+                    'resetLink': '' if smtp_configured() else reset_link,
+                },
+            )
+            return
+
+        if path in user_password_reset_confirm_paths:
+            reset_token = str(payload.get('resetToken', '')).strip()[:180]
+            new_password = str(payload.get('newPassword', '')).strip()
+            if len(reset_token) < 24:
+                self._json(HTTPStatus.BAD_REQUEST, {'error': 'resetToken_invalid'})
+                return
+            if len(new_password) < 8:
+                self._json(HTTPStatus.BAD_REQUEST, {'error': 'password_too_short'})
+                return
+            with get_db() as conn:
+                ensure_public_rooms(conn)
+                cleanup_rooms(conn)
+                row = conn.execute(
+                    '''
+                    SELECT username
+                    FROM watch_password_resets
+                    WHERE reset_token=?
+                      AND expires_at > datetime('now')
+                      AND (used_at IS NULL OR trim(used_at)='')
+                    LIMIT 1
+                    ''',
+                    (reset_token,),
+                ).fetchone()
+                if row is None:
+                    self._json(HTTPStatus.BAD_REQUEST, {'error': 'resetToken_expired_or_invalid'})
+                    return
+                username = str(row['username'] or '')
+                conn.execute(
+                    '''
+                    UPDATE watch_users
+                    SET password_hash=?, updated_at=datetime('now')
+                    WHERE username=?
+                    ''',
+                    (hash_password(new_password), username),
+                )
+                conn.execute(
+                    '''
+                    UPDATE watch_password_resets
+                    SET used_at=datetime('now')
+                    WHERE reset_token=?
+                    ''',
+                    (reset_token,),
+                )
+                conn.execute('DELETE FROM watch_user_sessions WHERE username=?', (username,))
+                conn.commit()
+            self._json(HTTPStatus.OK, {'ok': True, 'passwordUpdated': True})
+            return
+
+        if path in donation_catalog_paths:
+            self._json(HTTPStatus.OK, {'ok': True, 'plans': pricing_catalog()})
+            return
+
+        if path in user_discord_link_start_paths:
+            user_token = str(payload.get('userToken', '')).strip()
+            if not user_token:
+                self._json(HTTPStatus.BAD_REQUEST, {'error': 'userToken_required'})
+                return
+            if not (DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET and DISCORD_REDIRECT_URI):
+                self._json(HTTPStatus.SERVICE_UNAVAILABLE, {'error': 'discord_oauth_not_configured'})
+                return
+            with get_db() as conn:
+                user = validate_user_session(conn, user_token)
+                if user is None:
+                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'user_auth_invalid'})
+                    return
+                username = str(user['username'] or '')
+                state_token = secrets.token_urlsafe(32)
+                conn.execute(
+                    '''
+                    INSERT INTO watch_discord_link_states(state_token, username, created_at, expires_at)
+                    VALUES(?,?,datetime('now'),datetime('now','+15 minutes'))
+                    ''',
+                    (state_token, username),
+                )
+                conn.execute('DELETE FROM watch_discord_link_states WHERE expires_at <= datetime(\'now\')')
+                conn.commit()
+            params = urlencode(
+                {
+                    'client_id': DISCORD_CLIENT_ID,
+                    'redirect_uri': DISCORD_REDIRECT_URI,
+                    'response_type': 'code',
+                    'scope': DISCORD_OAUTH_SCOPE,
+                    'state': state_token,
+                    'prompt': 'consent',
+                }
+            )
+            self._json(
+                HTTPStatus.OK,
+                {'ok': True, 'authorizeUrl': f'https://discord.com/api/oauth2/authorize?{params}', 'state': state_token},
+            )
+            return
+
+        if path in user_discord_status_paths:
+            user_token = str(payload.get('userToken', '')).strip()
+            if not user_token:
+                self._json(HTTPStatus.BAD_REQUEST, {'error': 'userToken_required'})
+                return
+            with get_db() as conn:
+                user = validate_user_session(conn, user_token)
+                if user is None:
+                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'user_auth_invalid'})
+                    return
+                row = conn.execute(
+                    'SELECT discord_user_id, discord_username, donation_tier FROM watch_users WHERE username=? LIMIT 1',
+                    (str(user['username'] or ''),),
+                ).fetchone()
+                effective_tier, active_items = compute_effective_tier(
+                    conn,
+                    str(user['username'] or ''),
+                    clean_donation_tier(row['donation_tier'] if row and 'donation_tier' in row.keys() else 'free', 'free'),
+                )
+                conn.commit()
+            self._json(
+                HTTPStatus.OK,
+                {
+                    'ok': True,
+                    'discordLinked': bool(str(row['discord_user_id'] if row and 'discord_user_id' in row.keys() else '').strip()),
+                    'discordUsername': str(row['discord_username'] if row and 'discord_username' in row.keys() else ''),
+                    'donationTier': effective_tier,
+                    'entitlements': active_items,
+                },
+            )
+            return
+
+        if path in user_discord_unlink_paths:
+            user_token = str(payload.get('userToken', '')).strip()
+            if not user_token:
+                self._json(HTTPStatus.BAD_REQUEST, {'error': 'userToken_required'})
+                return
+            with get_db() as conn:
+                user = validate_user_session(conn, user_token)
+                if user is None:
+                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'user_auth_invalid'})
+                    return
+                username = str(user['username'] or '')
+                conn.execute(
+                    '''
+                    UPDATE watch_users
+                    SET discord_user_id='', discord_username='', updated_at=datetime('now')
+                    WHERE username=?
+                    ''',
+                    (username,),
+                )
+                conn.execute('DELETE FROM watch_discord_link_states WHERE username=?', (username,))
+                conn.commit()
+            self._json(HTTPStatus.OK, {'ok': True, 'unlinked': True})
             return
 
         if path in admin_ip_block_add_paths:
@@ -1844,8 +2556,18 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                         ''',
                         (str(minutes),),
                     )
+                    if 'mainEventLockdown' in payload:
+                        lockdown = bool(payload.get('mainEventLockdown', False))
+                        set_setting(conn, 'main_event_lockdown', '1' if lockdown else '0')
+                        if not lockdown:
+                            set_setting(conn, 'main_event_room_code', '')
+                    if 'mainEventRoomCode' in payload:
+                        main_code = normalize_room_code(payload.get('mainEventRoomCode', ''), '')
+                        set_setting(conn, 'main_event_room_code', main_code)
                     conn.commit()
                 ttl_minutes = get_empty_room_ttl_minutes(conn)
+                main_lockdown = bool(get_main_event_lockdown(conn))
+                main_room_code = str(get_main_event_room_code(conn) or '')
                 conn.commit()
             self._json(
                 HTTPStatus.OK,
@@ -1853,6 +2575,8 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     'ok': True,
                     'settings': {
                         'emptyRoomTtlMinutes': int(ttl_minutes),
+                        'mainEventLockdown': bool(main_lockdown),
+                        'mainEventRoomCode': main_room_code,
                     },
                 },
             )
@@ -1923,12 +2647,30 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             media_url = str(payload.get('mediaUrl', '')).strip()[:600]
             theme_key = clean_theme_key(payload.get('themeKey', 'clean'), 'clean')
             media_mode = clean_media_mode(payload.get('mediaMode', TELEWATCH_SFU_DEFAULT_MODE), 'webrtc')
+            requested_admin_token = str(payload.get('adminToken', '')).strip()
             requested_access_mode = str(payload.get('accessMode', 'public')).strip().lower()
             access_mode = requested_access_mode if requested_access_mode in {'public', 'invite', 'closed'} else 'public'
             requested_code = normalize_room_code(payload.get('roomCode', ''), '')
             with get_db() as conn:
                 ensure_public_rooms(conn)
                 cleanup_rooms(conn)
+                admin_user = validate_admin_session(conn, requested_admin_token) if requested_admin_token else None
+                main_event_lockdown = get_main_event_lockdown(conn)
+                main_event_room_code = get_main_event_room_code(conn)
+                if media_mode == 'broadcast':
+                    if admin_user is None:
+                        self._json(HTTPStatus.FORBIDDEN, {'error': 'broadcast_admin_required'})
+                        return
+                if main_event_lockdown:
+                    if admin_user is None:
+                        self._json(HTTPStatus.FORBIDDEN, {'error': 'main_event_lockdown'})
+                        return
+                    if media_mode != 'broadcast':
+                        self._json(HTTPStatus.FORBIDDEN, {'error': 'main_event_broadcast_only'})
+                        return
+                    if main_event_room_code and requested_code and requested_code != main_event_room_code:
+                        self._json(HTTPStatus.CONFLICT, {'error': 'main_event_room_locked', 'roomCode': main_event_room_code})
+                        return
                 if is_ip_blocked(conn, client_ip):
                     self._json(HTTPStatus.FORBIDDEN, {'error': 'ip_blocked'})
                     return
@@ -1979,6 +2721,10 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     ''',
                     (code, display_name, 'room_created', stable_json({'title': title, 'mediaUrl': media_url, 'themeKey': theme_key, 'mediaMode': media_mode, 'accessMode': access_mode})),
                 )
+                if main_event_lockdown:
+                    set_setting(conn, 'main_event_room_code', code)
+                    set_setting(conn, f'room:{code}:audience_mode', '1')
+                    set_setting(conn, f'room:{code}:slowmode_sec', '8')
                 conn.commit()
             self._json(
                 HTTPStatus.OK,
