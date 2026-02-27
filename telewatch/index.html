@@ -572,6 +572,7 @@
     .hidden-media { display: none !important; }
     .admin-tools.hidden { display: none; }
     .admin-login.hidden { display: none; }
+    .hidden { display: none !important; }
     .host-grid {
       display: grid;
       gap: 8px;
@@ -693,6 +694,31 @@
 
     <div class="workspace">
       <aside class="sidebar">
+        <div class="side-block">
+          <h3>Account</h3>
+          <div id="accountGuestWrap" class="side-controls">
+            <input id="userEmailInput" type="email" placeholder="Email" />
+            <input id="userPassInput" type="password" placeholder="Password" />
+            <input id="userDisplayInput" placeholder="Display name (optional)" />
+            <div class="row">
+              <button id="userLoginBtn" class="secondary">Sign In</button>
+              <button id="userRegisterBtn" class="secondary">Create</button>
+            </div>
+            <div class="muted">Optional: account unlocks premium tools.</div>
+          </div>
+          <div id="accountUserWrap" class="side-controls hidden">
+            <div id="userBadge" class="side-item">Signed in</div>
+            <div class="row">
+              <button id="saveRoomBtn" class="secondary">Save Current Room</button>
+              <button id="userLogoutBtn" class="secondary">Sign Out</button>
+            </div>
+            <select id="savedRoomsSelect"></select>
+            <div class="row">
+              <button id="joinSavedRoomBtn" class="secondary">Join Saved</button>
+              <button id="removeSavedRoomBtn" class="danger-btn">Remove</button>
+            </div>
+          </div>
+        </div>
         <div class="side-block">
           <h3>Layout</h3>
           <div class="side-controls">
@@ -1014,6 +1040,27 @@
               <button id="removeAdminBtn" class="danger-btn">Remove Selected Admin</button>
               <button id="adminLogoutBtn" class="secondary">Sign Out</button>
             </div>
+            <div class="block stack">
+              <h3>Block Lists</h3>
+              <div class="row">
+                <input id="blockUserInput" type="email" placeholder="user@email.com" />
+                <input id="blockIpInput" placeholder="IP address" />
+              </div>
+              <input id="blockReasonInput" placeholder="Reason (optional)" />
+              <div class="row">
+                <button id="blockUserBtn" class="danger-btn">Block User</button>
+                <button id="unblockUserBtn" class="secondary">Unblock User</button>
+              </div>
+              <div class="row">
+                <button id="blockIpBtn" class="danger-btn">Block IP</button>
+                <button id="unblockIpBtn" class="secondary">Unblock IP</button>
+              </div>
+              <div class="row">
+                <select id="blockedUsersSelect"></select>
+                <select id="blockedIpsSelect"></select>
+              </div>
+              <button id="refreshBlocksBtn" class="secondary">Refresh Blocks</button>
+            </div>
           </div>
         </div>
       </section>
@@ -1131,6 +1178,19 @@
       quickHostBtn: document.getElementById('quickHostBtn'),
       recentJoinBtn: document.getElementById('recentJoinBtn'),
       recentRoomsSelect: document.getElementById('recentRoomsSelect'),
+      accountGuestWrap: document.getElementById('accountGuestWrap'),
+      accountUserWrap: document.getElementById('accountUserWrap'),
+      userEmailInput: document.getElementById('userEmailInput'),
+      userPassInput: document.getElementById('userPassInput'),
+      userDisplayInput: document.getElementById('userDisplayInput'),
+      userLoginBtn: document.getElementById('userLoginBtn'),
+      userRegisterBtn: document.getElementById('userRegisterBtn'),
+      userBadge: document.getElementById('userBadge'),
+      saveRoomBtn: document.getElementById('saveRoomBtn'),
+      userLogoutBtn: document.getElementById('userLogoutBtn'),
+      savedRoomsSelect: document.getElementById('savedRoomsSelect'),
+      joinSavedRoomBtn: document.getElementById('joinSavedRoomBtn'),
+      removeSavedRoomBtn: document.getElementById('removeSavedRoomBtn'),
       requestQueueSelect: document.getElementById('requestQueueSelect'),
       requestResolveNote: document.getElementById('requestResolveNote'),
       approveRequestBtn: document.getElementById('approveRequestBtn'),
@@ -1149,6 +1209,16 @@
       removeAdminBtn: document.getElementById('removeAdminBtn'),
       adminLogoutBtn: document.getElementById('adminLogoutBtn'),
       adminListSelect: document.getElementById('adminListSelect'),
+      blockUserInput: document.getElementById('blockUserInput'),
+      blockIpInput: document.getElementById('blockIpInput'),
+      blockReasonInput: document.getElementById('blockReasonInput'),
+      blockUserBtn: document.getElementById('blockUserBtn'),
+      unblockUserBtn: document.getElementById('unblockUserBtn'),
+      blockIpBtn: document.getElementById('blockIpBtn'),
+      unblockIpBtn: document.getElementById('unblockIpBtn'),
+      blockedUsersSelect: document.getElementById('blockedUsersSelect'),
+      blockedIpsSelect: document.getElementById('blockedIpsSelect'),
+      refreshBlocksBtn: document.getElementById('refreshBlocksBtn'),
       titleInput: document.getElementById('titleInput'),
       mediaInput: document.getElementById('mediaInput'),
       advancedToggleBtn: document.getElementById('advancedToggleBtn'),
@@ -1278,6 +1348,11 @@
       cohostPerms: { kick: true, mute: true, access: true, pin: true },
       layoutMode: 'standard',
       densityMode: 'comfortable'
+      ,
+      userToken: '',
+      userEmail: '',
+      userDisplayName: '',
+      savedRooms: []
     };
     const SESSION_KEY = 'telewatch_session';
     const ADMIN_SESSION_KEY = 'telewatch_admin_session';
@@ -1290,6 +1365,7 @@
     const LAYOUT_MODE_KEY = 'telewatch_layout_mode';
     const DENSITY_MODE_KEY = 'telewatch_density_mode';
     const ROOM_TEMPLATE_KEY = 'telewatch_room_templates_v1';
+    const USER_SESSION_KEY = 'telewatch_user_session_v1';
 
     const THEMES = {
       clean: {
@@ -1772,7 +1848,9 @@
       audioEls: new Map(),
       camEls: new Map(),
       voiceOfferedTo: new Set(),
-      camOfferedTo: new Set()
+      camOfferedTo: new Set(),
+      adaptive: new Map(),
+      adaptiveTimer: null
     };
     let openPartyTimer = null;
     let adminRoomsTimer = null;
@@ -2541,6 +2619,75 @@
       }
     }
 
+    function adaptiveTargetFor(baseBitrate, rttSec, packetLossDelta) {
+      const base = Math.max(900000, Number(baseBitrate || 3200000));
+      let factor = 1.0;
+      if (rttSec > 0.55 || packetLossDelta > 40) factor = 0.35;
+      else if (rttSec > 0.35 || packetLossDelta > 20) factor = 0.5;
+      else if (rttSec > 0.2 || packetLossDelta > 10) factor = 0.7;
+      else if (rttSec < 0.12 && packetLossDelta <= 2) factor = 1.0;
+      return Math.max(450000, Math.min(base, Math.round(base * factor)));
+    }
+
+    async function applyAdaptiveSender(sender, targetBitrate, targetFps) {
+      if (!sender || !sender.getParameters || !sender.setParameters) return;
+      try {
+        const params = sender.getParameters() || {};
+        if (!Array.isArray(params.encodings) || !params.encodings.length) params.encodings = [{}];
+        params.encodings[0].maxBitrate = Math.max(450000, Math.round(targetBitrate || 900000));
+        params.encodings[0].maxFramerate = Math.max(15, Math.min(60, Math.round(targetFps || 30)));
+        await sender.setParameters(params);
+      } catch (_) {}
+    }
+
+    async function monitorAdaptiveQuality() {
+      if (!state.isHost || !rtc.localScreenStream) return;
+      const movieProfile = getMovieQualityProfile();
+      const peerIds = Array.from(rtc.peers.keys());
+      for (const pid of peerIds) {
+        const row = rtc.peers.get(pid);
+        if (!row || !row.pc) continue;
+        const pc = row.pc;
+        const videoSender = pc.getSenders().find((s) => s && s.track && s.track.kind === 'video');
+        if (!videoSender) continue;
+        let rttSec = 0.18;
+        let packetsLost = 0;
+        try {
+          const stats = await pc.getStats();
+          stats.forEach((report) => {
+            if (report.type === 'candidate-pair' && report.state === 'succeeded' && report.currentRoundTripTime) {
+              rttSec = Number(report.currentRoundTripTime) || rttSec;
+            }
+            if (report.type === 'remote-inbound-rtp' && report.kind === 'video') {
+              if (Number.isFinite(report.roundTripTime)) rttSec = Number(report.roundTripTime);
+              if (Number.isFinite(report.packetsLost)) packetsLost = Number(report.packetsLost);
+            }
+          });
+        } catch (_) {}
+        const prev = rtc.adaptive.get(pid) || { packetsLost: 0, targetBitrate: movieProfile.maxBitrate };
+        const lossDelta = Math.max(0, packetsLost - Number(prev.packetsLost || 0));
+        const target = adaptiveTargetFor(movieProfile.maxBitrate, rttSec, lossDelta);
+        const fps = target < movieProfile.maxBitrate * 0.65 ? Math.min(30, movieProfile.maxFramerate) : movieProfile.maxFramerate;
+        await applyAdaptiveSender(videoSender, target, fps);
+        rtc.adaptive.set(pid, { packetsLost, targetBitrate: target, rttSec, lossDelta, ts: Date.now() });
+      }
+    }
+
+    function startAdaptiveLoop() {
+      if (rtc.adaptiveTimer) return;
+      rtc.adaptiveTimer = setInterval(() => {
+        monitorAdaptiveQuality().catch(() => {});
+      }, 3500);
+    }
+
+    function stopAdaptiveLoop() {
+      if (rtc.adaptiveTimer) {
+        clearInterval(rtc.adaptiveTimer);
+        rtc.adaptiveTimer = null;
+      }
+      rtc.adaptive.clear();
+    }
+
     function shouldInitiateVoiceOffer(targetParticipantId) {
       const me = String(state.participantId || '');
       const peer = String(targetParticipantId || '');
@@ -3123,6 +3270,140 @@
       }
     }
 
+    function isPremiumUser() {
+      return !!(state.userToken && state.userEmail);
+    }
+
+    function renderPremiumState() {
+      const premium = isPremiumUser();
+      if (els.accountGuestWrap) els.accountGuestWrap.classList.toggle('hidden', premium);
+      if (els.accountUserWrap) els.accountUserWrap.classList.toggle('hidden', !premium);
+      if (els.userBadge) {
+        els.userBadge.textContent = premium
+          ? `Premium: ${state.userDisplayName || state.userEmail}`
+          : 'Not signed in';
+      }
+      if (els.macroStartBtn) els.macroStartBtn.disabled = !premium;
+      if (els.macroIntermissionBtn) els.macroIntermissionBtn.disabled = !premium;
+      if (els.macroWrapBtn) els.macroWrapBtn.disabled = !premium;
+      if (els.saveTemplateBtn) els.saveTemplateBtn.disabled = !premium;
+      if (els.applyTemplateBtn) els.applyTemplateBtn.disabled = !premium;
+      if (els.saveRoomBtn) els.saveRoomBtn.disabled = !premium;
+      if (els.joinSavedRoomBtn) els.joinSavedRoomBtn.disabled = !premium;
+      if (els.removeSavedRoomBtn) els.removeSavedRoomBtn.disabled = !premium;
+    }
+
+    function saveUserSession() {
+      try {
+        if (!state.userToken || !state.userEmail) {
+          localStorage.removeItem(USER_SESSION_KEY);
+          return;
+        }
+        localStorage.setItem(USER_SESSION_KEY, JSON.stringify({
+          userToken: state.userToken,
+          userEmail: state.userEmail,
+          userDisplayName: state.userDisplayName,
+        }));
+      } catch (_) {}
+    }
+
+    function clearUserSession() {
+      state.userToken = '';
+      state.userEmail = '';
+      state.userDisplayName = '';
+      state.savedRooms = [];
+      try { localStorage.removeItem(USER_SESSION_KEY); } catch (_) {}
+      renderSavedRooms();
+      renderPremiumState();
+    }
+
+    function renderSavedRooms() {
+      if (!els.savedRoomsSelect) return;
+      els.savedRoomsSelect.innerHTML = '';
+      const list = Array.isArray(state.savedRooms) ? state.savedRooms : [];
+      if (!list.length) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = isPremiumUser() ? 'No saved rooms yet' : 'Sign in for saved rooms';
+        els.savedRoomsSelect.appendChild(opt);
+        return;
+      }
+      for (const row of list) {
+        const opt = document.createElement('option');
+        opt.value = String(row.roomCode || '');
+        const title = String(row.savedName || row.roomTitle || row.roomCode || '');
+        opt.textContent = `${title} (${String(row.roomCode || '')})`;
+        els.savedRoomsSelect.appendChild(opt);
+      }
+    }
+
+    async function refreshSavedRooms() {
+      if (!isPremiumUser()) {
+        state.savedRooms = [];
+        renderSavedRooms();
+        return;
+      }
+      const data = await apiRequest('POST', '/api/watch/user/saved-rooms', { userToken: state.userToken });
+      state.savedRooms = Array.isArray(data.rooms) ? data.rooms : [];
+      renderSavedRooms();
+    }
+
+    async function userLogin() {
+      const username = String((els.userEmailInput && els.userEmailInput.value) || '').trim().toLowerCase();
+      const password = String((els.userPassInput && els.userPassInput.value) || '').trim();
+      if (!username || !password) throw new Error('Enter email and password.');
+      const data = await apiRequest('POST', '/api/watch/user/login', { username, password });
+      state.userToken = String(data.userToken || '');
+      state.userEmail = String(data.username || username);
+      state.userDisplayName = String(data.displayName || '');
+      saveUserSession();
+      renderPremiumState();
+      await refreshSavedRooms();
+      setStatus(true, 'Premium account connected.');
+    }
+
+    async function userRegister() {
+      const username = String((els.userEmailInput && els.userEmailInput.value) || '').trim().toLowerCase();
+      const password = String((els.userPassInput && els.userPassInput.value) || '').trim();
+      const displayName = String((els.userDisplayInput && els.userDisplayInput.value) || '').trim() || (els.displayName && els.displayName.value.trim()) || 'Viewer';
+      if (!username || !password) throw new Error('Enter email and password.');
+      const data = await apiRequest('POST', '/api/watch/user/register', { username, password, displayName });
+      state.userToken = String(data.userToken || '');
+      state.userEmail = String(data.username || username);
+      state.userDisplayName = String(data.displayName || displayName);
+      saveUserSession();
+      renderPremiumState();
+      await refreshSavedRooms();
+      setStatus(true, 'Premium account created.');
+    }
+
+    async function userLogout() {
+      const token = String(state.userToken || '').trim();
+      if (token) {
+        try { await apiRequest('POST', '/api/watch/user/logout', { userToken: token }); } catch (_) {}
+      }
+      clearUserSession();
+      setStatus(true, 'Signed out.');
+    }
+
+    async function saveCurrentRoomForUser() {
+      if (!isPremiumUser()) return;
+      const roomCode = normalizeRoomCode(state.roomCode || els.roomInput.value);
+      if (!roomCode) {
+        setStatus(false, 'Join a room first.');
+        return;
+      }
+      const savedName = String(window.prompt('Saved room name', roomCode) || '').trim();
+      await apiRequest('POST', '/api/watch/user/save-room', {
+        userToken: state.userToken,
+        roomCode,
+        roomTitle: String((els.titleInput && els.titleInput.value) || '').trim(),
+        savedName,
+      });
+      await refreshSavedRooms();
+      setStatus(true, `Saved room ${roomCode}.`);
+    }
+
     async function apiRequest(method, path, body, queryParams) {
       let lastError = null;
       for (const prefix of API_PREFIXES) {
@@ -3223,6 +3504,7 @@
       rtc.offeredTo.delete(participantId);
       rtc.voiceOfferedTo.delete(participantId);
       rtc.camOfferedTo.delete(participantId);
+      rtc.adaptive.delete(participantId);
       const audioEl = rtc.audioEls.get(participantId);
       if (audioEl) {
         try { audioEl.srcObject = null; audioEl.remove(); } catch (_) {}
@@ -3408,6 +3690,7 @@
         addEventLine('No share audio detected. In picker enable tab/system audio.');
       }
       await broadcastOffersToViewers();
+      startAdaptiveLoop();
       updateMediaVisibility();
       updateHostPreview();
     }
@@ -3425,6 +3708,7 @@
         els.screenView.srcObject = null;
       }
       for (const pid of Array.from(rtc.peers.keys())) closePeer(pid);
+      stopAdaptiveLoop();
       setSyncLabel('share stopped');
       updateStatusChips((state.participants || []).length);
       if (els.shareSourceInfo) els.shareSourceInfo.textContent = 'Selected share source: none';
@@ -3492,6 +3776,14 @@
       applyTheme(state.roomThemeKey, false);
       els.roomInput.value = state.roomCode;
       saveRecentRoom(state.roomCode);
+      if (isPremiumUser()) {
+        apiRequest('POST', '/api/watch/user/save-room', {
+          userToken: state.userToken,
+          roomCode: state.roomCode,
+          roomTitle: String((els.titleInput && els.titleInput.value) || '').trim(),
+          savedName: '',
+        }).then(() => refreshSavedRooms()).catch(() => {});
+      }
       onSessionStart();
       addEventLine('Room created: ' + state.roomCode);
     }
@@ -3525,6 +3817,14 @@
       state.sinceEventId = 0;
       onSessionStart();
       saveRecentRoom(state.roomCode);
+      if (isPremiumUser()) {
+        apiRequest('POST', '/api/watch/user/save-room', {
+          userToken: state.userToken,
+          roomCode: state.roomCode,
+          roomTitle: String((data.room && data.room.title) || ''),
+          savedName: '',
+        }).then(() => refreshSavedRooms()).catch(() => {});
+      }
       applyRoomState(data.room || null, true);
       addEventLine('Joined room: ' + state.roomCode);
     }
@@ -3611,6 +3911,7 @@
       renderAdminIdentity();
       await refreshAdminRooms().catch(() => {});
       await refreshAdminList();
+      await refreshBlocks().catch(() => {});
       setStatus(true, 'Admin signed in.');
     }
 
@@ -3652,6 +3953,80 @@
       }
     }
 
+    async function refreshBlocks() {
+      if (!state.adminToken) return;
+      const [userData, ipData] = await Promise.all([
+        apiRequest('POST', '/api/watch/admin/user-block/list', { adminToken: state.adminToken }),
+        apiRequest('POST', '/api/watch/admin/ip-block/list', { adminToken: state.adminToken }),
+      ]);
+      const users = Array.isArray(userData.blocks) ? userData.blocks : [];
+      const ips = Array.isArray(ipData.blocks) ? ipData.blocks : [];
+      if (els.blockedUsersSelect) {
+        els.blockedUsersSelect.innerHTML = '';
+        for (const r of users) {
+          const o = document.createElement('option');
+          o.value = String(r.username || '');
+          o.textContent = `${String(r.username || '')}${r.reason ? ' · ' + String(r.reason) : ''}`;
+          els.blockedUsersSelect.appendChild(o);
+        }
+        if (!users.length) {
+          const o = document.createElement('option');
+          o.value = '';
+          o.textContent = 'No blocked users';
+          els.blockedUsersSelect.appendChild(o);
+        }
+      }
+      if (els.blockedIpsSelect) {
+        els.blockedIpsSelect.innerHTML = '';
+        for (const r of ips) {
+          const o = document.createElement('option');
+          o.value = String(r.ipAddress || '');
+          o.textContent = `${String(r.ipAddress || '')}${r.reason ? ' · ' + String(r.reason) : ''}`;
+          els.blockedIpsSelect.appendChild(o);
+        }
+        if (!ips.length) {
+          const o = document.createElement('option');
+          o.value = '';
+          o.textContent = 'No blocked IPs';
+          els.blockedIpsSelect.appendChild(o);
+        }
+      }
+    }
+
+    async function blockUser(shouldBlock) {
+      if (!state.adminToken) throw new Error('Sign in as admin first.');
+      const adminCode = String(els.adminKeyInput.value || '').trim();
+      const username = cleanUsername((els.blockUserInput && els.blockUserInput.value) || (els.blockedUsersSelect && els.blockedUsersSelect.value) || '');
+      const reason = String((els.blockReasonInput && els.blockReasonInput.value) || '').trim();
+      if (!username) throw new Error('Enter user email.');
+      if (shouldBlock) {
+        await apiRequest('POST', '/api/watch/admin/user-block/add', { adminToken: state.adminToken, adminCode, username, reason });
+      } else {
+        await apiRequest('POST', '/api/watch/admin/user-block/remove', { adminToken: state.adminToken, adminCode, username });
+      }
+      await refreshBlocks();
+      setStatus(true, shouldBlock ? `User blocked: ${username}` : `User unblocked: ${username}`);
+    }
+
+    async function blockIp(shouldBlock) {
+      if (!state.adminToken) throw new Error('Sign in as admin first.');
+      const adminCode = String(els.adminKeyInput.value || '').trim();
+      const ipAddress = String((els.blockIpInput && els.blockIpInput.value) || (els.blockedIpsSelect && els.blockedIpsSelect.value) || '').trim();
+      const reason = String((els.blockReasonInput && els.blockReasonInput.value) || '').trim();
+      if (!ipAddress) throw new Error('Enter IP address.');
+      if (shouldBlock) {
+        await apiRequest('POST', '/api/watch/admin/ip-block/add', { adminToken: state.adminToken, adminCode, ipAddress, reason });
+      } else {
+        await apiRequest('POST', '/api/watch/admin/ip-block/remove', { adminToken: state.adminToken, adminCode, ipAddress });
+      }
+      await refreshBlocks();
+      setStatus(true, shouldBlock ? `IP blocked: ${ipAddress}` : `IP unblocked: ${ipAddress}`);
+    }
+
+    function cleanUsername(raw) {
+      return String(raw || '').trim().toLowerCase();
+    }
+
     async function removeSelectedAdmin() {
       const username = String((els.adminListSelect && els.adminListSelect.value) || '').trim().toLowerCase();
       const adminCode = String(els.adminKeyInput.value || '').trim();
@@ -3675,6 +4050,8 @@
       clearAdminSession();
       setStatus(false, 'Admin signed out.');
       if (els.adminRoomsSelect) els.adminRoomsSelect.innerHTML = '';
+      if (els.blockedUsersSelect) els.blockedUsersSelect.innerHTML = '';
+      if (els.blockedIpsSelect) els.blockedIpsSelect.innerHTML = '';
     }
 
     function updateBadges() {
@@ -4292,6 +4669,31 @@
     if (els.adminLogoutBtn) els.adminLogoutBtn.addEventListener('click', async () => {
       await adminLogout();
     });
+    if (els.refreshBlocksBtn) {
+      els.refreshBlocksBtn.addEventListener('click', async () => {
+        try { await refreshBlocks(); setStatus(true, 'Block lists refreshed.'); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
+      });
+    }
+    if (els.blockUserBtn) {
+      els.blockUserBtn.addEventListener('click', async () => {
+        try { await blockUser(true); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
+      });
+    }
+    if (els.unblockUserBtn) {
+      els.unblockUserBtn.addEventListener('click', async () => {
+        try { await blockUser(false); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
+      });
+    }
+    if (els.blockIpBtn) {
+      els.blockIpBtn.addEventListener('click', async () => {
+        try { await blockIp(true); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
+      });
+    }
+    if (els.unblockIpBtn) {
+      els.unblockIpBtn.addEventListener('click', async () => {
+        try { await blockIp(false); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
+      });
+    }
     if (els.layoutModeSelect) {
       els.layoutModeSelect.addEventListener('change', () => applyLayoutMode(els.layoutModeSelect.value, true));
     }
@@ -4335,6 +4737,48 @@
           await setWebcamPolicy().catch(() => {});
         }
         setStatus(true, 'Template applied.');
+      });
+    }
+    if (els.userLoginBtn) {
+      els.userLoginBtn.addEventListener('click', async () => {
+        try { await userLogin(); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
+      });
+    }
+    if (els.userRegisterBtn) {
+      els.userRegisterBtn.addEventListener('click', async () => {
+        try { await userRegister(); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
+      });
+    }
+    if (els.userLogoutBtn) {
+      els.userLogoutBtn.addEventListener('click', async () => {
+        await userLogout();
+      });
+    }
+    if (els.saveRoomBtn) {
+      els.saveRoomBtn.addEventListener('click', async () => {
+        try { await saveCurrentRoomForUser(); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
+      });
+    }
+    if (els.joinSavedRoomBtn) {
+      els.joinSavedRoomBtn.addEventListener('click', async () => {
+        const code = normalizeRoomCode((els.savedRoomsSelect && els.savedRoomsSelect.value) || '');
+        if (!code) return;
+        els.roomInput.value = code;
+        try { await joinRoom(); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
+      });
+    }
+    if (els.removeSavedRoomBtn) {
+      els.removeSavedRoomBtn.addEventListener('click', async () => {
+        if (!isPremiumUser()) return;
+        const code = normalizeRoomCode((els.savedRoomsSelect && els.savedRoomsSelect.value) || '');
+        if (!code) return;
+        try {
+          await apiRequest('POST', '/api/watch/user/delete-saved-room', { userToken: state.userToken, roomCode: code });
+          await refreshSavedRooms();
+          setStatus(true, `Removed saved room ${code}.`);
+        } catch (err) {
+          setStatus(false, String(err && err.message ? err.message : err));
+        }
       });
     }
     for (const btn of els.tabButtons) {
@@ -4513,6 +4957,32 @@
       applyLayoutMode(savedLayout, false);
       applyDensityMode(savedDensity, false);
       renderTemplateOptions();
+      try {
+        const rawUser = localStorage.getItem(USER_SESSION_KEY) || '';
+        if (rawUser) {
+          const u = JSON.parse(rawUser);
+          state.userToken = String(u.userToken || '').trim();
+          state.userEmail = String(u.userEmail || '').trim().toLowerCase();
+          state.userDisplayName = String(u.userDisplayName || '').trim();
+          if (els.userEmailInput && state.userEmail) els.userEmailInput.value = state.userEmail;
+        }
+      } catch (_) {}
+      renderPremiumState();
+      if (isPremiumUser()) {
+        apiRequest('POST', '/api/watch/user/me', { userToken: state.userToken })
+          .then((data) => {
+            state.userEmail = String(data.username || state.userEmail);
+            state.userDisplayName = String(data.displayName || state.userDisplayName);
+            saveUserSession();
+            renderPremiumState();
+            refreshSavedRooms().catch(() => {});
+          })
+          .catch(() => {
+            clearUserSession();
+          });
+      } else {
+        renderSavedRooms();
+      }
       const inviteSettings = readInviteSettings();
       if (els.inviteTtlInput) els.inviteTtlInput.value = String(inviteSettings.ttlMinutes);
       if (els.inviteMaxUsesInput) els.inviteMaxUsesInput.value = String(inviteSettings.maxUses);
@@ -4549,6 +5019,7 @@
           clearAdminSession();
         });
         refreshAdminRooms().catch(() => {});
+        refreshBlocks().catch(() => {});
       }
       try {
         const savedName = localStorage.getItem('telewatch_name') || '';
