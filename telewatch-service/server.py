@@ -15,6 +15,7 @@ DB_PATH = Path(os.getenv('TELEWATCH_DB_PATH', '/root/Frenzynet/telewatch-service
 ROOM_TTL_HOURS = int(os.getenv('TELEWATCH_ROOM_TTL_HOURS', '24'))
 PUBLIC_ROOM_PREFIX = os.getenv('TELEWATCH_PUBLIC_ROOM_PREFIX', 'WATCH').strip().upper()[:6] or 'WATCH'
 PUBLIC_ROOM_COUNT = max(1, min(50, int(os.getenv('TELEWATCH_PUBLIC_ROOM_COUNT', '10'))))
+TELEWATCH_ADMIN_KEY = os.getenv('TELEWATCH_ADMIN_KEY', '').strip()
 
 
 def utc_iso() -> str:
@@ -347,9 +348,17 @@ class TelewatchHandler(BaseHTTPRequestHandler):
 
         if path in delete_paths:
             room_code_val = normalize_room_code(payload.get('roomCode', ''), '')
+            provided_admin_key = str(payload.get('adminKey', '')).strip()
             if not room_code_val:
                 self._json(HTTPStatus.BAD_REQUEST, {'error': 'roomCode_required'})
                 return
+            if TELEWATCH_ADMIN_KEY:
+                if not provided_admin_key:
+                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'admin_key_required'})
+                    return
+                if provided_admin_key != TELEWATCH_ADMIN_KEY:
+                    self._json(HTTPStatus.FORBIDDEN, {'error': 'admin_key_invalid'})
+                    return
             with get_db() as conn:
                 ensure_public_rooms(conn)
                 cleanup_rooms(conn)
