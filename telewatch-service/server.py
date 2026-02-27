@@ -3,6 +3,8 @@ import json
 import os
 import secrets
 import sqlite3
+import hashlib
+import hmac
 import datetime as dt
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -18,6 +20,11 @@ PUBLIC_ROOM_COUNT = max(1, min(35, int(os.getenv('TELEWATCH_PUBLIC_ROOM_COUNT', 
 MAX_ROOMS = max(1, min(35, int(os.getenv('TELEWATCH_MAX_ROOMS', '35'))))
 MAX_PARTICIPANTS_PER_ROOM = max(2, min(25, int(os.getenv('TELEWATCH_MAX_PARTICIPANTS_PER_ROOM', '25'))))
 TELEWATCH_ADMIN_KEY = os.getenv('TELEWATCH_ADMIN_KEY', '').strip()
+TELEWATCH_ADMIN_CODE = os.getenv('TELEWATCH_ADMIN_CODE', '1978Luke$$').strip()
+TELEWATCH_OWNER_USERNAME = os.getenv('TELEWATCH_OWNER_USERNAME', 'Trimbledustn@gmail.com').strip().lower()
+TELEWATCH_OWNER_PASSWORD = os.getenv('TELEWATCH_OWNER_PASSWORD', '1978Luke$$').strip()
+TELEWATCH_AUTH_SALT = os.getenv('TELEWATCH_AUTH_SALT', 'frenzy-telewatch-salt-v1').strip()
+ADMIN_SESSION_TTL_HOURS = max(1, min(168, int(os.getenv('TELEWATCH_ADMIN_SESSION_TTL_HOURS', '24'))))
 
 
 def utc_iso() -> str:
@@ -31,6 +38,21 @@ def stable_json(value) -> str:
 def clean_name(raw: str, fallback: str = 'Guest') -> str:
     keep = ''.join(ch for ch in str(raw or '').strip() if ch.isalnum() or ch in ' _-.')
     return (keep[:32] or fallback)
+
+
+def clean_username(raw: str) -> str:
+    val = str(raw or '').strip().lower()
+    return val[:160]
+
+
+def hash_password(password: str) -> str:
+    body = f'{TELEWATCH_AUTH_SALT}:{str(password or "")}'.encode('utf-8', errors='replace')
+    return hashlib.sha256(body).hexdigest()
+
+
+def verify_password(password: str, expected_hash: str) -> bool:
+    actual = hash_password(password)
+    return hmac.compare_digest(actual, str(expected_hash or '').strip().lower())
 
 
 def room_code(length: int = 6) -> str:
@@ -109,9 +131,24 @@ def ensure_schema() -> None:
               responded_at TEXT,
               FOREIGN KEY (room_code) REFERENCES watch_rooms(room_code) ON DELETE CASCADE
             );
+            CREATE TABLE IF NOT EXISTS watch_admins (
+              username TEXT PRIMARY KEY,
+              password_hash TEXT NOT NULL,
+              is_owner INTEGER NOT NULL DEFAULT 0,
+              created_at TEXT NOT NULL DEFAULT (datetime('now')),
+              updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            CREATE TABLE IF NOT EXISTS watch_admin_sessions (
+              session_token TEXT PRIMARY KEY,
+              username TEXT NOT NULL,
+              created_at TEXT NOT NULL DEFAULT (datetime('now')),
+              last_seen_at TEXT NOT NULL DEFAULT (datetime('now')),
+              FOREIGN KEY (username) REFERENCES watch_admins(username) ON DELETE CASCADE
+            );
             CREATE INDEX IF NOT EXISTS idx_watch_participants_room ON watch_participants(room_code, last_seen_at);
             CREATE INDEX IF NOT EXISTS idx_watch_events_room ON watch_events(room_code, id);
             CREATE INDEX IF NOT EXISTS idx_watch_join_requests_room_status ON watch_join_requests(room_code, status, created_at);
+            CREATE INDEX IF NOT EXISTS idx_watch_admin_sessions_last_seen ON watch_admin_sessions(last_seen_at);
             '''
         )
         try:
@@ -132,6 +169,24 @@ def ensure_schema() -> None:
             SET participant_id = lower(hex(randomblob(6)))
             WHERE participant_id IS NULL OR trim(participant_id)=''
             '''
+        )
+        owner_username = clean_username(TELEWATCH_OWNER_USERNAME)
+        owner_hash = hash_password(TELEWATCH_OWNER_PASSWORD)
+        if owner_username and owner_hash:
+            conn.execute(
+                '''
+                INSERT INTO watch_admins(username, password_hash, is_owner, created_at, updated_at)
+                VALUES(?,?,1,datetime('now'),datetime('now'))
+                ON CONFLICT(username) DO UPDATE SET
+                  password_hash=excluded.password_hash,
+                  is_owner=1,
+                  updated_at=datetime('now')
+                ''',
+                (owner_username, owner_hash),
+            )
+        conn.execute(
+            "DELETE FROM watch_admin_sessions WHERE last_seen_at < datetime('now', ?)",
+            (f'-{ADMIN_SESSION_TTL_HOURS} hours',),
         )
         ensure_public_rooms(conn)
         conn.commit()
@@ -177,6 +232,38 @@ def ensure_public_rooms(conn: sqlite3.Connection) -> None:
             ''',
             (code, 'FrenzyHost', 'room_seeded', stable_json({'public': True})),
         )
+
+
+def create_admin_session(conn: sqlite3.Connection, username: str) -> str:
+    session_token = secrets.token_urlsafe(40)
+    conn.execute(
+        '''
+        INSERT INTO watch_admin_sessions(session_token, username, created_at, last_seen_at)
+        VALUES(?,?,datetime('now'),datetime('now'))
+        ''',
+        (session_token, clean_username(username)),
+    )
+    return session_token
+
+
+def validate_admin_session(conn: sqlite3.Connection, session_token: str) -> sqlite3.Row | None:
+    token = str(session_token or '').strip()
+    if not token:
+        return None
+    row = conn.execute(
+        '''
+        SELECT s.session_token, s.username, a.is_owner
+        FROM watch_admin_sessions s
+        JOIN watch_admins a ON a.username=s.username
+        WHERE s.session_token=? AND s.last_seen_at >= datetime('now', ?)
+        LIMIT 1
+        ''',
+        (token, f'-{ADMIN_SESSION_TTL_HOURS} hours'),
+    ).fetchone()
+    if row is None:
+        return None
+    conn.execute("UPDATE watch_admin_sessions SET last_seen_at=datetime('now') WHERE session_token=?", (token,))
+    return row
 
 
 class TelewatchHandler(BaseHTTPRequestHandler):
@@ -371,25 +458,106 @@ class TelewatchHandler(BaseHTTPRequestHandler):
 
         create_paths = {'/watch/create', '/api/watch/create', '/api/telewatch/watch/create', '/api/telewatch/api/watch/create'}
         join_paths = {'/watch/join', '/api/watch/join', '/api/telewatch/watch/join', '/api/telewatch/api/watch/join'}
+        admin_login_paths = {
+            '/watch/admin/login',
+            '/api/watch/admin/login',
+            '/api/telewatch/watch/admin/login',
+            '/api/telewatch/api/watch/admin/login',
+        }
+        admin_add_paths = {
+            '/watch/admin/add',
+            '/api/watch/admin/add',
+            '/api/telewatch/watch/admin/add',
+            '/api/telewatch/api/watch/admin/add',
+        }
         delete_paths = {'/watch/delete', '/api/watch/delete', '/api/telewatch/watch/delete', '/api/telewatch/api/watch/delete'}
         control_paths = {'/watch/control', '/api/watch/control', '/api/telewatch/watch/control', '/api/telewatch/api/watch/control'}
+
+        if path in admin_login_paths:
+            username = clean_username(payload.get('username', ''))
+            password = str(payload.get('password', '')).strip()
+            if not username or not password:
+                self._json(HTTPStatus.BAD_REQUEST, {'error': 'username_password_required'})
+                return
+            with get_db() as conn:
+                ensure_public_rooms(conn)
+                cleanup_rooms(conn)
+                row = conn.execute(
+                    'SELECT username, password_hash, is_owner FROM watch_admins WHERE username=? LIMIT 1',
+                    (username,),
+                ).fetchone()
+                if row is None or not verify_password(password, row['password_hash']):
+                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'admin_login_invalid'})
+                    return
+                token = create_admin_session(conn, username)
+                conn.commit()
+            self._json(
+                HTTPStatus.OK,
+                {'ok': True, 'adminToken': token, 'username': username, 'isOwner': bool(row['is_owner'])},
+            )
+            return
+
+        if path in admin_add_paths:
+            admin_token = str(payload.get('adminToken', '')).strip()
+            admin_code = str(payload.get('adminCode', '')).strip()
+            new_username = clean_username(payload.get('newUsername', ''))
+            new_password = str(payload.get('newPassword', '')).strip()
+            if not admin_token:
+                self._json(HTTPStatus.UNAUTHORIZED, {'error': 'admin_auth_required'})
+                return
+            if TELEWATCH_ADMIN_CODE and admin_code != TELEWATCH_ADMIN_CODE:
+                self._json(HTTPStatus.FORBIDDEN, {'error': 'admin_code_invalid'})
+                return
+            if len(new_username) < 3 or '@' not in new_username:
+                self._json(HTTPStatus.BAD_REQUEST, {'error': 'new_username_invalid'})
+                return
+            if len(new_password) < 8:
+                self._json(HTTPStatus.BAD_REQUEST, {'error': 'new_password_too_short'})
+                return
+            with get_db() as conn:
+                ensure_public_rooms(conn)
+                cleanup_rooms(conn)
+                actor = validate_admin_session(conn, admin_token)
+                if actor is None:
+                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'admin_auth_invalid'})
+                    return
+                conn.execute(
+                    '''
+                    INSERT INTO watch_admins(username, password_hash, is_owner, created_at, updated_at)
+                    VALUES(?,?,0,datetime('now'),datetime('now'))
+                    ON CONFLICT(username) DO UPDATE SET
+                      password_hash=excluded.password_hash,
+                      updated_at=datetime('now')
+                    ''',
+                    (new_username, hash_password(new_password)),
+                )
+                conn.commit()
+            self._json(HTTPStatus.OK, {'ok': True, 'added': True, 'username': new_username})
+            return
 
         if path in delete_paths:
             room_code_val = normalize_room_code(payload.get('roomCode', ''), '')
             provided_admin_key = str(payload.get('adminKey', '')).strip()
+            provided_admin_code = str(payload.get('adminCode', provided_admin_key)).strip()
+            provided_admin_token = str(payload.get('adminToken', '')).strip()
             if not room_code_val:
                 self._json(HTTPStatus.BAD_REQUEST, {'error': 'roomCode_required'})
                 return
-            if TELEWATCH_ADMIN_KEY:
-                if not provided_admin_key:
-                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'admin_key_required'})
-                    return
-                if provided_admin_key != TELEWATCH_ADMIN_KEY:
-                    self._json(HTTPStatus.FORBIDDEN, {'error': 'admin_key_invalid'})
-                    return
             with get_db() as conn:
                 ensure_public_rooms(conn)
                 cleanup_rooms(conn)
+                admin_user = validate_admin_session(conn, provided_admin_token)
+                legacy_ok = bool(TELEWATCH_ADMIN_KEY and provided_admin_key and provided_admin_key == TELEWATCH_ADMIN_KEY)
+                if admin_user is None and not legacy_ok:
+                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'admin_auth_required'})
+                    return
+                if TELEWATCH_ADMIN_CODE:
+                    if not provided_admin_code:
+                        self._json(HTTPStatus.UNAUTHORIZED, {'error': 'admin_code_required'})
+                        return
+                    if provided_admin_code != TELEWATCH_ADMIN_CODE:
+                        self._json(HTTPStatus.FORBIDDEN, {'error': 'admin_code_invalid'})
+                        return
                 room = conn.execute(
                     'SELECT room_code FROM watch_rooms WHERE room_code=?',
                     (room_code_val,),
