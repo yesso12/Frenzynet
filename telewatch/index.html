@@ -3291,6 +3291,14 @@
         setStatus(false, inviteFromQuery ? 'Invite link detected. Enter name and click Join Room.' : 'Enter name and click Join Room');
       }
     })();
+
+    window.addEventListener('beforeunload', (ev) => {
+      const inActiveHostSession = !!(state.roomCode && state.isHost);
+      const currentlySharing = !!rtc.localScreenStream;
+      if (!(inActiveHostSession || currentlySharing)) return;
+      ev.preventDefault();
+      ev.returnValue = 'Leaving will stop your active host session/screen share. Continue?';
+    });
   </script>
 </body>
 </html>
