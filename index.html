@@ -107,6 +107,23 @@
       font-size:.9rem;
     }
     .tag { display:inline-block; border:1px solid #41689a; border-radius:999px; padding:4px 8px; font-size:.78rem; color:#c7ddff; }
+    .hidden { display:none !important; }
+    details {
+      border:1px solid #355782;
+      border-radius:10px;
+      padding:10px;
+      background:rgba(13,25,47,.92);
+      margin-bottom:8px;
+    }
+    summary { cursor:pointer; font-weight:700; color:#d8e9ff; }
+    .request-item {
+      border:1px solid #395d8b;
+      border-radius:10px;
+      background:rgba(11,20,38,.9);
+      padding:8px;
+      margin-top:8px;
+      font-size:.9rem;
+    }
     @media (max-width: 980px) {
       .grid { grid-template-columns:1fr; }
       .rooms { grid-template-columns:repeat(2,minmax(0,1fr)); }
@@ -125,8 +142,9 @@
       <div class="brand">FrenzyNets Watch Party</div>
       <div class="nav">
         <a class="btn" href="/telewatch/">Watch Party</a>
-        <a class="btn alt" href="/telewatch/admin/">Admin Panel</a>
-        <a class="btn alt" href="/frenzynet-updates/">Desktop Downloads</a>
+        <a class="btn" href="/telewatch/?mainEvent=1">Join Main Event</a>
+        <a class="btn alt admin-only hidden" href="/telewatch/admin/">Admin Panel</a>
+        <a class="btn alt admin-only hidden" href="/frenzynet-updates/">Desktop Downloads</a>
         <a class="btn alt" href="https://discord.gg/4uRUSAN498" target="_blank" rel="noopener">Discord</a>
       </div>
     </div>
@@ -137,8 +155,10 @@
       <p>No VPN content on this page. FrenzyNets is now focused on Watch Party hosting, room controls, admin tools, and desktop panel downloads.</p>
       <div class="row">
         <a class="btn" href="/telewatch/">Open Watch Party</a>
-        <a class="btn alt" href="/telewatch/?admin=1">Main Event Mode</a>
-        <a class="btn alt" href="/telewatch/admin/">Room Moderation</a>
+        <a class="btn" href="/telewatch/?mainEvent=1">Join Main Event (Public)</a>
+        <a class="btn alt" href="/telewatch/?mode=public">Browse Public Rooms</a>
+        <a class="btn alt admin-only hidden" href="/telewatch/?admin=1">Main Event Mode</a>
+        <a class="btn alt admin-only hidden" href="/telewatch/admin/">Room Moderation</a>
       </div>
     </section>
 
@@ -152,7 +172,7 @@
         </div>
       </article>
 
-      <article class="card">
+      <article class="card admin-only hidden">
         <h3>Desktop App (All PC Types)</h3>
         <p>Watch Party desktop panel downloads for x64, x86, and ARM64.</p>
         <div class="row">
@@ -162,7 +182,7 @@
         </div>
       </article>
 
-      <article class="card">
+      <article class="card admin-only hidden">
         <h3>Admin / Owner Tools</h3>
         <p>Moderate rooms, run main event nights, and manage live sessions.</p>
         <div class="row">
@@ -174,12 +194,47 @@
     </section>
 
     <section class="card" style="margin-top:10px">
+      <h3>Main Event Access</h3>
+      <p>When a major night is hosted, this public button jumps straight to it.</p>
+      <div class="row">
+        <a class="btn" href="/telewatch/?mainEvent=1">Join Main Event Now</a>
+      </div>
+    </section>
+
+    <section class="card" style="margin-top:10px">
       <h3>Open Rooms</h3>
       <p>Quick room links for active public watch party rooms.</p>
       <div id="rooms" class="rooms"></div>
     </section>
 
-    <section class="verify">
+    <section class="card" style="margin-top:10px">
+      <h3>Live Interactions</h3>
+      <p>Public users can post requests for upcoming watch nights.</p>
+      <div class="row">
+        <input id="requestText" type="text" placeholder="Request a movie or event..." maxlength="120" style="flex:1;min-width:220px;border:1px solid #3d5f90;background:#0a1830;color:#ecf3ff;border-radius:10px;padding:10px;" />
+        <button id="requestBtn" class="btn" type="button">Submit Request</button>
+      </div>
+      <div id="requestList"></div>
+      <div style="margin-top:10px" class="meta">Next major night countdown: <span id="countdown">loading...</span></div>
+    </section>
+
+    <section class="card" style="margin-top:10px">
+      <h3>How It Works</h3>
+      <details>
+        <summary>How do I join a watch party?</summary>
+        <p>Use a room code from your host, enter it above, then join from the Watch Party page.</p>
+      </details>
+      <details>
+        <summary>Do I need the desktop app to watch?</summary>
+        <p>No. Public users can join from web. Desktop panel is currently admin-only.</p>
+      </details>
+      <details>
+        <summary>Where do I report issues during events?</summary>
+        <p>Use the FrenzyNets Discord support channel while the event is live.</p>
+      </details>
+    </section>
+
+    <section class="verify admin-only hidden">
       <h3 style="margin:0 0 6px">Verify Desktop Download</h3>
       <pre>Get-FileHash .\FrenzyWatchPartyPanel-win-x64.zip -Algorithm SHA256
 # Compare with /frenzynet-updates/FrenzyWatchPartyPanel-win-x64.zip.sha256</pre>
@@ -196,6 +251,14 @@
       const input = document.getElementById('roomCode');
       const joinBtn = document.getElementById('joinBtn');
       const roomsEl = document.getElementById('rooms');
+      const requestInput = document.getElementById('requestText');
+      const requestBtn = document.getElementById('requestBtn');
+      const requestList = document.getElementById('requestList');
+      const countdown = document.getElementById('countdown');
+      const isAdmin = !!localStorage.getItem('fn_admin_token');
+      document.querySelectorAll('.admin-only').forEach((el) => {
+        if (isAdmin) el.classList.remove('hidden');
+      });
 
       function cleanCode(v) {
         return String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
@@ -233,6 +296,42 @@
           if (j && Array.isArray(j.rooms) && j.rooms.length) draw(j.rooms);
         })
         .catch(() => {});
+
+      function readRequests() {
+        try { return JSON.parse(localStorage.getItem('fn_public_requests') || '[]'); } catch (_) { return []; }
+      }
+      function writeRequests(rows) {
+        try { localStorage.setItem('fn_public_requests', JSON.stringify(rows.slice(0, 25))); } catch (_) {}
+      }
+      function renderRequests() {
+        const rows = readRequests();
+        requestList.innerHTML = rows.length ? rows.map((r) => `<div class="request-item">${r}</div>`).join('') : '<div class="meta">No requests yet.</div>';
+      }
+      requestBtn.addEventListener('click', () => {
+        const v = String(requestInput.value || '').trim();
+        if (!v) return;
+        const rows = readRequests();
+        rows.unshift(v);
+        writeRequests(rows);
+        requestInput.value = '';
+        renderRequests();
+      });
+      renderRequests();
+
+      const nextEvent = Date.parse('2026-03-06T01:00:00Z');
+      function tickCountdown() {
+        const diff = nextEvent - Date.now();
+        if (diff <= 0) {
+          countdown.textContent = 'LIVE now';
+          return;
+        }
+        const d = Math.floor(diff / 86400000);
+        const h = Math.floor((diff % 86400000) / 3600000);
+        const m = Math.floor((diff % 3600000) / 60000);
+        countdown.textContent = `${d}d ${h}h ${m}m`;
+      }
+      tickCountdown();
+      setInterval(tickCountdown, 15000);
     })();
   </script>
 </body>
