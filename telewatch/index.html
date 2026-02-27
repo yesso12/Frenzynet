@@ -1376,6 +1376,7 @@
     const ROOM_TEMPLATE_KEY = 'telewatch_room_templates_v1';
     const USER_SESSION_KEY = 'telewatch_user_session_v1';
     const UI_MODE_KEY = 'telewatch_ui_mode';
+    const ROOM_CAPACITY_LIMIT = 50;
 
     const THEMES = {
       clean: {
@@ -2186,7 +2187,7 @@
         els.shareChip.classList.toggle('ok', sharing);
       }
       if (els.fullChip) {
-        const full = Number(activeCount || 0) >= 25;
+        const full = Number(activeCount || 0) >= ROOM_CAPACITY_LIMIT;
         els.fullChip.textContent = full ? 'Room Full' : 'Room Open';
         els.fullChip.classList.toggle('ok', !full);
       }
@@ -2489,6 +2490,42 @@
 
     function getWebcamQualityProfile() {
       return getQualityProfile((els.webcamQualitySelect && els.webcamQualitySelect.value) || 'high');
+    }
+
+    function viewerCount() {
+      const count = Number((state.participants || []).length || 0);
+      if (!state.isHost) return Math.max(0, count);
+      return Math.max(0, count - 1);
+    }
+
+    function scaleQualityForAudience(profile, viewers) {
+      const safe = Object.assign({}, profile || getQualityProfile('balanced'));
+      const n = Math.max(0, Number(viewers || 0));
+      if (n >= 40) {
+        safe.maxBitrate = Math.min(safe.maxBitrate, 1800000);
+        safe.maxFramerate = Math.min(safe.maxFramerate, 24);
+        safe.width = Math.min(safe.width, 1280);
+        safe.height = Math.min(safe.height, 720);
+        safe.frameRate = Math.min(safe.frameRate, 24);
+        safe.key = `${safe.key}-event-lite`;
+        return safe;
+      }
+      if (n >= 24) {
+        safe.maxBitrate = Math.min(safe.maxBitrate, 2800000);
+        safe.maxFramerate = Math.min(safe.maxFramerate, 30);
+        safe.width = Math.min(safe.width, 1280);
+        safe.height = Math.min(safe.height, 720);
+        safe.frameRate = Math.min(safe.frameRate, 30);
+        safe.key = `${safe.key}-event`;
+        return safe;
+      }
+      if (n >= 16) {
+        safe.maxBitrate = Math.min(safe.maxBitrate, 4200000);
+        safe.maxFramerate = Math.min(safe.maxFramerate, 30);
+        safe.frameRate = Math.min(safe.frameRate, 30);
+        safe.key = `${safe.key}-scaled`;
+      }
+      return safe;
     }
 
     async function setSenderQuality(sender, profile) {
@@ -3604,7 +3641,7 @@
 
     async function syncHostTrackSenders(participantId, pc) {
       if (!state.isHost || !rtc.localScreenStream) return;
-      const videoProfile = getMovieQualityProfile();
+      const videoProfile = scaleQualityForAudience(getMovieQualityProfile(), viewerCount());
       const audioProfile = getAudioProfile();
       const tracks = rtc.localScreenStream.getTracks().filter((t) => t.kind === 'video' || t.kind === 'audio');
       for (const track of tracks) {
@@ -3661,8 +3698,9 @@
       }
       const surface = String((els.shareSurfaceSelect && els.shareSurfaceSelect.value) || 'auto');
       const audioMode = String((els.shareAudioSelect && els.shareAudioSelect.value) || 'auto');
-      const captureQuality = getShareQualityProfile();
-      const movieQuality = getMovieQualityProfile();
+      const viewers = viewerCount();
+      const captureQuality = scaleQualityForAudience(getShareQualityProfile(), viewers);
+      const movieQuality = scaleQualityForAudience(getMovieQualityProfile(), viewers);
       const videoCfg = {};
       videoCfg.width = { ideal: captureQuality.width };
       videoCfg.height = { ideal: captureQuality.height };
@@ -3694,7 +3732,7 @@
       if (els.shareAudioInfo) {
         els.shareAudioInfo.textContent = 'Selected share audio: ' + (audTrack && audTrack.label ? audTrack.label : 'none');
       }
-      setStatus(true, `Sharing capture ${captureQuality.key} / movie ${movieQuality.key}.`);
+      setStatus(true, `Sharing capture ${captureQuality.key} / movie ${movieQuality.key} (${viewers} viewers).`);
       els.screenView.srcObject = stream;
       els.screenView.muted = true;
       try { await els.screenView.play(); } catch (_) {}
@@ -4475,7 +4513,7 @@
           return;
         }
         if (msg.includes('room_full')) {
-          setStatus(false, 'Room is full (25 people max).');
+          setStatus(false, `Room is full (${ROOM_CAPACITY_LIMIT} people max).`);
           return;
         }
         setStatus(false, msg);
