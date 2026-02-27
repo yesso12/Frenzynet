@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#0d0d14"/>
+      <stop offset="55%" stop-color="#1a1b26"/>
+      <stop offset="100%" stop-color="#08090f"/>
+    </linearGradient>
+    <linearGradient id="chrome" x1="0" x2="1" y1="0" y2="0">
+      <stop offset="0%" stop-color="#868ba0"/>
+      <stop offset="45%" stop-color="#e4ebff"/>
+      <stop offset="100%" stop-color="#6f7488"/>
+    </linearGradient>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#bg)"/>
+  <g stroke="url(#chrome)" stroke-width="10" fill="none" opacity="0.75">
+    <path d="M130 200 C560 20 1360 20 1790 200"/>
+    <path d="M130 360 C560 180 1360 180 1790 360"/>
+    <path d="M130 520 C560 340 1360 340 1790 520"/>
+    <path d="M130 680 C560 500 1360 500 1790 680"/>
+    <path d="M130 840 C560 660 1360 660 1790 840"/>
+  </g>
+  <g fill="#151824" opacity="0.95">
+    <rect x="0" y="850" width="1920" height="230"/>
+  </g>
+  <circle cx="330" cy="170" r="110" fill="#8fe7ff" opacity="0.16"/>
+  <circle cx="1570" cy="210" r="130" fill="#ff6bb3" opacity="0.15"/>
+</svg>
