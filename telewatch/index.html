@@ -731,6 +731,9 @@
               <button id="userLoginBtn" class="secondary">Sign In</button>
               <button id="userRegisterBtn" class="secondary">Create</button>
             </div>
+            <div class="row">
+              <button id="forgotPassBtn" class="secondary">Account Recovery (Discord/Admin)</button>
+            </div>
             <div class="muted">Optional: account unlocks premium tools. Donation tiers unlock more features.</div>
           </div>
           <div id="accountUserWrap" class="side-controls hidden">
@@ -769,6 +772,9 @@
             <button id="macroStartBtn" class="secondary">Start Party</button>
             <button id="macroIntermissionBtn" class="secondary">Intermission</button>
             <button id="macroWrapBtn" class="secondary">Wrap Up</button>
+            <button id="macroMainEventBtn" class="secondary">Main Event ON</button>
+            <button id="macroMainEventOffBtn" class="secondary">Main Event OFF</button>
+            <div id="mainEventState" class="muted">Main Event: OFF</div>
           </div>
         </div>
         <div class="side-block" data-advanced-ui="true">
@@ -825,6 +831,7 @@
                 </select>
               </div>
               <button id="openDesktopBtn" class="secondary">Open Desktop App</button>
+              <a id="downloadDesktopBtn" class="secondary" href="/telewatch/">Open Watch Party</a>
             </div>
             <div class="row">
               <button id="createBtn">Create Room</button>
@@ -910,6 +917,7 @@
                   <select id="mediaModeSelect">
                     <option value="webrtc">WebRTC Direct (Low Server Load)</option>
                     <option value="sfu">SFU Relay (Best for 40-50+)</option>
+                    <option value="broadcast">Broadcast (Admin Only, HLS/CDN)</option>
                   </select>
                 </div>
                 <div>
@@ -1223,12 +1231,16 @@
       inviteInput: document.getElementById('inviteInput'),
       clientModeSelect: document.getElementById('clientModeSelect'),
       openDesktopBtn: document.getElementById('openDesktopBtn'),
+      downloadDesktopBtn: document.getElementById('downloadDesktopBtn'),
       uiModeSelect: document.getElementById('uiModeSelect'),
       layoutModeSelect: document.getElementById('layoutModeSelect'),
       densitySelect: document.getElementById('densitySelect'),
       macroStartBtn: document.getElementById('macroStartBtn'),
       macroIntermissionBtn: document.getElementById('macroIntermissionBtn'),
       macroWrapBtn: document.getElementById('macroWrapBtn'),
+      macroMainEventBtn: document.getElementById('macroMainEventBtn'),
+      macroMainEventOffBtn: document.getElementById('macroMainEventOffBtn'),
+      mainEventState: document.getElementById('mainEventState'),
       templateSelect: document.getElementById('templateSelect'),
       saveTemplateBtn: document.getElementById('saveTemplateBtn'),
       applyTemplateBtn: document.getElementById('applyTemplateBtn'),
@@ -1240,6 +1252,7 @@
       userEmailInput: document.getElementById('userEmailInput'),
       userPassInput: document.getElementById('userPassInput'),
       userDisplayInput: document.getElementById('userDisplayInput'),
+      forgotPassBtn: document.getElementById('forgotPassBtn'),
       userLoginBtn: document.getElementById('userLoginBtn'),
       userRegisterBtn: document.getElementById('userRegisterBtn'),
       userBadge: document.getElementById('userBadge'),
@@ -1405,6 +1418,7 @@
       clientMode: 'web',
       allowWebcam: true,
       mediaMode: 'webrtc',
+      mainEventEnabled: false,
       sfuEnabled: false,
       sfuUrl: '',
       chatScopeRoom: '',
@@ -2599,15 +2613,20 @@
 
     function currentMediaMode() {
       const raw = String(state.mediaMode || 'webrtc').toLowerCase();
-      return raw === 'sfu' ? 'sfu' : 'webrtc';
+      return (raw === 'sfu' || raw === 'broadcast') ? raw : 'webrtc';
     }
 
     function isSfuMode() {
       return currentMediaMode() === 'sfu';
     }
 
+    function isBroadcastMode() {
+      return currentMediaMode() === 'broadcast';
+    }
+
     function applyMediaModeState(mode, persistControl) {
-      const clean = String(mode || 'webrtc').toLowerCase() === 'sfu' ? 'sfu' : 'webrtc';
+      const raw = String(mode || 'webrtc').toLowerCase();
+      const clean = (raw === 'sfu' || raw === 'broadcast') ? raw : 'webrtc';
       const prev = String(state.mediaMode || 'webrtc').toLowerCase();
       state.mediaMode = clean;
       if (prev === 'sfu' && clean !== 'sfu' && sfu.room) {
@@ -2621,6 +2640,42 @@
         if (persistControl) {
           els.mediaModeSelect.disabled = !!state.roomCode;
         }
+      }
+    }
+
+    function updateMediaModeGate() {
+      if (!els.mediaModeSelect) return;
+      const signedInAdmin = !!(state.adminToken && state.adminUsername);
+      const sfuOpt = Array.from(els.mediaModeSelect.options || []).find((o) => String(o.value) === 'sfu');
+      const broadcastOpt = Array.from(els.mediaModeSelect.options || []).find((o) => String(o.value) === 'broadcast');
+      if (sfuOpt) {
+        sfuOpt.disabled = !state.sfuEnabled || !hasTier('pro');
+        sfuOpt.textContent = hasTier('pro')
+          ? 'SFU Relay (Best for 40-50+)'
+          : 'SFU Relay (Pro donation tier)';
+      }
+      if (broadcastOpt) {
+        broadcastOpt.disabled = !signedInAdmin;
+        broadcastOpt.textContent = signedInAdmin
+          ? 'Broadcast (Admin Only, HLS/CDN)'
+          : 'Broadcast (Admin sign-in required)';
+      }
+      if (!signedInAdmin && !state.roomCode && currentMediaMode() === 'broadcast') {
+        applyMediaModeState('webrtc', false);
+      }
+    }
+
+    function renderMainEventState() {
+      const on = !!state.mainEventEnabled;
+      const signedInAdmin = !!(state.adminToken && state.adminUsername);
+      if (els.mainEventState) {
+        els.mainEventState.textContent = `Main Event: ${on ? 'ON' : 'OFF'}${signedInAdmin ? '' : ' (admin required)'}`;
+      }
+      if (els.macroMainEventBtn) {
+        els.macroMainEventBtn.disabled = !signedInAdmin || on;
+      }
+      if (els.macroMainEventOffBtn) {
+        els.macroMainEventOffBtn.disabled = !signedInAdmin || !on;
       }
     }
 
@@ -3630,11 +3685,11 @@
     }
 
     async function runHostMacro(kind) {
-      if (!state.isHost) {
+      const k = String(kind || '').toLowerCase();
+      if (k !== 'main_event' && !state.isHost) {
         setStatus(false, 'Only host can run macros.');
         return;
       }
-      const k = String(kind || '').toLowerCase();
       if (k === 'start') {
         await sendControl('set_access_mode', { accessMode: 'public' });
         await sendControl('set_webcam_policy', { allowWebcam: true });
@@ -3648,6 +3703,64 @@
         await sendControl('set_access_mode', { accessMode: 'closed' });
         await sendControl('chat', { message: 'Watch party is wrapping up. Thanks for joining.' });
         setStatus(true, 'Macro: Wrap Up applied.');
+      } else if (k === 'main_event') {
+        const signedInAdmin = !!(state.adminToken && state.adminUsername);
+        if (!signedInAdmin) {
+          throw new Error('Admin sign-in required for Main Event broadcast mode.');
+        }
+        state.mainEventEnabled = true;
+        renderMainEventState();
+        if (!state.roomCode) {
+          if (els.accessModeSelect) els.accessModeSelect.value = 'public';
+          if (els.mediaModeSelect) {
+            applyMediaModeState('broadcast', false);
+            els.mediaModeSelect.value = 'broadcast';
+          }
+          if (els.shareQualitySelect) els.shareQualitySelect.value = 'balanced';
+          if (els.movieQualitySelect) els.movieQualitySelect.value = 'high';
+          if (els.webcamPolicySelect) els.webcamPolicySelect.value = 'deny';
+          if (els.audioProfileSelect) els.audioProfileSelect.value = 'cinema';
+          if (els.titleInput && !String(els.titleInput.value || '').trim()) {
+            els.titleInput.value = 'Main Event Night';
+          }
+          setStatus(true, 'Main Event preset applied. Create room to launch Broadcast mode.');
+          switchTab('host');
+          setWizardStep(2);
+          return;
+        }
+        if (currentMediaMode() !== 'broadcast') {
+          throw new Error('Room is already live in non-broadcast mode. Start a new room for Main Event.');
+        }
+        if (state.isHost) {
+          await sendControl('set_access_mode', { accessMode: 'public' });
+          await sendControl('set_webcam_policy', { allowWebcam: false });
+          await sendControl('chat', { message: 'Main Event mode is live. Broadcast mode enabled for high audience scale.' });
+        }
+        setStatus(true, 'Main Event mode applied to current broadcast room.');
+      } else if (k === 'main_event_off') {
+        const signedInAdmin = !!(state.adminToken && state.adminUsername);
+        if (!signedInAdmin) {
+          throw new Error('Admin sign-in required to disable Main Event mode.');
+        }
+        state.mainEventEnabled = false;
+        renderMainEventState();
+        if (!state.roomCode) {
+          if (els.accessModeSelect) els.accessModeSelect.value = 'invite';
+          if (els.mediaModeSelect) {
+            applyMediaModeState('webrtc', false);
+            els.mediaModeSelect.value = 'webrtc';
+          }
+          if (els.shareQualitySelect) els.shareQualitySelect.value = 'high';
+          if (els.webcamPolicySelect) els.webcamPolicySelect.value = 'allow';
+          setStatus(true, 'Main Event preset disabled.');
+          return;
+        }
+        if (state.isHost) {
+          await sendControl('set_access_mode', { accessMode: 'invite' });
+          await sendControl('set_webcam_policy', { allowWebcam: true });
+          await sendControl('chat', { message: 'Main Event mode has been disabled by admin.' });
+        }
+        setStatus(true, 'Main Event mode disabled.');
       }
     }
 
@@ -3696,15 +3809,7 @@
       if (els.webcamQualitySelect && els.webcamQualitySelect.value === 'ultra' && !hasTier('supporter')) {
         els.webcamQualitySelect.value = 'high';
       }
-      if (els.mediaModeSelect) {
-        const sfuOpt = Array.from(els.mediaModeSelect.options || []).find((o) => String(o.value) === 'sfu');
-        if (sfuOpt) {
-          sfuOpt.disabled = !state.sfuEnabled || !hasTier('pro');
-          sfuOpt.textContent = hasTier('pro')
-            ? 'SFU Relay (Best for 40-50+)'
-            : 'SFU Relay (Pro donation tier)';
-        }
-      }
+      updateMediaModeGate();
       if (els.userBadge && isPremiumUser()) {
         els.userBadge.textContent = `Premium: ${state.userDisplayName || state.userEmail} · Tier: ${tier}`;
       }
@@ -3722,12 +3827,14 @@
       if (els.macroStartBtn) els.macroStartBtn.disabled = !premium;
       if (els.macroIntermissionBtn) els.macroIntermissionBtn.disabled = !premium;
       if (els.macroWrapBtn) els.macroWrapBtn.disabled = !premium;
+      if (!premium) state.mainEventEnabled = false;
       if (els.saveTemplateBtn) els.saveTemplateBtn.disabled = !premium;
       if (els.applyTemplateBtn) els.applyTemplateBtn.disabled = !premium;
       if (els.saveRoomBtn) els.saveRoomBtn.disabled = !premium;
       if (els.joinSavedRoomBtn) els.joinSavedRoomBtn.disabled = !premium;
       if (els.removeSavedRoomBtn) els.removeSavedRoomBtn.disabled = !premium;
       enforceDonationGates();
+      renderMainEventState();
     }
 
     function saveUserSession() {
@@ -3816,6 +3923,20 @@
       renderPremiumState();
       await refreshSavedRooms();
       setStatus(true, 'Premium account created.');
+    }
+
+    async function requestPasswordReset() {
+      const username = String((els.userEmailInput && els.userEmailInput.value) || '').trim().toLowerCase();
+      const help = `Account recovery is handled by admins in Discord.\nEmail: ${username || '(not provided)'}\nOpen Discord support now?`;
+      const open = window.confirm(help);
+      if (!open) {
+        setStatus(true, 'Account recovery is Discord/admin only.');
+        return;
+      }
+      try {
+        window.open('https://discord.gg/4uRUSAN498', '_blank', 'noopener');
+      } catch (_) {}
+      setStatus(true, 'Opened Discord support for account recovery.');
     }
 
     async function userLogout() {
@@ -4238,7 +4359,8 @@
         title: els.titleInput.value.trim(),
         mediaUrl: els.mediaInput.value.trim(),
         themeKey: selectedTheme,
-        mediaMode: String((els.mediaModeSelect && els.mediaModeSelect.value) || state.mediaMode || 'webrtc').toLowerCase() === 'sfu' ? 'sfu' : 'webrtc',
+        mediaMode: currentMediaMode(),
+        adminToken: String(state.adminToken || ''),
         accessMode: String((els.accessModeSelect && els.accessModeSelect.value) || 'public').trim().toLowerCase()
       };
       const data = await apiRequest('POST', '/api/watch/create', payload);
@@ -4344,6 +4466,8 @@
       els.adminToolsPanel.classList.toggle('hidden', !signedIn);
       if (els.adminRoomsBlock) els.adminRoomsBlock.classList.toggle('hidden', !signedIn);
       setEventsVisibility();
+      updateMediaModeGate();
+      renderMainEventState();
       if (adminRoomsTimer) {
         clearInterval(adminRoomsTimer);
         adminRoomsTimer = null;
@@ -5271,6 +5395,9 @@
     if (els.macroWrapBtn) {
       els.macroWrapBtn.addEventListener('click', async () => { try { await runHostMacro('wrap'); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); } });
     }
+    if (els.macroMainEventBtn) {
+      els.macroMainEventBtn.addEventListener('click', async () => { try { await runHostMacro('main_event'); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); } });
+    }
     if (els.saveTemplateBtn) {
       els.saveTemplateBtn.addEventListener('click', () => {
         const name = String(window.prompt('Template name') || '').trim();
@@ -5309,6 +5436,11 @@
     if (els.userRegisterBtn) {
       els.userRegisterBtn.addEventListener('click', async () => {
         try { await userRegister(); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
+      });
+    }
+    if (els.forgotPassBtn) {
+      els.forgotPassBtn.addEventListener('click', async () => {
+        try { await requestPasswordReset(); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
       });
     }
     if (els.userLogoutBtn) {
@@ -5480,9 +5612,14 @@
       if (els.clientModeSelect) {
         els.clientModeSelect.addEventListener('change', () => applyClientMode(els.clientModeSelect.value));
       }
-      if (els.openDesktopBtn) {
-        els.openDesktopBtn.addEventListener('click', () => openDesktopApp('open'));
-      }
+    if (els.openDesktopBtn) {
+      els.openDesktopBtn.addEventListener('click', () => openDesktopApp('open'));
+    }
+    if (els.downloadDesktopBtn) {
+      els.downloadDesktopBtn.addEventListener('click', () => {
+        setStatus(true, 'Opening Watch Party...');
+      });
+    }
       renderRecentRooms();
       try {
         const savedAdminKey = localStorage.getItem('telewatch_admin_key') || '';
