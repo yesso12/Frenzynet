@@ -938,14 +938,24 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     SELECT
                       r.room_code,
                       r.title,
+                      r.access_mode,
                       r.updated_at,
                       (
                         SELECT COUNT(*)
                         FROM watch_participants p
                         WHERE p.room_code=r.room_code AND p.last_seen_at >= datetime('now', '-20 minutes')
-                      ) AS active_count
+                      ) AS active_count,
+                      (
+                        SELECT p.display_name
+                        FROM watch_participants p
+                        WHERE p.room_code=r.room_code
+                          AND p.is_host=1
+                          AND p.last_seen_at >= datetime('now', '-30 minutes')
+                        ORDER BY p.created_at ASC
+                        LIMIT 1
+                      ) AS host_name
                     FROM watch_rooms r
-                    ORDER BY r.updated_at DESC
+                    ORDER BY active_count DESC, r.updated_at DESC
                     LIMIT 120
                     '''
                 ).fetchall()
@@ -958,8 +968,11 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                         {
                             'roomCode': r['room_code'],
                             'title': r['title'] or '',
+                            'accessMode': str(r['access_mode'] or 'public').strip().lower(),
                             'updatedAt': r['updated_at'],
                             'activeCount': int(r['active_count'] or 0),
+                            'hostName': str(r['host_name'] or '').strip(),
+                            'isActive': bool(int(r['active_count'] or 0) > 0),
                         }
                         for r in rows
                     ],

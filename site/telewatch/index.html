@@ -487,6 +487,27 @@
       color: #0e6b42;
     }
     .adv-wrap.hidden { display: none; }
+    details.dropdown {
+      border: 1px solid var(--line-soft);
+      border-radius: 10px;
+      background: var(--panel-2);
+      padding: 8px;
+    }
+    details.dropdown > summary {
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text);
+      list-style: none;
+    }
+    details.dropdown > summary::-webkit-details-marker { display: none; }
+    .admin-room-meta {
+      display: grid;
+      gap: 4px;
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 6px;
+    }
     @media (max-width: 1080px) {
       .workspace { grid-template-columns: 1fr; }
       .duo { grid-template-columns: 1fr; }
@@ -665,6 +686,13 @@
               <div id="webcamStatus" class="muted">Webcam: off</div>
               <div id="shareSourceInfo" class="muted">Selected share source: none</div>
               <div id="shareAudioInfo" class="muted">Selected share audio: none</div>
+              <details class="dropdown">
+                <summary>Host Preview (What Viewers See)</summary>
+                <div class="stack" style="margin-top:8px">
+                  <div id="hostPreviewInfo" class="muted">Preview source: none</div>
+                  <video id="hostPreview" playsinline autoplay muted class="hidden-media"></video>
+                </div>
+              </details>
               <div class="row">
                 <select id="webcamPolicySelect">
                   <option value="allow">Allow participant webcams</option>
@@ -830,8 +858,9 @@
             <h3>Admin Console</h3>
             <div class="muted">Open the dedicated admin dashboard for room deletes and account management.</div>
             <div id="adminRoomsBlock" class="hidden" style="margin-top:8px">
-              <label for="adminRoomsSelect">Admin Room Codes</label>
+              <label for="adminRoomsSelect">Active Rooms (Auto-detected)</label>
               <select id="adminRoomsSelect"></select>
+              <div id="adminRoomsMeta" class="admin-room-meta"></div>
               <div class="row" style="margin-top:8px">
                 <button id="copyAdminRoomBtn" class="secondary">Copy Code</button>
               </div>
@@ -892,6 +921,8 @@
       webcamStatus: document.getElementById('webcamStatus'),
       shareSourceInfo: document.getElementById('shareSourceInfo'),
       shareAudioInfo: document.getElementById('shareAudioInfo'),
+      hostPreviewInfo: document.getElementById('hostPreviewInfo'),
+      hostPreview: document.getElementById('hostPreview'),
       shareQualitySelect: document.getElementById('shareQualitySelect'),
       webcamPolicySelect: document.getElementById('webcamPolicySelect'),
       setWebcamPolicyBtn: document.getElementById('setWebcamPolicyBtn'),
@@ -941,6 +972,7 @@
       openPartiesList: document.getElementById('openPartiesList'),
       adminRoomsBlock: document.getElementById('adminRoomsBlock'),
       adminRoomsSelect: document.getElementById('adminRoomsSelect'),
+      adminRoomsMeta: document.getElementById('adminRoomsMeta'),
       copyAdminRoomBtn: document.getElementById('copyAdminRoomBtn'),
       nowTitle: document.getElementById('nowTitle'),
       reactionOverlay: document.getElementById('reactionOverlay'),
@@ -1477,6 +1509,7 @@
       camOfferedTo: new Set()
     };
     let openPartyTimer = null;
+    let adminRoomsTimer = null;
     let desktopFallbackTimer = null;
 
     function qp(name) {
@@ -1533,6 +1566,37 @@
     function setStatus(ok, text) {
       els.connState.className = 'count-pill ' + (ok ? 'status-online' : 'status-warn');
       els.connState.textContent = text;
+    }
+
+    function updateHostPreview() {
+      if (!els.hostPreview || !els.hostPreviewInfo) return;
+      if (!state.isHost || !state.roomCode) {
+        try { els.hostPreview.srcObject = null; } catch (_) {}
+        els.hostPreview.removeAttribute('src');
+        els.hostPreview.classList.add('hidden-media');
+        els.hostPreviewInfo.textContent = 'Preview source: host only';
+        return;
+      }
+      if (rtc.localScreenStream) {
+        els.hostPreview.srcObject = rtc.localScreenStream;
+        els.hostPreview.classList.remove('hidden-media');
+        els.hostPreviewInfo.textContent = 'Preview source: live screen share';
+        els.hostPreview.play().catch(() => {});
+        return;
+      }
+      const mediaUrl = String((els.player && els.player.src) || '').trim();
+      if (mediaUrl) {
+        try { els.hostPreview.srcObject = null; } catch (_) {}
+        els.hostPreview.src = mediaUrl;
+        els.hostPreview.classList.remove('hidden-media');
+        els.hostPreviewInfo.textContent = 'Preview source: media URL player';
+        els.hostPreview.play().catch(() => {});
+        return;
+      }
+      try { els.hostPreview.srcObject = null; } catch (_) {}
+      els.hostPreview.removeAttribute('src');
+      els.hostPreview.classList.add('hidden-media');
+      els.hostPreviewInfo.textContent = 'Preview source: none';
     }
 
     function setSyncLabel(text) {
@@ -2313,22 +2377,42 @@
       if (!(state.adminToken && state.adminUsername)) return;
       const data = await apiRequest('POST', '/api/watch/admin/rooms', { adminToken: state.adminToken });
       const rooms = Array.isArray(data.rooms) ? data.rooms : [];
-      state.adminRooms = rooms;
+      const activeRooms = rooms.filter((r) => !!r && Number(r.activeCount || 0) > 0);
+      state.adminRooms = activeRooms;
       if (!els.adminRoomsSelect || !els.adminRoomsBlock) return;
       els.adminRoomsBlock.classList.remove('hidden');
       els.adminRoomsSelect.innerHTML = '';
-      for (const r of rooms) {
+      for (const r of activeRooms) {
         const o = document.createElement('option');
         o.value = r.roomCode;
-        o.textContent = `${r.roomCode} (${r.activeCount}) ${r.title ? '- ' + r.title : ''}`;
+        const hostName = String(r.hostName || '').trim() || 'No active host';
+        const accessLabel = String(r.accessMode || 'public');
+        o.textContent = `${r.roomCode} · ${r.activeCount} live · Host: ${hostName} · ${accessLabel}`;
         els.adminRoomsSelect.appendChild(o);
       }
-      if (!rooms.length) {
+      if (!activeRooms.length) {
         const o = document.createElement('option');
         o.value = '';
-        o.textContent = 'No rooms found';
+        o.textContent = 'No active rooms right now';
         els.adminRoomsSelect.appendChild(o);
       }
+      renderAdminRoomMeta();
+    }
+
+    function renderAdminRoomMeta() {
+      if (!els.adminRoomsMeta || !els.adminRoomsSelect) return;
+      const selectedCode = String((els.adminRoomsSelect && els.adminRoomsSelect.value) || '').trim();
+      const selectedRoom = (state.adminRooms || []).find((r) => String(r.roomCode || '') === selectedCode) || (state.adminRooms || [])[0] || null;
+      if (!selectedRoom) {
+        els.adminRoomsMeta.innerHTML = '<div>Active rooms: 0</div>';
+        return;
+      }
+      els.adminRoomsMeta.innerHTML = `
+        <div>Host: ${String(selectedRoom.hostName || 'No active host')}</div>
+        <div>Title: ${String(selectedRoom.title || 'Untitled')}</div>
+        <div>Participants: ${Number(selectedRoom.activeCount || 0)}</div>
+        <div>Access: ${String(selectedRoom.accessMode || 'public')}</div>
+      `;
     }
 
     function screenShareHelpMessage(err) {
@@ -2673,6 +2757,7 @@
       }
       await broadcastOffersToViewers();
       updateMediaVisibility();
+      updateHostPreview();
     }
 
     async function stopScreenShare() {
@@ -2693,6 +2778,7 @@
       if (els.shareSourceInfo) els.shareSourceInfo.textContent = 'Selected share source: none';
       if (els.shareAudioInfo) els.shareAudioInfo.textContent = 'Selected share audio: none';
       updateMediaVisibility();
+      updateHostPreview();
     }
 
     async function processSignal(payload) {
@@ -2829,6 +2915,15 @@
       els.adminToolsPanel.classList.toggle('hidden', !signedIn);
       if (els.adminRoomsBlock) els.adminRoomsBlock.classList.toggle('hidden', !signedIn);
       setEventsVisibility();
+      if (adminRoomsTimer) {
+        clearInterval(adminRoomsTimer);
+        adminRoomsTimer = null;
+      }
+      if (signedIn) {
+        adminRoomsTimer = setInterval(() => {
+          refreshAdminRooms().catch(() => {});
+        }, 10000);
+      }
     }
 
     function saveAdminSession() {
@@ -2958,6 +3053,7 @@
       stopPollingLoop();
       saveSession();
       updateMediaVisibility();
+      updateHostPreview();
       startPollingLoop();
     }
 
@@ -3019,6 +3115,7 @@
           state.suppressOutbound = false;
         }
       }
+      updateHostPreview();
     }
 
     async function setupMedia() {
@@ -3028,6 +3125,7 @@
         title: els.titleInput.value.trim()
       });
       setSyncLabel('media updated');
+      updateHostPreview();
     }
 
     async function sendChat() {
@@ -3363,16 +3461,21 @@
         try { await resolveJoinRequest('denied'); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
       });
     }
-    if (els.copyAdminRoomBtn) {
-      els.copyAdminRoomBtn.addEventListener('click', async () => {
-        const code = String((els.adminRoomsSelect && els.adminRoomsSelect.value) || '').trim();
-        if (!code) return;
+      if (els.copyAdminRoomBtn) {
+        els.copyAdminRoomBtn.addEventListener('click', async () => {
+          const code = String((els.adminRoomsSelect && els.adminRoomsSelect.value) || '').trim();
+          if (!code) return;
         try {
           await navigator.clipboard.writeText(code);
           setStatus(true, 'Copied room code: ' + code);
         } catch (_) {
           setStatus(true, 'Room code: ' + code);
         }
+      });
+    }
+    if (els.adminRoomsSelect) {
+      els.adminRoomsSelect.addEventListener('change', () => {
+        renderAdminRoomMeta();
       });
     }
     if (els.sendRequestBtn) {
