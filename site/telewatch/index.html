@@ -3,6 +3,9 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
   <title>Frenzy Telewatch | Synced Watch Rooms</title>
   <style>
     :root {
@@ -395,11 +398,31 @@
       display: grid;
       gap: 10px;
     }
+    .family-lounge {
+      border: 1px solid var(--line-soft);
+      border-radius: 12px;
+      background: color-mix(in srgb, var(--panel-2) 92%, #ffffff 8%);
+      padding: 10px;
+      display: grid;
+      gap: 8px;
+    }
     .duo {
       display: grid;
       grid-template-columns: 1fr 330px;
       gap: 10px;
       align-items: start;
+    }
+    .community-layout {
+      grid-template-columns: 1fr;
+    }
+    .community-chat-panel {
+      grid-column: 1 / -1;
+      min-height: 560px;
+      grid-template-rows: auto auto auto minmax(320px, 1fr) auto;
+      width: 100%;
+    }
+    .community-layout .admin-delete {
+      max-width: 100%;
     }
     .scene-board {
       display: grid;
@@ -447,9 +470,9 @@
     .events div { padding: 3px 0; border-bottom: 1px dashed #d6dfe9; }
     .events div:last-child { border-bottom: 0; }
     .message-center {
-      border: 1px solid var(--line-soft);
-      border-radius: 12px;
-      background: linear-gradient(180deg, #f9fbff, #f4f8ff);
+      border: 1px solid #2f3c52;
+      border-radius: 14px;
+      background: linear-gradient(180deg, #1f2633, #1a202b);
       padding: 10px;
       display: grid;
       gap: 8px;
@@ -461,49 +484,107 @@
       gap: 8px;
       flex-wrap: wrap;
     }
-    .message-top .muted { margin: 0; }
+    .message-top h3 {
+      margin: 0;
+      text-transform: none;
+      letter-spacing: 0.01em;
+      font-size: 18px;
+      color: #eef4ff;
+    }
+    .message-top .muted { margin: 0; color: #a7bad8; }
     .chat-count {
       font-size: 11px;
       font-weight: 700;
-      color: #486286;
-      border: 1px solid #cfe0f7;
-      background: #eef5ff;
+      color: #d2ddf1;
+      border: 1px solid #3f5476;
+      background: #27364c;
       border-radius: 999px;
       padding: 3px 9px;
     }
     .pinned-box {
-      border: 1px solid #ffd5bf;
-      background: #fff7f1;
-      color: #5a2f1c;
+      border: 1px solid #53688f;
+      background: #27344a;
+      color: #eaf1ff;
       border-radius: 10px;
       padding: 8px 10px;
       font-size: 13px;
     }
     .chat-feed {
-      max-height: 260px;
+      max-height: none;
+      min-height: 340px;
+      height: clamp(420px, 54vh, 680px);
       overflow: auto;
-      border: 1px solid #d7e3f3;
-      border-radius: 10px;
-      padding: 8px;
+      overflow-x: hidden;
+      border: 1px solid #37485f;
+      border-radius: 12px;
+      padding: 10px;
       font-size: 13px;
       line-height: 1.45;
-      background: #ffffff;
+      background: #121923;
       display: grid;
-      gap: 7px;
+      gap: 8px;
+      align-content: start;
+      scrollbar-width: auto;
+      scrollbar-color: #5f7faa #1a2432;
     }
-    .msg-line { display: grid; gap: 1px; }
+    .chat-feed::-webkit-scrollbar {
+      width: 12px;
+    }
+    .chat-feed::-webkit-scrollbar-track {
+      background: #1a2432;
+      border-radius: 10px;
+    }
+    .chat-feed::-webkit-scrollbar-thumb {
+      background: #5f7faa;
+      border-radius: 10px;
+      border: 2px solid #1a2432;
+    }
+    .msg-line {
+      display: grid;
+      grid-template-columns: 34px minmax(0, 1fr);
+      gap: 8px;
+      align-items: start;
+    }
+    .msg-line.mine {
+      grid-template-columns: minmax(0, 1fr) 34px;
+    }
     .chat-feed .msg-line {
-      border: 1px solid #e0e9f4;
-      border-radius: 9px;
-      background: #f9fbff;
-      padding: 6px 8px;
+      border: 0;
+      background: transparent;
+      padding: 0;
+      box-shadow: none;
     }
     .msg-line[data-pinned="true"] {
-      border-color: #ffb184;
-      background: #fff2e8;
+      filter: saturate(1.05);
     }
-    .msg-head { font-size: 11px; color: #6f7d8f; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-    .msg-body { font-size: 13px; color: #1d2a39; word-break: break-word; }
+    .msg-avatar {
+      width: 34px;
+      height: 34px;
+      border-radius: 999px;
+      border: 1px solid #4d6388;
+      background: #24324a;
+      color: #dbe8ff;
+      display: grid;
+      place-items: center;
+      font-size: 12px;
+      font-weight: 800;
+      user-select: none;
+    }
+    .msg-card {
+      border: 1px solid #30445f;
+      border-radius: 12px;
+      background: #1e2a3d;
+      padding: 8px 10px;
+      display: grid;
+      gap: 4px;
+    }
+    .msg-line.mine .msg-card {
+      background: #304f7e;
+      border-color: #3f66a0;
+    }
+    .msg-head { font-size: 11px; color: #a8bbd8; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .msg-line.mine .msg-head { color: #d9e7ff; }
+    .msg-body { font-size: 13px; color: #eef4ff; word-break: break-word; }
     .msg-actions {
       display: flex;
       gap: 6px;
@@ -511,19 +592,19 @@
       margin-top: 4px;
     }
     .msg-pill {
-      border: 1px solid var(--input-line);
+      border: 1px solid #58709b;
       border-radius: 999px;
       padding: 2px 8px;
       font-size: 11px;
-      background: var(--input-bg);
-      color: var(--text);
+      background: #24344c;
+      color: #d7e5ff;
       cursor: pointer;
       user-select: none;
     }
     .msg-pill.active {
-      border-color: var(--accent);
-      color: var(--accent-strong);
-      background: var(--tab-active-bg);
+      border-color: #8fb6ff;
+      color: #fff;
+      background: #365687;
     }
     .chat-compose {
       display: grid;
@@ -534,6 +615,9 @@
     .chat-compose textarea {
       min-height: 56px;
       margin: 0;
+      background: #121b29;
+      border-color: #3c506f;
+      color: #eff5ff;
     }
     .chat-compose button {
       height: fit-content;
@@ -569,7 +653,7 @@
     .webcam-grid {
       display: grid;
       gap: 8px;
-      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
     }
     .webcam-tile {
       border: 1px solid var(--line-soft);
@@ -580,8 +664,52 @@
       gap: 6px;
     }
     .webcam-tile video {
-      max-height: 130px;
+      min-height: 140px;
+      max-height: 220px;
+      object-fit: cover;
       border-radius: 8px;
+    }
+    .media-device-panel {
+      border: 1px solid var(--line-soft);
+      background: var(--panel-2);
+      border-radius: 10px;
+      padding: 8px;
+      display: grid;
+      gap: 8px;
+    }
+    .webcam-stage {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: minmax(220px, 340px) minmax(0, 1fr);
+      align-items: start;
+    }
+    .webcam-stage-box {
+      border: 1px solid var(--line-soft);
+      border-radius: 10px;
+      background: var(--panel-2);
+      padding: 8px;
+    }
+    .webcam-stage-label {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--muted);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    .webcam-stage-local video {
+      width: 100%;
+      min-height: 180px;
+      max-height: 300px;
+      object-fit: cover;
+      border-radius: 8px;
+    }
+    .host-options-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
     }
     .webcam-label {
       font-size: 11px;
@@ -741,6 +869,7 @@
       .row > * { min-width: 100px; }
       .host-grid { grid-template-columns: 1fr; }
       .sidebar { max-height: none; }
+      .webcam-stage { grid-template-columns: 1fr; }
     }
     @media (max-width: 760px) {
       .wrap { width: min(100%, calc(100% - 12px)); margin: 10px auto 18px; }
@@ -829,7 +958,7 @@
             </select>
           </div>
         </div>
-        <div class="side-block" data-advanced-ui="true">
+        <div class="side-block" data-advanced-ui="true" data-host-only="true">
           <h3>Host Macros</h3>
           <div class="side-controls">
             <button id="macroStartBtn" class="secondary">Start Party</button>
@@ -840,7 +969,7 @@
             <div id="mainEventState" class="muted">Main Event: OFF</div>
           </div>
         </div>
-        <div class="side-block" data-advanced-ui="true">
+        <div class="side-block" data-advanced-ui="true" data-host-only="true">
           <h3>Room Templates</h3>
           <div class="side-controls">
             <select id="templateSelect"></select>
@@ -866,7 +995,7 @@
         <h2>Control Panel</h2>
         <div class="panel-tabs">
           <button class="tab-btn active" data-tab-btn="session">Session</button>
-          <button class="tab-btn" data-tab-btn="host">Host Setup</button>
+          <button class="tab-btn" data-tab-btn="host" data-host-only="true">Host Setup</button>
           <button class="tab-btn" data-tab-btn="chat">Messages</button>
           <button class="tab-btn" data-tab-btn="admin" data-advanced-ui="true">Admin</button>
         </div>
@@ -912,7 +1041,12 @@
           </div>
         </div>
 
-        <div class="tab-pane" data-tab-pane="host">
+        <div class="tab-pane" data-tab-pane="host" id="hostTabPane">
+          <div class="host-options-head">
+            <div class="muted">Host controls are only shown to the active room host.</div>
+            <button id="hostOptionsToggleBtn" class="secondary" style="width:auto">Minimize Host Options</button>
+          </div>
+          <div id="hostOptionsWrap">
           <div class="block stack">
             <h3>Host Setup</h3>
             <div class="host-grid">
@@ -1031,46 +1165,6 @@
               <button id="deleteRoomBtn" class="secondary full">Delete Room</button>
             </div>
             <div class="block stack full">
-              <h3>Voice Chat</h3>
-              <div id="voiceStatus" class="muted">Voice: off</div>
-              <div id="webcamStatus" class="muted">Webcam: off</div>
-              <div id="shareSourceInfo" class="muted">Selected share source: none</div>
-              <div id="shareAudioInfo" class="muted">Selected share audio: none</div>
-              <details class="dropdown">
-                <summary>Host Preview (What Viewers See)</summary>
-                <div class="stack" style="margin-top:8px">
-                  <div id="hostPreviewInfo" class="muted">Preview source: none</div>
-                  <video id="hostPreview" playsinline autoplay muted class="hidden-media"></video>
-                </div>
-              </details>
-              <div class="row">
-                <select id="webcamPolicySelect">
-                  <option value="allow">Allow participant webcams</option>
-                  <option value="deny">Block participant webcams</option>
-                </select>
-                <button id="setWebcamPolicyBtn" class="secondary">Apply Webcam Policy</button>
-              </div>
-              <div class="row">
-                <button id="joinVoiceBtn" class="secondary">Join Voice</button>
-                <button id="leaveVoiceBtn" class="secondary" disabled>Leave Voice</button>
-              </div>
-              <div class="row">
-                <button id="startWebcamBtn" class="secondary">Start Webcam</button>
-                <button id="stopWebcamBtn" class="secondary" disabled>Stop Webcam</button>
-              </div>
-              <video id="localWebcamPreview" playsinline autoplay muted class="hidden-media"></video>
-              <div id="remoteWebcamGrid" class="webcam-grid hidden-media"></div>
-              <div class="row">
-                <select id="muteTargetSelect"></select>
-                <button id="muteTargetBtn" class="secondary">Mute</button>
-                <button id="unmuteTargetBtn" class="secondary">Unmute</button>
-              </div>
-              <div class="row">
-                <select id="kickTargetSelect"></select>
-                <button id="kickTargetBtn" class="danger-btn">Kick User</button>
-              </div>
-            </div>
-            <div class="block stack full">
               <h3>Join Requests (Invite Only)</h3>
               <select id="joinRequestSelect"></select>
               <div class="row">
@@ -1088,6 +1182,7 @@
               </div>
             </div>
           </div>
+        </div>
         </div>
 
         <div class="tab-pane" data-tab-pane="chat">
@@ -1236,6 +1331,86 @@
                 <div id="reactionOverlay" class="reaction-overlay"></div>
               </div>
               <video id="screenView" controls autoplay playsinline muted></video>
+              <div class="family-lounge">
+                <h3 style="margin:0">Family Lounge Voice + Webcam</h3>
+                <div id="voiceStatus" class="muted">Voice: off</div>
+                <div id="webcamStatus" class="muted">Webcam: off</div>
+                <div id="shareSourceInfo" class="muted">Selected share source: none</div>
+                <div id="shareAudioInfo" class="muted">Selected share audio: none</div>
+                <div class="media-device-panel">
+                  <div class="row">
+                    <div>
+                      <label for="micDeviceSelect">Microphone</label>
+                      <select id="micDeviceSelect"></select>
+                    </div>
+                    <div>
+                      <label for="camDeviceSelect">Webcam</label>
+                      <select id="camDeviceSelect"></select>
+                    </div>
+                  </div>
+                  <div class="row">
+                    <div>
+                      <label for="voiceQualitySelect">Voice Quality</label>
+                      <select id="voiceQualitySelect">
+                        <option value="voice">Voice Clear (Noise Reduction)</option>
+                        <option value="cinema">Studio Wide (High Fidelity)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label for="liveWebcamQualitySelect">Webcam Quality</label>
+                      <select id="liveWebcamQualitySelect">
+                        <option value="high">High (1080p)</option>
+                        <option value="ultra">Ultra (1440p)</option>
+                        <option value="balanced">Balanced (720p)</option>
+                      </select>
+                    </div>
+                    <div style="align-self:end">
+                      <button id="refreshDevicesBtn" class="secondary">Refresh Devices</button>
+                    </div>
+                  </div>
+                </div>
+                <details class="dropdown" data-host-only="true">
+                  <summary>Host Preview (What Viewers See)</summary>
+                  <div class="stack" style="margin-top:8px">
+                    <div id="hostPreviewInfo" class="muted">Preview source: none</div>
+                    <video id="hostPreview" playsinline autoplay muted class="hidden-media"></video>
+                  </div>
+                </details>
+                <div class="row" data-host-only="true">
+                  <select id="webcamPolicySelect">
+                    <option value="allow">Allow participant webcams</option>
+                    <option value="deny">Block participant webcams</option>
+                  </select>
+                  <button id="setWebcamPolicyBtn" class="secondary">Apply Webcam Policy</button>
+                </div>
+                <div class="row">
+                  <button id="joinVoiceBtn" class="secondary">Join Voice</button>
+                  <button id="leaveVoiceBtn" class="secondary" disabled>Leave Voice</button>
+                </div>
+                <div class="row">
+                  <button id="startWebcamBtn" class="secondary">Start Webcam</button>
+                  <button id="stopWebcamBtn" class="secondary" disabled>Stop Webcam</button>
+                </div>
+                <div class="webcam-stage">
+                  <div class="webcam-stage-box webcam-stage-local">
+                    <div class="webcam-stage-label">Your Webcam</div>
+                    <video id="localWebcamPreview" playsinline autoplay muted class="hidden-media"></video>
+                  </div>
+                  <div class="webcam-stage-box">
+                    <div class="webcam-stage-label">Family Webcam Grid</div>
+                    <div id="remoteWebcamGrid" class="webcam-grid hidden-media"></div>
+                  </div>
+                </div>
+                <div class="row" data-host-only="true">
+                  <select id="muteTargetSelect"></select>
+                  <button id="muteTargetBtn" class="secondary">Mute</button>
+                  <button id="unmuteTargetBtn" class="secondary">Unmute</button>
+                </div>
+                <div class="row" data-host-only="true">
+                  <select id="kickTargetSelect"></select>
+                  <button id="kickTargetBtn" class="danger-btn">Kick User</button>
+                </div>
+              </div>
               <div class="reaction-bar">
                 <button class="reaction-btn" data-react="🔥">🔥</button>
                 <button class="reaction-btn" data-react="😂">😂</button>
@@ -1253,23 +1428,10 @@
 
           <div class="scene-card" data-scene-card="community" draggable="true">
             <div class="scene-head">Community <span class="drag-handle">Drag</span></div>
-            <div class="duo">
+            <div class="duo community-layout">
               <div class="block stack">
                 <h3>Participants</h3>
                 <div id="participantsGrid" class="participants-grid"></div>
-                <div class="message-center">
-                  <div class="message-top">
-                    <h3 style="margin:0">Room Messages</h3>
-                    <span id="chatCount" class="chat-count">0 messages</span>
-                  </div>
-                  <div class="muted">Room-only chat. Newest messages appear first.</div>
-                  <div id="pinnedChat" class="pinned-box">No pinned message</div>
-                  <div id="chatFeed" class="chat-feed"></div>
-                  <div class="chat-compose">
-                    <textarea id="chatInput" placeholder="Send a message or timestamp note, e.g. pause at 12:34"></textarea>
-                    <button id="chatBtn" class="secondary">Send</button>
-                  </div>
-                </div>
                 <div id="eventsBlock" data-advanced-ui="true">
                   <h3>Events</h3>
                   <div class="muted">Playback and system events for this room.</div>
@@ -1290,6 +1452,19 @@
                 <div style="height:8px"></div>
                 <a href="/telewatch/admin/" id="openAdminConsole">Open Admin Console</a>
               </div>
+              <div class="message-center community-chat-panel">
+                <div class="message-top">
+                  <h3>Room Messages</h3>
+                  <span id="chatCount" class="chat-count">0 messages</span>
+                </div>
+                <div class="muted">Room-only live chat.</div>
+                <div id="pinnedChat" class="pinned-box">No pinned message</div>
+                <div id="chatFeed" class="chat-feed"></div>
+                <div class="chat-compose">
+                  <textarea id="chatInput" placeholder="Message the room..."></textarea>
+                  <button id="chatBtn" class="secondary">Send</button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1304,7 +1479,11 @@
 
   <script defer src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
   <script>
-    const API_PREFIXES = ['https://api.frenzynets.com/api/telewatch'];
+    const API_PREFIXES = [
+      'https://api.frenzynets.com',
+      '/api/telewatch',
+      'https://api.frenzynets.com/api/telewatch'
+    ];
     const POLL_RETRY_MS = 1200;
     const LONG_POLL_WAIT_MS = 20000;
     const RTC_CFG = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
@@ -1382,10 +1561,18 @@
       mediaInput: document.getElementById('mediaInput'),
       advancedToggleBtn: document.getElementById('advancedToggleBtn'),
       advancedWrap: document.getElementById('advancedWrap'),
+      hostTabPane: document.getElementById('hostTabPane'),
+      hostOptionsWrap: document.getElementById('hostOptionsWrap'),
+      hostOptionsToggleBtn: document.getElementById('hostOptionsToggleBtn'),
       joinVoiceBtn: document.getElementById('joinVoiceBtn'),
       leaveVoiceBtn: document.getElementById('leaveVoiceBtn'),
       voiceStatus: document.getElementById('voiceStatus'),
       webcamStatus: document.getElementById('webcamStatus'),
+      micDeviceSelect: document.getElementById('micDeviceSelect'),
+      camDeviceSelect: document.getElementById('camDeviceSelect'),
+      refreshDevicesBtn: document.getElementById('refreshDevicesBtn'),
+      voiceQualitySelect: document.getElementById('voiceQualitySelect'),
+      liveWebcamQualitySelect: document.getElementById('liveWebcamQualitySelect'),
       shareSourceInfo: document.getElementById('shareSourceInfo'),
       shareAudioInfo: document.getElementById('shareAudioInfo'),
       hostPreviewInfo: document.getElementById('hostPreviewInfo'),
@@ -1514,8 +1701,10 @@
       cohostPerms: { kick: true, mute: true, access: true, pin: true },
       layoutMode: 'standard',
       densityMode: 'comfortable',
-      uiMode: 'easy'
-      ,
+      uiMode: 'easy',
+      hostOptionsMinimized: false,
+      preferredMicId: '',
+      preferredCamId: '',
       userToken: '',
       userEmail: '',
       userDisplayName: '',
@@ -1535,6 +1724,9 @@
     const ROOM_TEMPLATE_KEY = 'telewatch_room_templates_v1';
     const USER_SESSION_KEY = 'telewatch_user_session_v1';
     const UI_MODE_KEY = 'telewatch_ui_mode';
+    const HOST_OPTIONS_MIN_KEY = 'telewatch_host_options_min';
+    const MIC_DEVICE_KEY = 'telewatch_mic_device_id';
+    const CAM_DEVICE_KEY = 'telewatch_cam_device_id';
     const ROOM_CAPACITY_LIMIT = 50;
 
     const THEMES = {
@@ -2941,8 +3133,14 @@
         const camLabel = camOn() ? 'Webcam on' : 'Webcam off';
         els.sideVoice.textContent = `${voiceLabel} · ${camLabel}`;
       }
-      if (els.joinVoiceBtn) els.joinVoiceBtn.disabled = voiceOn();
+      const inRoom = !!(state.roomCode && state.participantToken);
+      if (els.joinVoiceBtn) els.joinVoiceBtn.disabled = voiceOn() || !inRoom;
       if (els.leaveVoiceBtn) els.leaveVoiceBtn.disabled = !voiceOn();
+      if (els.micDeviceSelect) els.micDeviceSelect.disabled = false;
+      if (els.camDeviceSelect) els.camDeviceSelect.disabled = false;
+      if (els.refreshDevicesBtn) els.refreshDevicesBtn.disabled = false;
+      if (els.voiceQualitySelect) els.voiceQualitySelect.disabled = false;
+      if (els.liveWebcamQualitySelect) els.liveWebcamQualitySelect.disabled = false;
       const hostCanModerate = !!state.isHost;
       if (els.muteTargetBtn) els.muteTargetBtn.disabled = !hostCanModerate;
       if (els.unmuteTargetBtn) els.unmuteTargetBtn.disabled = !hostCanModerate;
@@ -2964,7 +3162,7 @@
       if (els.startWebcamBtn) els.startWebcamBtn.disabled = !canUseWebcam || camOn();
       if (els.stopWebcamBtn) els.stopWebcamBtn.disabled = !camOn();
       if (els.remoteWebcamGrid) {
-        els.remoteWebcamGrid.classList.toggle('hidden-media', !state.isHost || rtc.camEls.size < 1);
+        els.remoteWebcamGrid.classList.toggle('hidden-media', rtc.camEls.size < 1);
       }
     }
 
@@ -2979,7 +3177,7 @@
     }
 
     function getAudioProfile() {
-      const mode = String((els.audioProfileSelect && els.audioProfileSelect.value) || 'cinema').toLowerCase();
+      const mode = String((els.voiceQualitySelect && els.voiceQualitySelect.value) || (els.audioProfileSelect && els.audioProfileSelect.value) || 'cinema').toLowerCase();
       if (mode === 'voice') {
         return {
           constraints: {
@@ -3004,6 +3202,110 @@
         voiceBitrate: 256000,
         streamAudioBitrate: 384000,
       };
+    }
+
+    function syncQualitySelectors() {
+      const voiceMode = String((els.voiceQualitySelect && els.voiceQualitySelect.value) || (els.audioProfileSelect && els.audioProfileSelect.value) || 'cinema').toLowerCase();
+      if (els.voiceQualitySelect) els.voiceQualitySelect.value = voiceMode;
+      if (els.audioProfileSelect) els.audioProfileSelect.value = voiceMode;
+      const camMode = String((els.liveWebcamQualitySelect && els.liveWebcamQualitySelect.value) || (els.webcamQualitySelect && els.webcamQualitySelect.value) || 'high').toLowerCase();
+      if (els.liveWebcamQualitySelect) els.liveWebcamQualitySelect.value = camMode;
+      if (els.webcamQualitySelect) els.webcamQualitySelect.value = camMode;
+    }
+
+    function loadPreferredMediaDevices() {
+      try { state.preferredMicId = String(localStorage.getItem(MIC_DEVICE_KEY) || '').trim(); } catch (_) {}
+      try { state.preferredCamId = String(localStorage.getItem(CAM_DEVICE_KEY) || '').trim(); } catch (_) {}
+    }
+
+    function persistPreferredMediaDevices() {
+      try {
+        if (state.preferredMicId) localStorage.setItem(MIC_DEVICE_KEY, state.preferredMicId);
+        else localStorage.removeItem(MIC_DEVICE_KEY);
+      } catch (_) {}
+      try {
+        if (state.preferredCamId) localStorage.setItem(CAM_DEVICE_KEY, state.preferredCamId);
+        else localStorage.removeItem(CAM_DEVICE_KEY);
+      } catch (_) {}
+    }
+
+    function renderDeviceSelect(selectEl, rows, preferred, fallbackLabel) {
+      if (!selectEl) return '';
+      selectEl.innerHTML = '';
+      if (!rows.length) {
+        const o = document.createElement('option');
+        o.value = '';
+        o.textContent = fallbackLabel + ' unavailable';
+        selectEl.appendChild(o);
+        return '';
+      }
+      let picked = '';
+      let idx = 0;
+      for (const d of rows) {
+        idx += 1;
+        const o = document.createElement('option');
+        o.value = String(d.deviceId || '');
+        o.textContent = String(d.label || `${fallbackLabel} ${idx}`);
+        selectEl.appendChild(o);
+        if (!picked && preferred && o.value === preferred) picked = o.value;
+      }
+      if (!picked) picked = String(rows[0].deviceId || '');
+      selectEl.value = picked;
+      return picked;
+    }
+
+    async function refreshDeviceLists() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+      try {
+        const rows = await navigator.mediaDevices.enumerateDevices();
+        const audioInputs = rows.filter((d) => d && d.kind === 'audioinput');
+        const videoInputs = rows.filter((d) => d && d.kind === 'videoinput');
+        state.preferredMicId = renderDeviceSelect(els.micDeviceSelect, audioInputs, state.preferredMicId || (els.micDeviceSelect && els.micDeviceSelect.value) || '', 'Microphone');
+        state.preferredCamId = renderDeviceSelect(els.camDeviceSelect, videoInputs, state.preferredCamId || (els.camDeviceSelect && els.camDeviceSelect.value) || '', 'Webcam');
+        persistPreferredMediaDevices();
+      } catch (_) {}
+    }
+
+    async function warmDevicePermissions() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+      let stream = null;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+      } catch (_) {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        } catch (_) {
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: true });
+          } catch (_) {}
+        }
+      }
+      if (stream) {
+        for (const t of stream.getTracks()) {
+          try { t.stop(); } catch (_) {}
+        }
+      }
+    }
+
+    function applyHostOptionsVisibility() {
+      const hostTabBtn = els.tabButtons.find((b) => b && b.getAttribute('data-tab-btn') === 'host');
+      const canUseHostOptions = !!state.isHost;
+      if (hostTabBtn) hostTabBtn.classList.toggle('hidden', !canUseHostOptions);
+      if (els.hostTabPane) els.hostTabPane.classList.toggle('hidden', !canUseHostOptions);
+      const hostOnlyEls = Array.from(document.querySelectorAll('[data-host-only="true"]'));
+      for (const node of hostOnlyEls) {
+        node.classList.toggle('hidden', !canUseHostOptions);
+      }
+      const activeHostPane = !!document.querySelector('.tab-pane.active[data-tab-pane="host"]');
+      if (!canUseHostOptions && activeHostPane) {
+        switchTab('chat');
+      }
+    }
+
+    function renderHostOptionsMinimized() {
+      if (!els.hostOptionsWrap || !els.hostOptionsToggleBtn) return;
+      els.hostOptionsWrap.classList.toggle('hidden', !!state.hostOptionsMinimized);
+      els.hostOptionsToggleBtn.textContent = state.hostOptionsMinimized ? 'Expand Host Options' : 'Minimize Host Options';
     }
 
     function refreshMuteTargets() {
@@ -3225,12 +3527,32 @@
     }
 
     async function startVoiceChat() {
+      if (!state.roomCode || !state.participantToken) {
+        throw new Error('Join a room first, then start voice chat.');
+      }
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error('Voice chat unavailable in this browser.');
       }
       const profile = getAudioProfile();
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: profile.constraints, video: false });
+      const audioConstraints = Object.assign({}, profile.constraints || {});
+      const selectedMic = String((els.micDeviceSelect && els.micDeviceSelect.value) || state.preferredMicId || '').trim();
+      if (selectedMic) audioConstraints.deviceId = { exact: selectedMic };
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints, video: false });
+      } catch (err) {
+        if (selectedMic) {
+          stream = await navigator.mediaDevices.getUserMedia({ audio: profile.constraints, video: false });
+        } else {
+          throw err;
+        }
+      }
       rtc.localVoiceStream = stream;
+      if (selectedMic) {
+        state.preferredMicId = selectedMic;
+        persistPreferredMediaDevices();
+      }
+      refreshDeviceLists().catch(() => {});
       const mutedByHost = !!state.hostMuted[state.participantId || ''];
       for (const t of stream.getAudioTracks()) t.enabled = !mutedByHost;
       if (isSfuMode()) {
@@ -3306,7 +3628,9 @@
     }
 
     async function startWebcamShare() {
-      if (!state.roomCode) return;
+      if (!state.roomCode || !state.participantToken) {
+        throw new Error('Join a room first, then start webcam.');
+      }
       if (!state.isHost && !state.allowWebcam) {
         setStatus(false, 'Host has blocked participant webcams.');
         return;
@@ -3315,11 +3639,35 @@
         throw new Error('Webcam is unavailable in this browser.');
       }
       const q = getWebcamQualityProfile();
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: q.width }, height: { ideal: q.height }, frameRate: { ideal: q.frameRate, max: q.maxFramerate } },
-        audio: false
-      });
+      const selectedCam = String((els.camDeviceSelect && els.camDeviceSelect.value) || state.preferredCamId || '').trim();
+      const videoConstraints = {
+        width: { ideal: q.width },
+        height: { ideal: q.height },
+        frameRate: { ideal: q.frameRate, max: q.maxFramerate }
+      };
+      if (selectedCam) videoConstraints.deviceId = { exact: selectedCam };
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: videoConstraints,
+          audio: false
+        });
+      } catch (err) {
+        if (selectedCam) {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { width: { ideal: q.width }, height: { ideal: q.height }, frameRate: { ideal: q.frameRate, max: q.maxFramerate } },
+            audio: false
+          });
+        } else {
+          throw err;
+        }
+      }
       rtc.localCamStream = stream;
+      if (selectedCam) {
+        state.preferredCamId = selectedCam;
+        persistPreferredMediaDevices();
+      }
+      refreshDeviceLists().catch(() => {});
       if (els.localWebcamPreview) {
         els.localWebcamPreview.srcObject = stream;
         els.localWebcamPreview.classList.remove('hidden-media');
@@ -3513,11 +3861,36 @@
       });
     }
 
+    function normalizeActorName(v) {
+      return String(v || '').trim().toLowerCase();
+    }
+
+    function ownActorNames() {
+      const set = new Set();
+      set.add(normalizeActorName((els.displayName && els.displayName.value) || ''));
+      set.add(normalizeActorName(state.userDisplayName || ''));
+      set.add(normalizeActorName(state.userEmail || ''));
+      return set;
+    }
+
+    function isOwnMessage(row) {
+      const actor = normalizeActorName(row && row.actor ? row.actor : '');
+      if (!actor) return false;
+      return ownActorNames().has(actor);
+    }
+
+    function actorInitial(actor) {
+      const text = String(actor || '').trim();
+      if (!text) return '?';
+      return text.charAt(0).toUpperCase();
+    }
+
     function renderChatFeed() {
       if (!els.chatFeed) return;
-      const sorted = Array.from(state.chatMessages.values()).sort((a, b) => b.id - a.id);
+      const sorted = Array.from(state.chatMessages.values()).sort((a, b) => a.id - b.id);
       const hiddenCount = Math.max(0, sorted.length - 80);
-      const entries = sorted.slice(0, 80);
+      const entries = sorted.slice(Math.max(0, sorted.length - 80));
+      const wasNearBottom = Math.abs((els.chatFeed.scrollTop + els.chatFeed.clientHeight) - els.chatFeed.scrollHeight) < 36;
       if (els.chatCount) {
         const total = sorted.length;
         els.chatCount.textContent = `${total} message${total === 1 ? '' : 's'}`;
@@ -3531,15 +3904,26 @@
       }
       for (const row of entries) {
         const d = document.createElement('div');
-        d.className = 'msg-line';
+        const mine = isOwnMessage(row);
+        d.className = 'msg-line' + (mine ? ' mine' : '');
         d.dataset.messageId = String(row.id);
         d.dataset.pinned = row.pinned ? 'true' : 'false';
         const ts = row.ts || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const isPinned = !!row.pinned;
         const reactions = row.reactions || {};
-        d.innerHTML = `<div class="msg-head">${row.actor} · ${ts}${isPinned ? ' · PINNED' : ''}</div><div class="msg-body"></div><div class="msg-actions"></div>`;
-        d.querySelector('.msg-body').textContent = String(row.message || '');
-        const act = d.querySelector('.msg-actions');
+        const avatar = document.createElement('div');
+        avatar.className = 'msg-avatar';
+        avatar.textContent = actorInitial(row.actor);
+        const card = document.createElement('div');
+        card.className = 'msg-card';
+        const head = document.createElement('div');
+        head.className = 'msg-head';
+        head.textContent = `${String(row.actor || 'Guest')} · ${ts}${isPinned ? ' · PINNED' : ''}`;
+        const body = document.createElement('div');
+        body.className = 'msg-body';
+        body.textContent = String(row.message || '');
+        const act = document.createElement('div');
+        act.className = 'msg-actions';
         const choices = ['🔥', '😂', '👏', '❤️'];
         for (const emoji of choices) {
           const count = Number(reactions[emoji] || 0);
@@ -3556,7 +3940,20 @@
           pin.addEventListener('click', () => togglePinMessage(row.id));
           act.appendChild(pin);
         }
+        card.appendChild(head);
+        card.appendChild(body);
+        card.appendChild(act);
+        if (mine) {
+          d.appendChild(card);
+          d.appendChild(avatar);
+        } else {
+          d.appendChild(avatar);
+          d.appendChild(card);
+        }
         els.chatFeed.appendChild(d);
+      }
+      if (wasNearBottom || entries.length < 2) {
+        els.chatFeed.scrollTop = els.chatFeed.scrollHeight;
       }
       renderPinnedMessage();
     }
@@ -4789,6 +5186,7 @@
     function updateBadges() {
       els.roomBadge.textContent = 'Room: ' + (state.roomCode || 'none');
       els.roleBadge.textContent = 'Role: ' + (state.isHost ? 'host' : 'viewer');
+      applyHostOptionsVisibility();
     }
 
     function onSessionStart() {
@@ -5117,7 +5515,7 @@
       } catch (err) {
         state.reconnectCount = Number(state.reconnectCount || 0) + 1;
         const msg = String(err && err.message ? err.message : 'network_error');
-        if (msg.includes('invalid_participant')) {
+        if (msg.includes('invalid_participant') || msg.includes('HTTP 401')) {
           const prevRoom = String(state.roomCode || '');
           stopPollingLoop();
           await disconnectSfu().catch(() => {});
@@ -5478,7 +5876,86 @@
     }
     if (els.shareQualitySelect) els.shareQualitySelect.addEventListener('change', enforceDonationGates);
     if (els.movieQualitySelect) els.movieQualitySelect.addEventListener('change', enforceDonationGates);
-    if (els.webcamQualitySelect) els.webcamQualitySelect.addEventListener('change', enforceDonationGates);
+    if (els.webcamQualitySelect) {
+      els.webcamQualitySelect.addEventListener('change', () => {
+        syncQualitySelectors();
+        enforceDonationGates();
+      });
+    }
+    if (els.audioProfileSelect) {
+      els.audioProfileSelect.addEventListener('change', () => {
+        syncQualitySelectors();
+      });
+    }
+    if (els.voiceQualitySelect) {
+      els.voiceQualitySelect.addEventListener('change', async () => {
+        syncQualitySelectors();
+        if (!voiceOn()) return;
+        try {
+          await stopVoiceChat();
+          await startVoiceChat();
+          setStatus(true, 'Voice quality updated.');
+        } catch (err) {
+          setStatus(false, String(err && err.message ? err.message : err));
+        }
+      });
+    }
+    if (els.liveWebcamQualitySelect) {
+      els.liveWebcamQualitySelect.addEventListener('change', async () => {
+        syncQualitySelectors();
+        enforceDonationGates();
+        if (!camOn()) return;
+        try {
+          await stopWebcamShare();
+          await startWebcamShare();
+          setStatus(true, 'Webcam quality updated.');
+        } catch (err) {
+          setStatus(false, String(err && err.message ? err.message : err));
+        }
+      });
+    }
+    if (els.micDeviceSelect) {
+      els.micDeviceSelect.addEventListener('change', async () => {
+        state.preferredMicId = String(els.micDeviceSelect.value || '').trim();
+        persistPreferredMediaDevices();
+        if (!voiceOn()) return;
+        try {
+          await stopVoiceChat();
+          await startVoiceChat();
+          setStatus(true, 'Microphone switched.');
+        } catch (err) {
+          setStatus(false, String(err && err.message ? err.message : err));
+        }
+      });
+    }
+    if (els.camDeviceSelect) {
+      els.camDeviceSelect.addEventListener('change', async () => {
+        state.preferredCamId = String(els.camDeviceSelect.value || '').trim();
+        persistPreferredMediaDevices();
+        if (!camOn()) return;
+        try {
+          await stopWebcamShare();
+          await startWebcamShare();
+          setStatus(true, 'Webcam switched.');
+        } catch (err) {
+          setStatus(false, String(err && err.message ? err.message : err));
+        }
+      });
+    }
+    if (els.refreshDevicesBtn) {
+      els.refreshDevicesBtn.addEventListener('click', async () => {
+        await warmDevicePermissions();
+        await refreshDeviceLists();
+        setStatus(true, 'Media devices refreshed.');
+      });
+    }
+    if (els.hostOptionsToggleBtn) {
+      els.hostOptionsToggleBtn.addEventListener('click', () => {
+        state.hostOptionsMinimized = !state.hostOptionsMinimized;
+        try { localStorage.setItem(HOST_OPTIONS_MIN_KEY, state.hostOptionsMinimized ? '1' : '0'); } catch (_) {}
+        renderHostOptionsMinimized();
+      });
+    }
     if (els.uiModeSelect) {
       els.uiModeSelect.addEventListener('change', () => applyUIMode(els.uiModeSelect.value, true));
     }
@@ -5493,6 +5970,9 @@
     }
     if (els.macroMainEventBtn) {
       els.macroMainEventBtn.addEventListener('click', async () => { try { await runHostMacro('main_event'); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); } });
+    }
+    if (els.macroMainEventOffBtn) {
+      els.macroMainEventOffBtn.addEventListener('click', async () => { try { await runHostMacro('main_event_off'); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); } });
     }
     if (els.saveTemplateBtn) {
       els.saveTemplateBtn.addEventListener('click', () => {
@@ -5580,6 +6060,13 @@
     els.chatBtn.addEventListener('click', async () => {
       try { await sendChat(); } catch (err) { setStatus(false, String(err.message || err)); }
     });
+    if (els.chatInput) {
+      els.chatInput.addEventListener('keydown', async (ev) => {
+        if (ev.key !== 'Enter' || ev.shiftKey) return;
+        ev.preventDefault();
+        try { await sendChat(); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
+      });
+    }
     els.copyLinkBtn.addEventListener('click', copyInviteLink);
     els.startShareBtn.addEventListener('click', async () => {
       if (!state.isHost) return;
@@ -5745,6 +6232,24 @@
       if (els.audioProfileSelect && !els.audioProfileSelect.value) {
         els.audioProfileSelect.value = 'cinema';
       }
+      if (els.voiceQualitySelect && !els.voiceQualitySelect.value) {
+        els.voiceQualitySelect.value = String((els.audioProfileSelect && els.audioProfileSelect.value) || 'cinema');
+      }
+      if (els.liveWebcamQualitySelect && !els.liveWebcamQualitySelect.value) {
+        els.liveWebcamQualitySelect.value = String((els.webcamQualitySelect && els.webcamQualitySelect.value) || 'high');
+      }
+      loadPreferredMediaDevices();
+      syncQualitySelectors();
+      refreshDeviceLists().catch(() => {});
+      if (navigator.mediaDevices && 'ondevicechange' in navigator.mediaDevices) {
+        navigator.mediaDevices.ondevicechange = () => { refreshDeviceLists().catch(() => {}); };
+      }
+      try {
+        state.hostOptionsMinimized = String(localStorage.getItem(HOST_OPTIONS_MIN_KEY) || '0') === '1';
+      } catch (_) {
+        state.hostOptionsMinimized = false;
+      }
+      renderHostOptionsMinimized();
       if (els.mediaModeSelect && !els.mediaModeSelect.value) {
         els.mediaModeSelect.value = 'webrtc';
       }
@@ -5830,6 +6335,7 @@
       } catch (_) {}
       renderAdminIdentity();
       updateVoiceUi();
+      applyHostOptionsVisibility();
       if (state.adminToken) {
         refreshAdminList().catch(() => {
           clearAdminSession();
