@@ -6,19 +6,28 @@
   <title>Telewatch Admin | FrenzyNets</title>
   <style>
     :root {
-      --bg: #f4f6fa;
-      --panel: #fff;
-      --line: #dbe2ea;
-      --text: #18212c;
-      --muted: #6a7787;
-      --accent: #ff5f1f;
-      --accent2: #e04d11;
+      --bg: #f3f6fb;
+      --panel: #ffffff;
+      --panel-soft: #f8fbff;
+      --line: #d8e2ef;
+      --text: #172333;
+      --muted: #617289;
+      --accent: #ff6a2a;
+      --accent2: #e24f15;
       --danger: #c23138;
+      --shadow: 0 12px 30px rgba(10, 20, 35, 0.07);
     }
     * { box-sizing: border-box; }
-    body { margin: 0; background: var(--bg); color: var(--text); font-family: Inter, "Segoe UI", Arial, sans-serif; }
-    .wrap { width: min(900px, calc(100% - 20px)); margin: 18px auto; display: grid; gap: 12px; }
-    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+    body { margin: 0; background: radial-gradient(circle at 12% 8%, #ffffff, var(--bg)); color: var(--text); font-family: "Segoe UI", Inter, Arial, sans-serif; }
+    .wrap { width: min(1160px, calc(100% - 20px)); margin: 18px auto; display: grid; gap: 12px; }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; box-shadow: var(--shadow); }
+    .tool-section {
+      margin-top: 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: linear-gradient(180deg, var(--panel-soft), #fff);
+      padding: 12px;
+    }
     .row { display: flex; gap: 8px; flex-wrap: wrap; }
     .row > * { flex: 1; min-width: 150px; }
     label { display: block; margin: 0 0 4px; font-size: 11px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
@@ -30,6 +39,29 @@
     .status { font-weight: 700; }
     .hidden { display: none; }
     a { color: #2263d1; }
+    .stream-frame {
+      width: 100%;
+      min-height: 560px;
+      border: 1px solid #ced9e8;
+      border-radius: 12px;
+      background: #0d1422;
+    }
+    .pill {
+      display: inline-block;
+      border: 1px solid #cfdbeb;
+      border-radius: 999px;
+      padding: 5px 10px;
+      font-size: 12px;
+      color: #3e556f;
+      background: #f6f9ff;
+      font-weight: 700;
+    }
+    @media (max-width: 760px) {
+      .wrap { width: calc(100% - 14px); margin: 10px auto; }
+      .row > * { min-width: 100%; flex-basis: 100%; }
+      .stream-frame { min-height: 420px; }
+      button { padding: 11px; }
+    }
   </style>
 </head>
 <body>
@@ -66,7 +98,8 @@
         <div style="align-self:end"><button id="logoutBtn" class="secondary">Sign Out</button></div>
       </div>
 
-      <h3 style="margin:12px 0 8px">Room Management</h3>
+      <div class="tool-section">
+      <h3 style="margin:0 0 8px">Room Management</h3>
       <div class="row">
         <div>
           <label for="roomCodeDelete">Room Code</label>
@@ -74,8 +107,10 @@
         </div>
         <div style="align-self:end"><button id="deleteRoomBtn" class="danger">Delete Room</button></div>
       </div>
+      </div>
 
-      <h3 style="margin:12px 0 8px">Main Event Control</h3>
+      <div class="tool-section">
+      <h3 style="margin:0 0 8px">Main Event Control</h3>
       <div class="row">
         <div>
           <label for="mainEventRoomCode">Main Event Room Code</label>
@@ -102,8 +137,10 @@
         <button id="loadMainEventBtn" class="secondary">Load Main Event Settings</button>
         <button id="saveMainEventBtn">Save Main Event Settings</button>
       </div>
+      </div>
 
-      <h3 style="margin:12px 0 8px">Main Event Hosting</h3>
+      <div class="tool-section">
+      <h3 style="margin:0 0 8px">Main Event Hosting</h3>
       <div class="row">
         <div>
           <label for="mainEventHostName">Host Display Name</label>
@@ -143,8 +180,10 @@
       </div>
       <div id="mainEventInfo" class="muted" style="margin-top:6px">No main event room selected.</div>
       <div id="mainEventHostInfo" class="muted" style="margin-top:4px">Host controls: not attached</div>
+      </div>
 
-      <h3 style="margin:12px 0 8px">Main Event Studio</h3>
+      <div class="tool-section">
+      <h3 style="margin:0 0 8px">Main Event Studio</h3>
       <div class="row">
         <div>
           <label for="studioTitle">Movie / Episode Title</label>
@@ -200,8 +239,27 @@
       <div class="row" style="margin-top:8px">
         <button id="studioMessageBtn" class="secondary">Send Room Message</button>
       </div>
+      </div>
 
-      <h3 style="margin:12px 0 8px">Admin Accounts</h3>
+      <div class="tool-section">
+      <h3 style="margin:0 0 8px">Streaming Console</h3>
+      <div class="row">
+        <div>
+          <label for="studioStreamUrl">Embedded Stream URL</label>
+          <input id="studioStreamUrl" readonly />
+        </div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="studioLoadStreamBtn">Load Stream Console</button>
+        <button id="studioPopoutStreamBtn" class="secondary">Open In New Tab</button>
+        <button id="studioRefreshStreamBtn" class="secondary">Refresh Console</button>
+      </div>
+      <div style="margin-top:8px"><span class="pill">Use this panel to run the actual share/stream workflow live.</span></div>
+      <iframe id="studioStreamFrame" class="stream-frame" loading="lazy" referrerpolicy="strict-origin-when-cross-origin"></iframe>
+      </div>
+
+      <div class="tool-section">
+      <h3 style="margin:0 0 8px">Admin Accounts</h3>
       <div class="row">
         <div>
           <label for="newAdminUser">Add/Update Username</label>
@@ -221,6 +279,7 @@
         <select id="adminList"></select>
       </div>
       <div style="margin-top:8px"><button id="removeAdminBtn" class="danger">Remove Selected Admin</button></div>
+      </div>
     </div>
   </div>
 
@@ -266,6 +325,11 @@
       studioThemeBtn: document.getElementById('studioThemeBtn'),
       studioAccessBtn: document.getElementById('studioAccessBtn'),
       studioMessageBtn: document.getElementById('studioMessageBtn'),
+      studioStreamUrl: document.getElementById('studioStreamUrl'),
+      studioStreamFrame: document.getElementById('studioStreamFrame'),
+      studioLoadStreamBtn: document.getElementById('studioLoadStreamBtn'),
+      studioPopoutStreamBtn: document.getElementById('studioPopoutStreamBtn'),
+      studioRefreshStreamBtn: document.getElementById('studioRefreshStreamBtn'),
       newAdminUser: document.getElementById('newAdminUser'),
       newAdminPass: document.getElementById('newAdminPass'),
       adminList: document.getElementById('adminList'),
@@ -302,6 +366,10 @@
     function mainEventJoinUrl(code) {
       const c = cleanCode(code);
       return c ? `https://frenzynets.com/telewatch/?room=${encodeURIComponent(c)}` : 'https://frenzynets.com/telewatch/?mainEvent=1';
+    }
+    function mainEventStudioUrl(code) {
+      const c = cleanCode(code);
+      return c ? `https://frenzynets.com/telewatch/?room=${encodeURIComponent(c)}&admin=1` : 'https://frenzynets.com/telewatch/?admin=1';
     }
     function toLocalInputValue(iso) {
       const d = new Date(String(iso || '').trim());
@@ -414,6 +482,7 @@
       }
       const selected = cleanCode(els.mainEventRoomCode.value || els.mainEventRooms.value);
       els.mainEventInfo.textContent = selected ? `Main Event Link: ${mainEventJoinUrl(selected)}` : 'No main event room selected.';
+      els.studioStreamUrl.value = mainEventStudioUrl(selected);
     }
 
     async function loadMainEventSettings() {
@@ -424,6 +493,7 @@
       els.mainEventCountdown.value = toLocalInputValue(s.mainEventCountdownIso || '');
       const c = cleanCode(s.mainEventRoomCode || '');
       els.mainEventInfo.textContent = c ? `Main Event Link: ${mainEventJoinUrl(c)}` : 'No main event room selected.';
+      els.studioStreamUrl.value = mainEventStudioUrl(c);
     }
 
     els.loginBtn.addEventListener('click', async () => {
@@ -504,6 +574,7 @@
       if (code) {
         els.mainEventRoomCode.value = code;
         els.mainEventInfo.textContent = `Main Event Link: ${mainEventJoinUrl(code)}`;
+        els.studioStreamUrl.value = mainEventStudioUrl(code);
       }
     });
 
@@ -511,6 +582,7 @@
       const code = cleanCode(els.mainEventRoomCode.value);
       els.mainEventRoomCode.value = code;
       els.mainEventInfo.textContent = code ? `Main Event Link: ${mainEventJoinUrl(code)}` : 'No main event room selected.';
+      els.studioStreamUrl.value = mainEventStudioUrl(code);
     });
 
     els.refreshRoomsBtn.addEventListener('click', async () => {
@@ -736,6 +808,34 @@
       }
     });
 
+    els.studioLoadStreamBtn.addEventListener('click', () => {
+      const code = selectedMainRoomCode();
+      const url = mainEventStudioUrl(code);
+      els.studioStreamUrl.value = url;
+      els.studioStreamFrame.src = url;
+      setStatus(`Stream console loaded for ${cleanCode(code) || 'admin mode'}.`);
+    });
+
+    els.studioPopoutStreamBtn.addEventListener('click', () => {
+      const code = selectedMainRoomCode();
+      const url = mainEventStudioUrl(code);
+      els.studioStreamUrl.value = url;
+      window.open(url, '_blank', 'noopener');
+    });
+
+    els.studioRefreshStreamBtn.addEventListener('click', () => {
+      const current = String(els.studioStreamFrame.src || '').trim();
+      if (!current) {
+        const code = selectedMainRoomCode();
+        const url = mainEventStudioUrl(code);
+        els.studioStreamUrl.value = url;
+        els.studioStreamFrame.src = url;
+        return;
+      }
+      els.studioStreamFrame.src = current;
+      setStatus('Stream console refreshed.');
+    });
+
     els.addAdminBtn.addEventListener('click', async () => {
       try {
         await api('/api/watch/admin/add', {
@@ -781,6 +881,7 @@
     els.username.value = state.username || 'Trimbledustn@gmail.com';
     els.mainEventHostName.value = 'DFrenzy';
     els.mainEventCountdown.value = nextSaturdayLocalInput();
+    els.studioStreamUrl.value = mainEventStudioUrl('');
     render();
     if (state.token) {
       refreshAdmins().catch(() => {});
