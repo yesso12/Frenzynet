@@ -3090,7 +3090,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                 cohost_can_mute = bool(room['cohost_can_mute']) if 'cohost_can_mute' in room.keys() else True
                 cohost_can_access = bool(room['cohost_can_access']) if 'cohost_can_access' in room.keys() else True
                 cohost_can_pin = bool(room['cohost_can_pin']) if 'cohost_can_pin' in room.keys() else True
-                if action in {'play', 'pause', 'seek', 'set_media', 'set_title', 'set_theme', 'set_webcam_policy', 'delete_room', 'reset_room', 'resolve_request', 'create_invite', 'set_cohost', 'set_cohost_perms'} and not is_host:
+                if action in {'play', 'pause', 'seek', 'set_media', 'set_title', 'set_theme', 'set_media_mode', 'set_webcam_policy', 'delete_room', 'reset_room', 'resolve_request', 'create_invite', 'set_cohost', 'set_cohost_perms'} and not is_host:
                     self._json(HTTPStatus.FORBIDDEN, {'error': 'host_required'})
                     return
                 if action == 'set_access_mode' and not (is_host or (is_cohost and cohost_can_access)):
@@ -3162,6 +3162,13 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                         (theme_key, room_code_val),
                     )
                     event_payload['themeKey'] = theme_key
+                elif action == 'set_media_mode':
+                    media_mode = clean_media_mode(payload.get('mediaMode', TELEWATCH_SFU_DEFAULT_MODE), 'webrtc')
+                    conn.execute(
+                        'UPDATE watch_rooms SET media_mode=?, updated_at=datetime(\'now\') WHERE room_code=?',
+                        (media_mode, room_code_val),
+                    )
+                    event_payload['mediaMode'] = media_mode
                 elif action == 'set_webcam_policy':
                     allow_webcam = bool(payload.get('allowWebcam', True))
                     conn.execute(
