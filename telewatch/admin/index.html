@@ -103,6 +103,46 @@
         <button id="saveMainEventBtn">Save Main Event Settings</button>
       </div>
 
+      <h3 style="margin:12px 0 8px">Main Event Hosting</h3>
+      <div class="row">
+        <div>
+          <label for="mainEventHostName">Host Display Name</label>
+          <input id="mainEventHostName" placeholder="DFrenzy" />
+        </div>
+        <div>
+          <label for="mainEventTitle">Main Event Title</label>
+          <input id="mainEventTitle" placeholder="Friday Main Event" />
+        </div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <div>
+          <label for="mainEventMode">Transport Mode</label>
+          <select id="mainEventMode">
+            <option value="broadcast">Broadcast (Main Event)</option>
+            <option value="sfu">SFU</option>
+            <option value="webrtc">WebRTC</option>
+          </select>
+        </div>
+        <div>
+          <label for="mainEventRooms">Existing Active Rooms</label>
+          <select id="mainEventRooms"></select>
+        </div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="refreshRoomsBtn" class="secondary">Refresh Rooms</button>
+        <button id="createMainEventBtn">Create + Enable Main Event</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="enableMainEventBtn">Enable Lockdown</button>
+        <button id="disableMainEventBtn" class="secondary">Disable Lockdown</button>
+        <button id="stopMainEventBtn" class="danger">Stop + Delete Event Room</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="openMainEventBtn" class="secondary">Open Event Room</button>
+        <button id="copyMainEventJoinBtn" class="secondary">Copy Public Join Link</button>
+      </div>
+      <div id="mainEventInfo" class="muted" style="margin-top:6px">No main event room selected.</div>
+
       <h3 style="margin:12px 0 8px">Admin Accounts</h3>
       <div class="row">
         <div>
@@ -140,6 +180,18 @@
       mainEventRoomCode: document.getElementById('mainEventRoomCode'),
       mainEventLockdown: document.getElementById('mainEventLockdown'),
       mainEventCountdown: document.getElementById('mainEventCountdown'),
+      mainEventHostName: document.getElementById('mainEventHostName'),
+      mainEventTitle: document.getElementById('mainEventTitle'),
+      mainEventMode: document.getElementById('mainEventMode'),
+      mainEventRooms: document.getElementById('mainEventRooms'),
+      refreshRoomsBtn: document.getElementById('refreshRoomsBtn'),
+      createMainEventBtn: document.getElementById('createMainEventBtn'),
+      enableMainEventBtn: document.getElementById('enableMainEventBtn'),
+      disableMainEventBtn: document.getElementById('disableMainEventBtn'),
+      stopMainEventBtn: document.getElementById('stopMainEventBtn'),
+      openMainEventBtn: document.getElementById('openMainEventBtn'),
+      copyMainEventJoinBtn: document.getElementById('copyMainEventJoinBtn'),
+      mainEventInfo: document.getElementById('mainEventInfo'),
       newAdminUser: document.getElementById('newAdminUser'),
       newAdminPass: document.getElementById('newAdminPass'),
       adminList: document.getElementById('adminList'),
@@ -170,6 +222,13 @@
     }
 
     function setStatus(msg) { els.status.textContent = msg; }
+    function cleanCode(v) {
+      return String(v || '').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 24);
+    }
+    function mainEventJoinUrl(code) {
+      const c = cleanCode(code);
+      return c ? `https://frenzynets.com/telewatch/?room=${encodeURIComponent(c)}` : 'https://frenzynets.com/telewatch/?mainEvent=1';
+    }
     function toLocalInputValue(iso) {
       const d = new Date(String(iso || '').trim());
       if (!Number.isFinite(d.getTime())) return '';
@@ -232,12 +291,38 @@
       }
     }
 
+    async function refreshAdminRooms() {
+      const data = await api('/api/watch/admin/rooms', { adminToken: state.token });
+      const rows = Array.isArray(data.rooms) ? data.rooms : [];
+      els.mainEventRooms.innerHTML = '';
+      for (const r of rows) {
+        const code = cleanCode(r.roomCode || '');
+        if (!code) continue;
+        const o = document.createElement('option');
+        o.value = code;
+        const host = String(r.hostName || '').trim() || 'No host';
+        const count = Number(r.activeCount || 0);
+        o.textContent = `${code} · ${host} · ${count} live`;
+        els.mainEventRooms.appendChild(o);
+      }
+      if (!els.mainEventRooms.options.length) {
+        const o = document.createElement('option');
+        o.value = '';
+        o.textContent = 'No active rooms';
+        els.mainEventRooms.appendChild(o);
+      }
+      const selected = cleanCode(els.mainEventRoomCode.value || els.mainEventRooms.value);
+      els.mainEventInfo.textContent = selected ? `Main Event Link: ${mainEventJoinUrl(selected)}` : 'No main event room selected.';
+    }
+
     async function loadMainEventSettings() {
       const data = await api('/api/watch/admin/settings', { adminToken: state.token, action: 'get' });
       const s = data && data.settings ? data.settings : {};
       els.mainEventRoomCode.value = String(s.mainEventRoomCode || '').toUpperCase();
       els.mainEventLockdown.value = s.mainEventLockdown ? '1' : '0';
       els.mainEventCountdown.value = toLocalInputValue(s.mainEventCountdownIso || '');
+      const c = cleanCode(s.mainEventRoomCode || '');
+      els.mainEventInfo.textContent = c ? `Main Event Link: ${mainEventJoinUrl(c)}` : 'No main event room selected.';
     }
 
     els.loginBtn.addEventListener('click', async () => {
@@ -251,6 +336,7 @@
         save();
         render();
         await refreshAdmins();
+        await refreshAdminRooms();
         await loadMainEventSettings();
       } catch (e) {
         setStatus('Login failed: ' + (e.message || e));
@@ -281,6 +367,7 @@
     els.loadMainEventBtn.addEventListener('click', async () => {
       try {
         await loadMainEventSettings();
+        await refreshAdminRooms();
         setStatus('Main event settings loaded.');
       } catch (e) {
         setStatus('Load failed: ' + (e.message || e));
@@ -304,9 +391,140 @@
         };
         await api('/api/watch/admin/settings', payload);
         await loadMainEventSettings();
+        await refreshAdminRooms();
         setStatus('Main event settings saved.');
       } catch (e) {
         setStatus('Save failed: ' + (e.message || e));
+      }
+    });
+
+    els.mainEventRooms.addEventListener('change', () => {
+      const code = cleanCode(els.mainEventRooms.value);
+      if (code) {
+        els.mainEventRoomCode.value = code;
+        els.mainEventInfo.textContent = `Main Event Link: ${mainEventJoinUrl(code)}`;
+      }
+    });
+
+    els.mainEventRoomCode.addEventListener('input', () => {
+      const code = cleanCode(els.mainEventRoomCode.value);
+      els.mainEventRoomCode.value = code;
+      els.mainEventInfo.textContent = code ? `Main Event Link: ${mainEventJoinUrl(code)}` : 'No main event room selected.';
+    });
+
+    els.refreshRoomsBtn.addEventListener('click', async () => {
+      try {
+        await refreshAdminRooms();
+        setStatus('Rooms refreshed.');
+      } catch (e) {
+        setStatus('Room refresh failed: ' + (e.message || e));
+      }
+    });
+
+    els.createMainEventBtn.addEventListener('click', async () => {
+      try {
+        const roomCode = cleanCode(els.mainEventRoomCode.value);
+        const created = await api('/api/watch/create', {
+          adminToken: state.token,
+          roomCode,
+          displayName: String(els.mainEventHostName.value || '').trim() || 'MainHost',
+          title: String(els.mainEventTitle.value || '').trim() || 'Main Event',
+          accessMode: 'public',
+          mediaMode: String(els.mainEventMode.value || 'broadcast').trim().toLowerCase()
+        });
+        const code = cleanCode(created.roomCode || roomCode);
+        els.mainEventRoomCode.value = code;
+        await api('/api/watch/admin/settings', {
+          adminToken: state.token,
+          adminCode: String(els.adminCode.value || '').trim(),
+          action: 'set',
+          mainEventRoomCode: code,
+          mainEventLockdown: true,
+          mainEventCountdownIso: localInputToIso(els.mainEventCountdown.value)
+        });
+        els.mainEventLockdown.value = '1';
+        await refreshAdminRooms();
+        await loadMainEventSettings();
+        setStatus(`Main Event started in room ${code}.`);
+      } catch (e) {
+        setStatus('Create Main Event failed: ' + (e.message || e));
+      }
+    });
+
+    els.enableMainEventBtn.addEventListener('click', async () => {
+      try {
+        const code = cleanCode(els.mainEventRoomCode.value || els.mainEventRooms.value);
+        if (!code) throw new Error('main_event_room_required');
+        await api('/api/watch/admin/settings', {
+          adminToken: state.token,
+          adminCode: String(els.adminCode.value || '').trim(),
+          action: 'set',
+          mainEventRoomCode: code,
+          mainEventLockdown: true,
+          mainEventCountdownIso: localInputToIso(els.mainEventCountdown.value)
+        });
+        els.mainEventLockdown.value = '1';
+        await loadMainEventSettings();
+        setStatus(`Main Event lockdown enabled for ${code}.`);
+      } catch (e) {
+        setStatus('Enable failed: ' + (e.message || e));
+      }
+    });
+
+    els.disableMainEventBtn.addEventListener('click', async () => {
+      try {
+        await api('/api/watch/admin/settings', {
+          adminToken: state.token,
+          adminCode: String(els.adminCode.value || '').trim(),
+          action: 'set',
+          mainEventLockdown: false
+        });
+        els.mainEventLockdown.value = '0';
+        await loadMainEventSettings();
+        setStatus('Main Event lockdown disabled.');
+      } catch (e) {
+        setStatus('Disable failed: ' + (e.message || e));
+      }
+    });
+
+    els.stopMainEventBtn.addEventListener('click', async () => {
+      try {
+        const code = cleanCode(els.mainEventRoomCode.value || els.mainEventRooms.value);
+        if (!code) throw new Error('main_event_room_required');
+        await api('/api/watch/delete', {
+          roomCode: code,
+          adminToken: state.token,
+          adminCode: String(els.adminCode.value || '').trim()
+        });
+        await api('/api/watch/admin/settings', {
+          adminToken: state.token,
+          adminCode: String(els.adminCode.value || '').trim(),
+          action: 'set',
+          mainEventLockdown: false,
+          mainEventRoomCode: ''
+        });
+        els.mainEventRoomCode.value = '';
+        els.mainEventLockdown.value = '0';
+        await refreshAdminRooms();
+        await loadMainEventSettings();
+        setStatus(`Main Event stopped and room ${code} removed.`);
+      } catch (e) {
+        setStatus('Stop failed: ' + (e.message || e));
+      }
+    });
+
+    els.openMainEventBtn.addEventListener('click', () => {
+      const code = cleanCode(els.mainEventRoomCode.value || els.mainEventRooms.value);
+      window.open(mainEventJoinUrl(code), '_blank', 'noopener');
+    });
+
+    els.copyMainEventJoinBtn.addEventListener('click', async () => {
+      try {
+        const code = cleanCode(els.mainEventRoomCode.value || els.mainEventRooms.value);
+        await navigator.clipboard.writeText(mainEventJoinUrl(code));
+        setStatus('Main Event public link copied.');
+      } catch (_) {
+        setStatus('Copy failed. Browser blocked clipboard.');
       }
     });
 
@@ -327,7 +545,13 @@
     });
 
     els.refreshBtn.addEventListener('click', async () => {
-      try { await refreshAdmins(); setStatus('Admin list refreshed.'); } catch (e) { setStatus('Refresh failed: ' + (e.message || e)); }
+      try {
+        await refreshAdmins();
+        await refreshAdminRooms();
+        setStatus('Admin list + rooms refreshed.');
+      } catch (e) {
+        setStatus('Refresh failed: ' + (e.message || e));
+      }
     });
 
     els.removeAdminBtn.addEventListener('click', async () => {
@@ -347,10 +571,12 @@
 
     load();
     els.username.value = state.username || 'Trimbledustn@gmail.com';
+    els.mainEventHostName.value = 'DFrenzy';
     els.mainEventCountdown.value = nextSaturdayLocalInput();
     render();
     if (state.token) {
       refreshAdmins().catch(() => {});
+      refreshAdminRooms().catch(() => {});
       loadMainEventSettings().catch(() => {});
     }
   </script>
