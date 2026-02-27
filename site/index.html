@@ -405,7 +405,16 @@
       });
       renderRequests();
 
-      const nextEvent = Date.parse('2026-03-06T01:00:00Z');
+      function fallbackNextSaturdayMs() {
+        const now = new Date();
+        const target = new Date(now.getTime());
+        const days = (6 - target.getDay() + 7) % 7;
+        target.setDate(target.getDate() + days);
+        target.setHours(20, 0, 0, 0);
+        if (target.getTime() <= now.getTime()) target.setDate(target.getDate() + 7);
+        return target.getTime();
+      }
+      let nextEvent = fallbackNextSaturdayMs();
       function tickCountdown() {
         const diff = nextEvent - Date.now();
         if (diff <= 0) {
@@ -419,6 +428,17 @@
       }
       tickCountdown();
       setInterval(tickCountdown, 15000);
+      fetch('https://api.frenzynets.com/api/telewatch/public-settings', { cache: 'no-store' })
+        .then((r) => r.ok ? r.json() : null)
+        .then((j) => {
+          const iso = j && j.settings ? String(j.settings.mainEventCountdownIso || '') : '';
+          const ms = Date.parse(iso);
+          if (Number.isFinite(ms) && ms > 0) {
+            nextEvent = ms;
+            tickCountdown();
+          }
+        })
+        .catch(() => {});
 
       const spotlightItems = [
         'Main Event public lobby opens 15 minutes before showtime.',

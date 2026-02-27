@@ -446,26 +446,63 @@
     }
     .events div { padding: 3px 0; border-bottom: 1px dashed #d6dfe9; }
     .events div:last-child { border-bottom: 0; }
+    .message-center {
+      border: 1px solid var(--line-soft);
+      border-radius: 12px;
+      background: linear-gradient(180deg, #f9fbff, #f4f8ff);
+      padding: 10px;
+      display: grid;
+      gap: 8px;
+    }
+    .message-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .message-top .muted { margin: 0; }
+    .chat-count {
+      font-size: 11px;
+      font-weight: 700;
+      color: #486286;
+      border: 1px solid #cfe0f7;
+      background: #eef5ff;
+      border-radius: 999px;
+      padding: 3px 9px;
+    }
+    .pinned-box {
+      border: 1px solid #ffd5bf;
+      background: #fff7f1;
+      color: #5a2f1c;
+      border-radius: 10px;
+      padding: 8px 10px;
+      font-size: 13px;
+    }
     .chat-feed {
-      max-height: 200px;
+      max-height: 260px;
       overflow: auto;
-      background: #f8fafc;
-      border: 1px solid #dde5ef;
-      border-radius: 9px;
+      border: 1px solid #d7e3f3;
+      border-radius: 10px;
       padding: 8px;
       font-size: 13px;
       line-height: 1.45;
+      background: #ffffff;
+      display: grid;
+      gap: 7px;
     }
-    .chat-feed div { padding: 6px 0; border-bottom: 1px dashed #d6dfe9; }
-    .chat-feed div:last-child { border-bottom: 0; }
     .msg-line { display: grid; gap: 1px; }
-    .msg-line[data-pinned="true"] {
-      border-left: 3px solid var(--accent);
-      padding-left: 6px;
-      background: rgba(255,255,255,0.55);
-      border-radius: 6px;
+    .chat-feed .msg-line {
+      border: 1px solid #e0e9f4;
+      border-radius: 9px;
+      background: #f9fbff;
+      padding: 6px 8px;
     }
-    .msg-head { font-size: 11px; color: #6f7d8f; }
+    .msg-line[data-pinned="true"] {
+      border-color: #ffb184;
+      background: #fff2e8;
+    }
+    .msg-head { font-size: 11px; color: #6f7d8f; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
     .msg-body { font-size: 13px; color: #1d2a39; word-break: break-word; }
     .msg-actions {
       display: flex;
@@ -490,11 +527,17 @@
     }
     .chat-compose {
       display: grid;
+      grid-template-columns: 1fr auto;
       gap: 8px;
-      margin-top: 8px;
+      align-items: end;
     }
     .chat-compose textarea {
-      min-height: 64px;
+      min-height: 56px;
+      margin: 0;
+    }
+    .chat-compose button {
+      height: fit-content;
+      min-width: 132px;
     }
     .participants-grid {
       display: grid;
@@ -707,6 +750,7 @@
       input, button, textarea { font-size: 16px; }
       .badge { font-size: 12px; }
       video { max-height: 230px; }
+      .chat-compose { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -1213,14 +1257,18 @@
               <div class="block stack">
                 <h3>Participants</h3>
                 <div id="participantsGrid" class="participants-grid"></div>
-                <h3>Pinned Message</h3>
-                <div id="pinnedChat" class="muted">No pinned message</div>
-                <h3>Room Messages</h3>
-                <div class="muted">Live room chat appears here. Newest messages show first.</div>
-                <div id="chatFeed" class="chat-feed"></div>
-                <div class="chat-compose">
-                  <textarea id="chatInput" placeholder="Send a message or timestamp note, e.g. pause at 12:34"></textarea>
-                  <button id="chatBtn" class="secondary">Send Message</button>
+                <div class="message-center">
+                  <div class="message-top">
+                    <h3 style="margin:0">Room Messages</h3>
+                    <span id="chatCount" class="chat-count">0 messages</span>
+                  </div>
+                  <div class="muted">Room-only chat. Newest messages appear first.</div>
+                  <div id="pinnedChat" class="pinned-box">No pinned message</div>
+                  <div id="chatFeed" class="chat-feed"></div>
+                  <div class="chat-compose">
+                    <textarea id="chatInput" placeholder="Send a message or timestamp note, e.g. pause at 12:34"></textarea>
+                    <button id="chatBtn" class="secondary">Send</button>
+                  </div>
                 </div>
                 <div id="eventsBlock" data-advanced-ui="true">
                   <h3>Events</h3>
@@ -1418,6 +1466,7 @@
       events: document.getElementById('events'),
       eventsBlock: document.getElementById('eventsBlock'),
       chatFeed: document.getElementById('chatFeed'),
+      chatCount: document.getElementById('chatCount'),
       player: document.getElementById('player'),
       screenView: document.getElementById('screenView'),
       stepSession: document.getElementById('stepSession'),
@@ -2423,6 +2472,9 @@
         if (!inRoom) {
           els.pinnedChat.textContent = 'Join a room to view room-only messages.';
         }
+      }
+      if (els.chatCount && !inRoom) {
+        els.chatCount.textContent = '0 messages';
       }
     }
 
@@ -3466,6 +3518,10 @@
       const sorted = Array.from(state.chatMessages.values()).sort((a, b) => b.id - a.id);
       const hiddenCount = Math.max(0, sorted.length - 80);
       const entries = sorted.slice(0, 80);
+      if (els.chatCount) {
+        const total = sorted.length;
+        els.chatCount.textContent = `${total} message${total === 1 ? '' : 's'}`;
+      }
       els.chatFeed.innerHTML = '';
       if (hiddenCount > 0) {
         const note = document.createElement('div');

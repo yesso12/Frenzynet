@@ -62,6 +62,30 @@ def utc_iso() -> str:
     return dt.datetime.now(dt.timezone.utc).isoformat(timespec='seconds').replace('+00:00', 'Z')
 
 
+def default_main_event_countdown_iso(now_utc: dt.datetime | None = None) -> str:
+    now = now_utc or dt.datetime.now(dt.timezone.utc)
+    # Target next Saturday 01:00 UTC by default.
+    days_until_sat = (5 - now.weekday()) % 7
+    target = (now + dt.timedelta(days=days_until_sat)).replace(hour=1, minute=0, second=0, microsecond=0)
+    if target <= now:
+        target = target + dt.timedelta(days=7)
+    return target.isoformat(timespec='seconds').replace('+00:00', 'Z')
+
+
+def normalize_countdown_iso(raw: str, fallback: str) -> str:
+    text = str(raw or '').strip()
+    if not text:
+        return str(fallback)
+    try:
+        parsed = dt.datetime.fromisoformat(text.replace('Z', '+00:00'))
+    except Exception:
+        return str(fallback)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=dt.timezone.utc)
+    parsed = parsed.astimezone(dt.timezone.utc).replace(microsecond=0)
+    return parsed.isoformat(timespec='seconds').replace('+00:00', 'Z')
+
+
 def stable_json(value) -> str:
     return json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=True)
 
@@ -277,6 +301,7 @@ def ensure_schema() -> None:
             CREATE TABLE IF NOT EXISTS watch_rooms (
               room_code TEXT PRIMARY KEY,
               host_token TEXT NOT NULL UNIQUE,
+              host_ip TEXT NOT NULL DEFAULT '',
               title TEXT,
               media_url TEXT,
               theme_key TEXT NOT NULL DEFAULT 'clean',
@@ -470,6 +495,10 @@ def ensure_schema() -> None:
         except sqlite3.OperationalError:
             pass
         try:
+            conn.execute("ALTER TABLE watch_rooms ADD COLUMN host_ip TEXT NOT NULL DEFAULT ''")
+        except sqlite3.OperationalError:
+            pass
+        try:
             conn.execute("ALTER TABLE watch_rooms ADD COLUMN access_mode TEXT NOT NULL DEFAULT 'public'")
         except sqlite3.OperationalError:
             pass
@@ -597,6 +626,14 @@ def ensure_schema() -> None:
             ON CONFLICT(setting_key) DO NOTHING
             '''
         )
+        conn.execute(
+            '''
+            INSERT INTO watch_settings(setting_key, setting_value, updated_at)
+            VALUES('main_event_countdown_iso', ?, datetime('now'))
+            ON CONFLICT(setting_key) DO NOTHING
+            ''',
+            (default_main_event_countdown_iso(),),
+        )
         conn.execute("DELETE FROM watch_room_bans WHERE expires_at <= datetime('now')")
         conn.execute("DELETE FROM watch_room_invites WHERE expires_at <= datetime('now') OR (max_uses > 0 AND used_count >= max_uses)")
         conn.execute("DELETE FROM watch_password_resets WHERE expires_at <= datetime('now') OR (used_at IS NOT NULL AND trim(used_at) != '')")
@@ -646,6 +683,12 @@ def get_main_event_lockdown(conn: sqlite3.Connection) -> bool:
 
 def get_main_event_room_code(conn: sqlite3.Connection) -> str:
     return normalize_room_code(get_setting(conn, 'main_event_room_code', ''), '')
+
+
+def get_main_event_countdown_iso(conn: sqlite3.Connection) -> str:
+    fallback = default_main_event_countdown_iso()
+    raw = get_setting(conn, 'main_event_countdown_iso', fallback)
+    return normalize_countdown_iso(raw, fallback)
 
 
 def get_room_audience_mode(conn: sqlite3.Connection, room_code_val: str) -> bool:
@@ -968,6 +1011,12 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             '/api/telewatch/public-rooms',
             '/api/telewatch/api/public-rooms',
         }
+        public_settings_paths = {
+            '/public-settings',
+            '/api/public-settings',
+            '/api/telewatch/public-settings',
+            '/api/telewatch/api/public-settings',
+        }
         discord_callback_paths = {
             '/watch/user/discord/callback',
             '/api/watch/user/discord/callback',
@@ -1020,6 +1069,25 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     )
                 conn.commit()
             self._json(HTTPStatus.OK, {'ok': True, 'rooms': rooms, 'serverNow': utc_iso()})
+            return
+        if path in public_settings_paths:
+            with get_db() as conn:
+                ensure_public_rooms(conn)
+                cleanup_rooms(conn)
+                main_room_code = str(get_main_event_room_code(conn) or '')
+                countdown_iso = str(get_main_event_countdown_iso(conn) or default_main_event_countdown_iso())
+                conn.commit()
+            self._json(
+                HTTPStatus.OK,
+                {
+                    'ok': True,
+                    'settings': {
+                        'mainEventRoomCode': main_room_code,
+                        'mainEventCountdownIso': countdown_iso,
+                    },
+                    'serverNow': utc_iso(),
+                },
+            )
             return
         if path in discord_callback_paths:
             state_token = str((q.get('state') or [''])[0]).strip()[:128]
@@ -2564,10 +2632,15 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     if 'mainEventRoomCode' in payload:
                         main_code = normalize_room_code(payload.get('mainEventRoomCode', ''), '')
                         set_setting(conn, 'main_event_room_code', main_code)
+                    if 'mainEventCountdownIso' in payload:
+                        fallback_iso = get_main_event_countdown_iso(conn)
+                        countdown_iso = normalize_countdown_iso(payload.get('mainEventCountdownIso', ''), fallback_iso)
+                        set_setting(conn, 'main_event_countdown_iso', countdown_iso)
                     conn.commit()
                 ttl_minutes = get_empty_room_ttl_minutes(conn)
                 main_lockdown = bool(get_main_event_lockdown(conn))
                 main_room_code = str(get_main_event_room_code(conn) or '')
+                main_countdown_iso = str(get_main_event_countdown_iso(conn) or default_main_event_countdown_iso())
                 conn.commit()
             self._json(
                 HTTPStatus.OK,
@@ -2577,6 +2650,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                         'emptyRoomTtlMinutes': int(ttl_minutes),
                         'mainEventLockdown': bool(main_lockdown),
                         'mainEventRoomCode': main_room_code,
+                        'mainEventCountdownIso': main_countdown_iso,
                     },
                 },
             )
@@ -2616,7 +2690,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     conn.execute(
                         '''
                         UPDATE watch_rooms
-                        SET title=?, media_url='', theme_key='clean', media_mode=?, allow_webcam=1, cohost_can_kick=1, cohost_can_mute=1, cohost_can_access=1, cohost_can_pin=1, access_mode='public', is_private=0, delete_on_host_leave=1, playback_sec=0, is_playing=0, updated_at=datetime('now')
+                        SET title=?, media_url='', theme_key='clean', host_ip='', media_mode=?, allow_webcam=1, cohost_can_kick=1, cohost_can_mute=1, cohost_can_access=1, cohost_can_pin=1, access_mode='public', is_private=0, delete_on_host_leave=1, playback_sec=0, is_playing=0, updated_at=datetime('now')
                         WHERE room_code=?
                         ''',
                         (f'Public Room {room_code_val[-2:]}', clean_media_mode(TELEWATCH_SFU_DEFAULT_MODE, 'webrtc'), room_code_val),
@@ -2681,6 +2755,32 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                 if int(custom_room_count or 0) >= MAX_ROOMS:
                     self._json(HTTPStatus.CONFLICT, {'error': 'room_capacity_reached', 'maxRooms': MAX_ROOMS})
                     return
+                host_ip = str(client_ip or '').strip()[:64]
+                if host_ip:
+                    existing_host_room = conn.execute(
+                        '''
+                        SELECT r.room_code
+                        FROM watch_rooms r
+                        JOIN watch_participants p
+                          ON p.room_code=r.room_code
+                         AND p.participant_token=r.host_token
+                         AND p.is_host=1
+                        WHERE r.host_ip=?
+                          AND p.last_seen_at >= datetime('now', '-30 minutes')
+                        LIMIT 1
+                        ''',
+                        (host_ip,),
+                    ).fetchone()
+                    if existing_host_room is not None:
+                        self._json(
+                            HTTPStatus.CONFLICT,
+                            {
+                                'error': 'host_router_limit',
+                                'message': 'This router/network can host only one watch party at a time.',
+                                'roomCode': str(existing_host_room['room_code'] or ''),
+                            },
+                        )
+                        return
                 code = ''
                 if requested_code:
                     exists = conn.execute('SELECT 1 FROM watch_rooms WHERE room_code=?', (requested_code,)).fetchone()
@@ -2702,10 +2802,10 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                 participant_id = secrets.token_hex(6)
                 conn.execute(
                     '''
-                    INSERT INTO watch_rooms(room_code, host_token, title, media_url, theme_key, media_mode, access_mode, is_private, delete_on_host_leave, playback_sec, is_playing, created_at, updated_at)
-                    VALUES(?,?,?,?,?,?,?,?,1,0,0,datetime('now'),datetime('now'))
+                    INSERT INTO watch_rooms(room_code, host_token, host_ip, title, media_url, theme_key, media_mode, access_mode, is_private, delete_on_host_leave, playback_sec, is_playing, created_at, updated_at)
+                    VALUES(?,?,?,?,?,?,?,?,?,1,0,0,datetime('now'),datetime('now'))
                     ''',
-                    (code, host_token, title, media_url, theme_key, media_mode, access_mode, 1 if access_mode == 'invite' else 0),
+                    (code, host_token, host_ip, title, media_url, theme_key, media_mode, access_mode, 1 if access_mode == 'invite' else 0),
                 )
                 conn.execute(
                     '''
