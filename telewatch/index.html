@@ -591,6 +591,14 @@
                   <label>&nbsp;</label>
                   <button id="setAccessModeBtn" class="secondary">Set Access Mode</button>
                 </div>
+                <div>
+                  <label for="inviteTtlInput">Invite Expires (Minutes)</label>
+                  <input id="inviteTtlInput" type="number" min="5" max="10080" step="5" value="720" />
+                </div>
+                <div>
+                  <label for="inviteMaxUsesInput">Invite Max Uses (0 = Unlimited)</label>
+                  <input id="inviteMaxUsesInput" type="number" min="0" max="500" step="1" value="0" />
+                </div>
               </div>
               <button id="setMediaBtn" class="secondary">Set Media</button>
               <button id="copyLinkBtn" class="secondary">Copy Invite</button>
@@ -823,6 +831,8 @@
       shareAudioSelect: document.getElementById('shareAudioSelect'),
       accessModeSelect: document.getElementById('accessModeSelect'),
       setAccessModeBtn: document.getElementById('setAccessModeBtn'),
+      inviteTtlInput: document.getElementById('inviteTtlInput'),
+      inviteMaxUsesInput: document.getElementById('inviteMaxUsesInput'),
       joinRequestSelect: document.getElementById('joinRequestSelect'),
       approveJoinBtn: document.getElementById('approveJoinBtn'),
       denyJoinBtn: document.getElementById('denyJoinBtn'),
@@ -898,6 +908,7 @@
     const RECENT_ROOMS_KEY = 'telewatch_recent_rooms';
     const THEME_KEY = 'telewatch_theme';
     const JOIN_REQUEST_KEY = 'telewatch_join_request';
+    const INVITE_SETTINGS_KEY = 'telewatch_invite_settings';
 
     const THEMES = {
       clean: {
@@ -1470,6 +1481,32 @@
         opt.textContent = `${String(r.displayName || 'Guest')} · ${String(r.createdAt || '')}`;
         els.joinRequestSelect.appendChild(opt);
       }
+    }
+
+    function readInviteSettings() {
+      let ttlMinutes = 720;
+      let maxUses = 0;
+      try {
+        const raw = localStorage.getItem(INVITE_SETTINGS_KEY) || '';
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          ttlMinutes = Number(parsed.ttlMinutes);
+          maxUses = Number(parsed.maxUses);
+        }
+      } catch (_) {}
+      if (!Number.isFinite(ttlMinutes)) ttlMinutes = 720;
+      if (!Number.isFinite(maxUses)) maxUses = 0;
+      ttlMinutes = Math.max(5, Math.min(10080, Math.round(ttlMinutes)));
+      maxUses = Math.max(0, Math.min(500, Math.round(maxUses)));
+      return { ttlMinutes, maxUses };
+    }
+
+    function writeInviteSettings(ttlMinutes, maxUses) {
+      const ttl = Math.max(5, Math.min(10080, Math.round(Number(ttlMinutes) || 720)));
+      const uses = Math.max(0, Math.min(500, Math.round(Number(maxUses) || 0)));
+      try {
+        localStorage.setItem(INVITE_SETTINGS_KEY, JSON.stringify({ ttlMinutes: ttl, maxUses: uses }));
+      } catch (_) {}
     }
 
     async function setRoomTheme(themeKey) {
@@ -2548,6 +2585,8 @@
       els.deleteRoomBtn.disabled = !state.isHost;
       if (els.setAccessModeBtn) els.setAccessModeBtn.disabled = !state.isHost;
       if (els.accessModeSelect) els.accessModeSelect.disabled = !state.isHost;
+      if (els.inviteTtlInput) els.inviteTtlInput.disabled = !state.isHost;
+      if (els.inviteMaxUsesInput) els.inviteMaxUsesInput.disabled = !state.isHost;
       els.chatBtn.disabled = false;
       setWizardStep(2);
       switchTab(state.isHost ? 'host' : 'chat');
@@ -2631,7 +2670,14 @@
       let url = window.location.origin + '/telewatch/?room=' + encodeURIComponent(state.roomCode);
       if (state.isHost) {
         try {
-          const res = await sendControl('create_invite', { ttlMinutes: 720, maxUses: 0 });
+          const ttlRaw = Number((els.inviteTtlInput && els.inviteTtlInput.value) || 720);
+          const maxUsesRaw = Number((els.inviteMaxUsesInput && els.inviteMaxUsesInput.value) || 0);
+          const ttlMinutes = Math.max(5, Math.min(10080, Math.round(Number.isFinite(ttlRaw) ? ttlRaw : 720)));
+          const maxUses = Math.max(0, Math.min(500, Math.round(Number.isFinite(maxUsesRaw) ? maxUsesRaw : 0)));
+          if (els.inviteTtlInput) els.inviteTtlInput.value = String(ttlMinutes);
+          if (els.inviteMaxUsesInput) els.inviteMaxUsesInput.value = String(maxUses);
+          writeInviteSettings(ttlMinutes, maxUses);
+          const res = await sendControl('create_invite', { ttlMinutes, maxUses });
           const token = String(res && res.actionPayload && res.actionPayload.inviteToken ? res.actionPayload.inviteToken : '').trim();
           if (token) {
             url += '&invite=' + encodeURIComponent(token);
@@ -3118,6 +3164,19 @@
       }
       if (els.shareAudioSelect && !els.shareAudioSelect.value) {
         els.shareAudioSelect.value = 'tab';
+      }
+      const inviteSettings = readInviteSettings();
+      if (els.inviteTtlInput) els.inviteTtlInput.value = String(inviteSettings.ttlMinutes);
+      if (els.inviteMaxUsesInput) els.inviteMaxUsesInput.value = String(inviteSettings.maxUses);
+      if (els.inviteTtlInput) {
+        els.inviteTtlInput.addEventListener('change', () => {
+          writeInviteSettings(els.inviteTtlInput.value, els.inviteMaxUsesInput ? els.inviteMaxUsesInput.value : 0);
+        });
+      }
+      if (els.inviteMaxUsesInput) {
+        els.inviteMaxUsesInput.addEventListener('change', () => {
+          writeInviteSettings(els.inviteTtlInput ? els.inviteTtlInput.value : 720, els.inviteMaxUsesInput.value);
+        });
       }
       try {
         const rawAdmin = localStorage.getItem(ADMIN_SESSION_KEY) || '';
