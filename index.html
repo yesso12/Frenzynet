@@ -124,9 +124,30 @@
       margin-top:8px;
       font-size:.9rem;
     }
+    .kpi-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin-top:8px; }
+    .kpi {
+      border:1px solid #3d5f8f;
+      border-radius:10px;
+      background:rgba(12,24,45,.9);
+      padding:8px;
+    }
+    .kpi .n { font-weight:800; font-size:1.1rem; color:#e7f4ff; }
+    .kpi .k { font-size:.76rem; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+    .poll-option { margin-top:8px; }
+    .bar-wrap { height:8px; border-radius:999px; background:#1a2e53; overflow:hidden; margin-top:4px; }
+    .bar { height:100%; background:linear-gradient(90deg,#37d8ff,#00b8ef); width:0%; transition:width .2s ease; }
+    .spotlight {
+      border:1px solid #3b6192;
+      border-radius:10px;
+      background:linear-gradient(145deg, rgba(17,33,60,.95), rgba(12,23,44,.95));
+      padding:10px;
+      margin-top:8px;
+    }
+    .room-tools { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px; }
     @media (max-width: 980px) {
       .grid { grid-template-columns:1fr; }
       .rooms { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .kpi-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
     }
     @media (max-width: 640px) {
       .shell { width:calc(100% - 16px); }
@@ -199,12 +220,26 @@
       <div class="row">
         <a class="btn" href="/telewatch/?mainEvent=1">Join Main Event Now</a>
       </div>
+      <div class="spotlight">
+        <div style="font-weight:700;color:#d9ecff">Event Spotlight</div>
+        <div id="spotlightText" class="meta">Loading event highlights...</div>
+      </div>
     </section>
 
     <section class="card" style="margin-top:10px">
       <h3>Open Rooms</h3>
       <p>Quick room links for active public watch party rooms.</p>
+      <div class="room-tools">
+        <input id="roomFilter" type="text" placeholder="Filter room code..." maxlength="12" style="flex:1;min-width:170px;border:1px solid #3d5f90;background:#0a1830;color:#ecf3ff;border-radius:10px;padding:9px;" />
+        <button id="randomRoomBtn" class="btn" type="button">Join Random Room</button>
+      </div>
       <div id="rooms" class="rooms"></div>
+      <div class="kpi-grid">
+        <div class="kpi"><div id="kpiRooms" class="n">0</div><div class="k">Open Rooms</div></div>
+        <div class="kpi"><div id="kpiLive" class="n">0</div><div class="k">Live Rooms</div></div>
+        <div class="kpi"><div id="kpiWatchers" class="n">0</div><div class="k">Watchers</div></div>
+        <div class="kpi"><div id="kpiUpdated" class="n">--</div><div class="k">Updated</div></div>
+      </div>
     </section>
 
     <section class="card" style="margin-top:10px">
@@ -216,6 +251,29 @@
       </div>
       <div id="requestList"></div>
       <div style="margin-top:10px" class="meta">Next major night countdown: <span id="countdown">loading...</span></div>
+      <div class="row" style="margin-top:10px">
+        <button id="reactHype" class="btn" type="button">🔥 Hype</button>
+        <button id="reactReady" class="btn" type="button">✅ Ready</button>
+        <button id="reactInvite" class="btn" type="button">📣 Invite Friends</button>
+      </div>
+      <div id="reactionBoard" class="meta"></div>
+    </section>
+
+    <section class="card" style="margin-top:10px">
+      <h3>Community Poll</h3>
+      <p>Vote what should be featured on the next major public night.</p>
+      <div class="poll-option">
+        <div class="row"><button data-poll="action" class="btn poll-vote" type="button">Vote Action</button><span id="pollActionLabel" class="meta">0 votes</span></div>
+        <div class="bar-wrap"><div id="pollActionBar" class="bar"></div></div>
+      </div>
+      <div class="poll-option">
+        <div class="row"><button data-poll="comedy" class="btn poll-vote" type="button">Vote Comedy</button><span id="pollComedyLabel" class="meta">0 votes</span></div>
+        <div class="bar-wrap"><div id="pollComedyBar" class="bar"></div></div>
+      </div>
+      <div class="poll-option">
+        <div class="row"><button data-poll="anime" class="btn poll-vote" type="button">Vote Anime</button><span id="pollAnimeLabel" class="meta">0 votes</span></div>
+        <div class="bar-wrap"><div id="pollAnimeBar" class="bar"></div></div>
+      </div>
     </section>
 
     <section class="card" style="margin-top:10px">
@@ -255,10 +313,19 @@
       const requestBtn = document.getElementById('requestBtn');
       const requestList = document.getElementById('requestList');
       const countdown = document.getElementById('countdown');
+      const roomFilter = document.getElementById('roomFilter');
+      const randomRoomBtn = document.getElementById('randomRoomBtn');
+      const kpiRooms = document.getElementById('kpiRooms');
+      const kpiLive = document.getElementById('kpiLive');
+      const kpiWatchers = document.getElementById('kpiWatchers');
+      const kpiUpdated = document.getElementById('kpiUpdated');
+      const spotlightText = document.getElementById('spotlightText');
+      const reactionBoard = document.getElementById('reactionBoard');
       const isAdmin = !!localStorage.getItem('fn_admin_token');
       document.querySelectorAll('.admin-only').forEach((el) => {
         if (isAdmin) el.classList.remove('hidden');
       });
+      let roomCache = [];
 
       function cleanCode(v) {
         return String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
@@ -278,7 +345,21 @@
         return { roomCode: code, title: `Public Room ${String(i + 1).padStart(2, '0')}`, activeCount: 0, isLive: false, joinUrl: `/telewatch/?room=${code}` };
       });
 
+      function updateKpis(rooms) {
+        const rows = rooms || [];
+        const live = rows.filter((r) => !!r.isLive).length;
+        const watchers = rows.reduce((n, r) => n + Number(r.activeCount || 0), 0);
+        kpiRooms.textContent = String(rows.length);
+        kpiLive.textContent = String(live);
+        kpiWatchers.textContent = String(watchers);
+        const d = new Date();
+        kpiUpdated.textContent = d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
+      }
+
       function draw(rooms) {
+        roomCache = Array.isArray(rooms) ? rooms.slice() : [];
+        const q = String(roomFilter.value || '').toUpperCase().trim();
+        const filtered = !q ? roomCache : roomCache.filter((r) => String(r.roomCode || '').toUpperCase().includes(q));
         roomsEl.innerHTML = (rooms || []).slice(0, 10).map((r) => {
           const code = String(r.roomCode || '').toUpperCase();
           const viewers = Number(r.activeCount || 0);
@@ -286,6 +367,16 @@
           const href = r.joinUrl || `/telewatch/?room=${encodeURIComponent(code)}`;
           return `<a class="room" href="${href}">${code}<div class="meta">${state}</div></a>`;
         }).join('');
+        if (q) {
+          roomsEl.innerHTML = filtered.slice(0, 10).map((r) => {
+            const code = String(r.roomCode || '').toUpperCase();
+            const viewers = Number(r.activeCount || 0);
+            const state = r.isLive ? `LIVE · ${viewers} watching` : 'Open';
+            const href = r.joinUrl || `/telewatch/?room=${encodeURIComponent(code)}`;
+            return `<a class="room" href="${href}">${code}<div class="meta">${state}</div></a>`;
+          }).join('') || '<div class="meta">No rooms match your filter.</div>';
+        }
+        updateKpis(roomCache);
       }
 
       draw(fallback);
@@ -296,6 +387,14 @@
           if (j && Array.isArray(j.rooms) && j.rooms.length) draw(j.rooms);
         })
         .catch(() => {});
+      roomFilter.addEventListener('input', () => draw(roomCache.length ? roomCache : fallback));
+      randomRoomBtn.addEventListener('click', () => {
+        const rows = roomCache.length ? roomCache : fallback;
+        const pick = rows[Math.floor(Math.random() * rows.length)];
+        if (!pick) return;
+        const code = String(pick.roomCode || '').toUpperCase();
+        window.location.href = `/telewatch/?room=${encodeURIComponent(code)}`;
+      });
 
       function readRequests() {
         try { return JSON.parse(localStorage.getItem('fn_public_requests') || '[]'); } catch (_) { return []; }
@@ -332,6 +431,66 @@
       }
       tickCountdown();
       setInterval(tickCountdown, 15000);
+
+      const spotlightItems = [
+        'Main Event public lobby opens 15 minutes before showtime.',
+        'Hosts can enable invite-only rooms for private groups.',
+        'Public viewers can jump straight in with the Main Event button.',
+        'Live room list auto-updates as new parties open.'
+      ];
+      let sIdx = 0;
+      function rotateSpotlight() {
+        spotlightText.textContent = spotlightItems[sIdx % spotlightItems.length];
+        sIdx += 1;
+      }
+      rotateSpotlight();
+      setInterval(rotateSpotlight, 6000);
+
+      function readReactions() {
+        try { return JSON.parse(localStorage.getItem('fn_public_reactions') || '{"hype":0,"ready":0,"invite":0}'); } catch (_) { return { hype:0, ready:0, invite:0 }; }
+      }
+      function writeReactions(v) {
+        try { localStorage.setItem('fn_public_reactions', JSON.stringify(v)); } catch (_) {}
+      }
+      function renderReactions() {
+        const r = readReactions();
+        reactionBoard.textContent = `🔥 Hype: ${r.hype}  |  ✅ Ready: ${r.ready}  |  📣 Invite Friends: ${r.invite}`;
+      }
+      document.getElementById('reactHype').addEventListener('click', () => { const r = readReactions(); r.hype += 1; writeReactions(r); renderReactions(); });
+      document.getElementById('reactReady').addEventListener('click', () => { const r = readReactions(); r.ready += 1; writeReactions(r); renderReactions(); });
+      document.getElementById('reactInvite').addEventListener('click', () => { const r = readReactions(); r.invite += 1; writeReactions(r); renderReactions(); });
+      renderReactions();
+
+      function readPoll() {
+        try { return JSON.parse(localStorage.getItem('fn_public_poll') || '{"action":0,"comedy":0,"anime":0}'); } catch (_) { return { action:0, comedy:0, anime:0 }; }
+      }
+      function writePoll(v) {
+        try { localStorage.setItem('fn_public_poll', JSON.stringify(v)); } catch (_) {}
+      }
+      function renderPoll() {
+        const p = readPoll();
+        const total = Math.max(1, p.action + p.comedy + p.anime);
+        const aPct = Math.round((p.action / total) * 100);
+        const cPct = Math.round((p.comedy / total) * 100);
+        const nPct = Math.round((p.anime / total) * 100);
+        document.getElementById('pollActionLabel').textContent = `${p.action} votes`;
+        document.getElementById('pollComedyLabel').textContent = `${p.comedy} votes`;
+        document.getElementById('pollAnimeLabel').textContent = `${p.anime} votes`;
+        document.getElementById('pollActionBar').style.width = `${aPct}%`;
+        document.getElementById('pollComedyBar').style.width = `${cPct}%`;
+        document.getElementById('pollAnimeBar').style.width = `${nPct}%`;
+      }
+      document.querySelectorAll('.poll-vote').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const key = btn.getAttribute('data-poll');
+          const p = readPoll();
+          if (!p[key] && p[key] !== 0) return;
+          p[key] += 1;
+          writePoll(p);
+          renderPoll();
+        });
+      });
+      renderPoll();
     })();
   </script>
 </body>
