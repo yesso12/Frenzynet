@@ -706,8 +706,7 @@ def get_room_slowmode_sec(conn: sqlite3.Connection, room_code_val: str) -> int:
 
 
 def cleanup_rooms(conn: sqlite3.Connection) -> None:
-    last_error = None
-    for attempt in range(6):
+    for attempt in range(10):
         try:
             placeholders = ','.join(['?'] * len(public_room_codes()))
             ttl_window = f'-{get_empty_room_ttl_minutes(conn)} minutes'
@@ -729,13 +728,19 @@ def cleanup_rooms(conn: sqlite3.Connection) -> None:
             conn.execute("DELETE FROM watch_room_invites WHERE expires_at <= datetime('now') OR (max_uses > 0 AND used_count >= max_uses)")
             return
         except sqlite3.OperationalError as exc:
-            last_error = exc
-            if 'locked' in str(exc).lower() and attempt < 5:
-                time.sleep(0.08 * (attempt + 1))
+            if 'locked' not in str(exc).lower():
+                raise
+            # Clear any failed transaction state before retrying.
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            if attempt < 9:
+                time.sleep(0.1 * (attempt + 1))
                 continue
-            raise
-    if last_error is not None:
-        raise last_error
+            # Skip cleanup under heavy contention; avoid crashing request handlers.
+            return
+    return
 
 
 def room_payload(room_row: sqlite3.Row) -> dict:
