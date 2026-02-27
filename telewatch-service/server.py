@@ -98,6 +98,7 @@ def ensure_schema() -> None:
               title TEXT,
               media_url TEXT,
               theme_key TEXT NOT NULL DEFAULT 'clean',
+              access_mode TEXT NOT NULL DEFAULT 'public',
               is_private INTEGER NOT NULL DEFAULT 0,
               delete_on_host_leave INTEGER NOT NULL DEFAULT 1,
               playback_sec REAL NOT NULL DEFAULT 0,
@@ -173,11 +174,22 @@ def ensure_schema() -> None:
             conn.execute("ALTER TABLE watch_rooms ADD COLUMN theme_key TEXT NOT NULL DEFAULT 'clean'")
         except sqlite3.OperationalError:
             pass
+        try:
+            conn.execute("ALTER TABLE watch_rooms ADD COLUMN access_mode TEXT NOT NULL DEFAULT 'public'")
+        except sqlite3.OperationalError:
+            pass
         conn.execute(
             '''
             UPDATE watch_rooms
             SET theme_key='clean'
             WHERE theme_key IS NULL OR trim(theme_key)=''
+            '''
+        )
+        conn.execute(
+            '''
+            UPDATE watch_rooms
+            SET access_mode=CASE WHEN is_private=1 THEN 'invite' ELSE 'public' END
+            WHERE access_mode IS NULL OR trim(access_mode)=''
             '''
         )
         conn.execute(
@@ -218,11 +230,15 @@ def cleanup_rooms(conn: sqlite3.Connection) -> None:
 
 
 def room_payload(room_row: sqlite3.Row) -> dict:
+    access_mode = str(room_row['access_mode'] if 'access_mode' in room_row.keys() else '').strip().lower()
+    if access_mode not in {'public', 'invite', 'closed'}:
+        access_mode = 'invite' if bool(room_row['is_private']) else 'public'
     return {
         'roomCode': room_row['room_code'],
         'title': room_row['title'] or '',
         'mediaUrl': room_row['media_url'] or '',
         'themeKey': clean_theme_key(room_row['theme_key'] if 'theme_key' in room_row.keys() else 'clean'),
+        'accessMode': access_mode,
         'isPrivate': bool(room_row['is_private']),
         'deleteOnHostLeave': bool(room_row['delete_on_host_leave']),
         'playbackSec': float(room_row['playback_sec'] or 0.0),
@@ -238,8 +254,8 @@ def ensure_public_rooms(conn: sqlite3.Connection) -> None:
             continue
         conn.execute(
             '''
-            INSERT INTO watch_rooms(room_code, host_token, title, media_url, theme_key, is_private, delete_on_host_leave, playback_sec, is_playing, created_at, updated_at)
-            VALUES(?,?,?,?,?,0,1,0,0,datetime('now'),datetime('now'))
+            INSERT INTO watch_rooms(room_code, host_token, title, media_url, theme_key, access_mode, is_private, delete_on_host_leave, playback_sec, is_playing, created_at, updated_at)
+            VALUES(?,?,?,?,?,'public',0,1,0,0,datetime('now'),datetime('now'))
             ''',
             (code, secrets.token_urlsafe(32), f'Public Room {code[-2:]}', '', 'clean'),
         )
@@ -335,7 +351,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                 rooms = []
                 for code in public_room_codes():
                     room = conn.execute(
-                        'SELECT room_code, title, media_url, theme_key, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
+                        'SELECT room_code, title, media_url, theme_key, access_mode, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
                         (code,),
                     ).fetchone()
                     if room is None:
@@ -353,6 +369,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                             'roomCode': code,
                             'title': room['title'] or f'Public Room {code[-2:]}',
                             'themeKey': clean_theme_key(room['theme_key']),
+                            'accessMode': 'public',
                             'activeCount': int(active_count),
                             'isLive': bool(active_count > 0),
                             'joinUrl': f'/telewatch/?room={code}',
@@ -391,7 +408,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             conn.execute("UPDATE watch_participants SET last_seen_at=datetime('now') WHERE participant_token=?", (participant_token,))
 
             room = conn.execute(
-                'SELECT room_code, title, media_url, theme_key, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
+                'SELECT room_code, title, media_url, theme_key, access_mode, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
                 (room_code_val,),
             ).fetchone()
             if room is None:
@@ -443,6 +460,26 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                 ''',
                 (room_code_val,),
             ).fetchone()[0]
+            pending_join_requests = []
+            if bool(part['is_host']):
+                req_rows = conn.execute(
+                    '''
+                    SELECT request_token, display_name, created_at
+                    FROM watch_join_requests
+                    WHERE room_code=? AND status='pending'
+                    ORDER BY created_at ASC
+                    LIMIT 60
+                    ''',
+                    (room_code_val,),
+                ).fetchall()
+                pending_join_requests = [
+                    {
+                        'requestToken': r['request_token'],
+                        'displayName': r['display_name'],
+                        'createdAt': r['created_at'],
+                    }
+                    for r in req_rows
+                ]
             conn.commit()
 
         self._json(
@@ -463,6 +500,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                 ],
                 'activeCount': int(active_count),
                 'events': events,
+                'pendingJoinRequests': pending_join_requests,
                 'serverNow': utc_iso(),
             },
         )
@@ -736,13 +774,14 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     conn.execute(
                         '''
                         UPDATE watch_rooms
-                        SET title=?, media_url='', theme_key='clean', is_private=0, delete_on_host_leave=1, playback_sec=0, is_playing=0, updated_at=datetime('now')
+                        SET title=?, media_url='', theme_key='clean', access_mode='public', is_private=0, delete_on_host_leave=1, playback_sec=0, is_playing=0, updated_at=datetime('now')
                         WHERE room_code=?
                         ''',
                         (f'Public Room {room_code_val[-2:]}', room_code_val),
                     )
                     conn.execute('DELETE FROM watch_participants WHERE room_code=?', (room_code_val,))
                     conn.execute('DELETE FROM watch_events WHERE room_code=?', (room_code_val,))
+                    conn.execute('DELETE FROM watch_join_requests WHERE room_code=?', (room_code_val,))
                     conn.execute(
                         '''
                         INSERT INTO watch_events(room_code, actor_name, event_type, payload_json, created_at)
@@ -763,6 +802,8 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             title = str(payload.get('title', '')).strip()[:160]
             media_url = str(payload.get('mediaUrl', '')).strip()[:600]
             theme_key = clean_theme_key(payload.get('themeKey', 'clean'), 'clean')
+            requested_access_mode = str(payload.get('accessMode', 'public')).strip().lower()
+            access_mode = requested_access_mode if requested_access_mode in {'public', 'invite', 'closed'} else 'public'
             requested_code = normalize_room_code(payload.get('roomCode', ''), '')
             with get_db() as conn:
                 ensure_public_rooms(conn)
@@ -795,10 +836,10 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                 participant_id = secrets.token_hex(6)
                 conn.execute(
                     '''
-                    INSERT INTO watch_rooms(room_code, host_token, title, media_url, theme_key, is_private, delete_on_host_leave, playback_sec, is_playing, created_at, updated_at)
-                    VALUES(?,?,?,?,?,0,1,0,0,datetime('now'),datetime('now'))
+                    INSERT INTO watch_rooms(room_code, host_token, title, media_url, theme_key, access_mode, is_private, delete_on_host_leave, playback_sec, is_playing, created_at, updated_at)
+                    VALUES(?,?,?,?,?,?,?,1,0,0,datetime('now'),datetime('now'))
                     ''',
-                    (code, host_token, title, media_url, theme_key),
+                    (code, host_token, title, media_url, theme_key, access_mode, 1 if access_mode == 'invite' else 0),
                 )
                 conn.execute(
                     '''
@@ -812,7 +853,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     INSERT INTO watch_events(room_code, actor_name, event_type, payload_json, created_at)
                     VALUES(?,?,?,?,datetime('now'))
                     ''',
-                    (code, display_name, 'room_created', stable_json({'title': title, 'mediaUrl': media_url, 'themeKey': theme_key})),
+                    (code, display_name, 'room_created', stable_json({'title': title, 'mediaUrl': media_url, 'themeKey': theme_key, 'accessMode': access_mode})),
                 )
                 conn.commit()
             self._json(
@@ -831,6 +872,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
         if path in join_paths:
             room_code_val = normalize_room_code(payload.get('roomCode', ''), '')
             display_name = clean_name(payload.get('displayName', ''), f"Guest-{secrets.randbelow(900) + 100}")
+            request_token_in = str(payload.get('requestToken', '')).strip()[:96]
             if not room_code_val:
                 self._json(HTTPStatus.BAD_REQUEST, {'error': 'roomCode_required'})
                 return
@@ -839,12 +881,15 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                 ensure_public_rooms(conn)
                 cleanup_rooms(conn)
                 room = conn.execute(
-                    'SELECT room_code, title, media_url, theme_key, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
+                    'SELECT room_code, title, media_url, theme_key, access_mode, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
                     (room_code_val,),
                 ).fetchone()
                 if room is None:
                     self._json(HTTPStatus.NOT_FOUND, {'error': 'room_not_found'})
                     return
+                access_mode = str(room['access_mode'] or '').strip().lower()
+                if access_mode not in {'public', 'invite', 'closed'}:
+                    access_mode = 'invite' if bool(room['is_private']) else 'public'
                 participant_count = conn.execute(
                     '''
                     SELECT COUNT(*)
@@ -865,6 +910,80 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     (room_code_val,),
                 ).fetchone()
                 join_is_host = bool(is_public_room(room_code_val) and host_exists is None)
+
+                if request_token_in:
+                    req = conn.execute(
+                        '''
+                        SELECT request_token, status, participant_token, participant_id
+                        FROM watch_join_requests
+                        WHERE room_code=? AND request_token=?
+                        LIMIT 1
+                        ''',
+                        (room_code_val, request_token_in),
+                    ).fetchone()
+                    if req is not None:
+                        status = str(req['status'] or '').strip().lower()
+                        if status == 'approved' and req['participant_token'] and req['participant_id']:
+                            conn.execute(
+                                '''
+                                UPDATE watch_participants
+                                SET last_seen_at=datetime('now')
+                                WHERE participant_token=? AND room_code=?
+                                ''',
+                                (req['participant_token'], room_code_val),
+                            )
+                            conn.commit()
+                            self._json(
+                                HTTPStatus.OK,
+                                {
+                                    'ok': True,
+                                    'participantToken': req['participant_token'],
+                                    'participantId': req['participant_id'],
+                                    'isHost': False,
+                                    'room': room_payload(room),
+                                },
+                            )
+                            return
+                        if status == 'denied':
+                            self._json(HTTPStatus.FORBIDDEN, {'error': 'join_request_denied'})
+                            return
+                        self._json(HTTPStatus.OK, {'ok': True, 'pendingApproval': True, 'requestToken': request_token_in})
+                        return
+
+                if not join_is_host and access_mode == 'closed':
+                    self._json(HTTPStatus.FORBIDDEN, {'error': 'room_closed'})
+                    return
+                if not join_is_host and access_mode == 'invite':
+                    existing_req = conn.execute(
+                        '''
+                        SELECT request_token, status
+                        FROM watch_join_requests
+                        WHERE room_code=? AND lower(display_name)=lower(?) AND status='pending'
+                        ORDER BY id DESC
+                        LIMIT 1
+                        ''',
+                        (room_code_val, display_name),
+                    ).fetchone()
+                    request_token = str(existing_req['request_token']) if existing_req is not None else secrets.token_urlsafe(24)
+                    if existing_req is None:
+                        conn.execute(
+                            '''
+                            INSERT INTO watch_join_requests(request_token, room_code, display_name, status, created_at)
+                            VALUES(?,?,?,'pending',datetime('now'))
+                            ''',
+                            (request_token, room_code_val, display_name),
+                        )
+                        conn.execute(
+                            '''
+                            INSERT INTO watch_events(room_code, actor_name, event_type, payload_json, created_at)
+                            VALUES(?,?,?,?,datetime('now'))
+                            ''',
+                            (room_code_val, display_name, 'join_requested', stable_json({'displayName': display_name})),
+                        )
+                    conn.commit()
+                    self._json(HTTPStatus.OK, {'ok': True, 'pendingApproval': True, 'requestToken': request_token})
+                    return
+
                 participant_token = secrets.token_urlsafe(32)
                 participant_id = secrets.token_hex(6)
                 conn.execute(
@@ -939,6 +1058,9 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                 if action in {'play', 'pause', 'seek', 'set_media', 'set_title', 'set_theme', 'delete_room', 'reset_room', 'mute_user', 'resolve_request'} and not bool(part['is_host']):
                     self._json(HTTPStatus.FORBIDDEN, {'error': 'host_required'})
                     return
+                if action in {'set_access_mode', 'kick_user', 'resolve_join_request'} and not bool(part['is_host']):
+                    self._json(HTTPStatus.FORBIDDEN, {'error': 'host_required'})
+                    return
 
                 event_payload = {}
                 playback_raw = payload.get('playbackSec')
@@ -993,6 +1115,20 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                         (theme_key, room_code_val),
                     )
                     event_payload['themeKey'] = theme_key
+                elif action == 'set_access_mode':
+                    access_mode = str(payload.get('accessMode', '')).strip().lower()
+                    if access_mode not in {'public', 'invite', 'closed'}:
+                        self._json(HTTPStatus.BAD_REQUEST, {'error': 'invalid_access_mode'})
+                        return
+                    conn.execute(
+                        '''
+                        UPDATE watch_rooms
+                        SET access_mode=?, is_private=?, updated_at=datetime('now')
+                        WHERE room_code=?
+                        ''',
+                        (access_mode, 1 if access_mode == 'invite' else 0, room_code_val),
+                    )
+                    event_payload['accessMode'] = access_mode
                 elif action == 'reset_room':
                     title = str(payload.get('title', '')).strip()[:160]
                     if not title:
@@ -1021,6 +1157,72 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                         return
                     event_payload['toParticipantId'] = to_participant_id
                     event_payload['muted'] = bool(muted)
+                elif action == 'kick_user':
+                    to_participant_id = str(payload.get('toParticipantId', '')).strip().lower()[:24]
+                    if not to_participant_id:
+                        self._json(HTTPStatus.BAD_REQUEST, {'error': 'toParticipantId_required'})
+                        return
+                    if to_participant_id == str(part['participant_id'] or '').lower():
+                        self._json(HTTPStatus.BAD_REQUEST, {'error': 'cannot_kick_self'})
+                        return
+                    target = conn.execute(
+                        'SELECT participant_id, is_host FROM watch_participants WHERE room_code=? AND participant_id=? LIMIT 1',
+                        (room_code_val, to_participant_id),
+                    ).fetchone()
+                    if target is None:
+                        self._json(HTTPStatus.NOT_FOUND, {'error': 'target_participant_not_found'})
+                        return
+                    if bool(target['is_host']):
+                        self._json(HTTPStatus.FORBIDDEN, {'error': 'cannot_kick_host'})
+                        return
+                    conn.execute(
+                        'DELETE FROM watch_participants WHERE room_code=? AND participant_id=?',
+                        (room_code_val, to_participant_id),
+                    )
+                    event_payload['toParticipantId'] = to_participant_id
+                elif action == 'resolve_join_request':
+                    request_token = str(payload.get('requestToken', '')).strip()[:96]
+                    status = str(payload.get('status', '')).strip().lower()[:16]
+                    if not request_token:
+                        self._json(HTTPStatus.BAD_REQUEST, {'error': 'requestToken_required'})
+                        return
+                    if status not in {'approved', 'denied'}:
+                        self._json(HTTPStatus.BAD_REQUEST, {'error': 'invalid_status'})
+                        return
+                    req = conn.execute(
+                        '''
+                        SELECT request_token, display_name, status
+                        FROM watch_join_requests
+                        WHERE room_code=? AND request_token=?
+                        LIMIT 1
+                        ''',
+                        (room_code_val, request_token),
+                    ).fetchone()
+                    if req is None:
+                        self._json(HTTPStatus.NOT_FOUND, {'error': 'join_request_not_found'})
+                        return
+                    participant_token_new = None
+                    participant_id_new = None
+                    if status == 'approved':
+                        participant_token_new = secrets.token_urlsafe(32)
+                        participant_id_new = secrets.token_hex(6)
+                        conn.execute(
+                            '''
+                            INSERT INTO watch_participants(participant_token, participant_id, room_code, display_name, is_host, created_at, last_seen_at)
+                            VALUES(?,?,?,?,0,datetime('now'),datetime('now'))
+                            ''',
+                            (participant_token_new, participant_id_new, room_code_val, clean_name(req['display_name'], 'Guest')),
+                        )
+                    conn.execute(
+                        '''
+                        UPDATE watch_join_requests
+                        SET status=?, participant_token=?, participant_id=?, responded_by=?, responded_at=datetime('now')
+                        WHERE room_code=? AND request_token=?
+                        ''',
+                        (status, participant_token_new, participant_id_new, part['display_name'], room_code_val, request_token),
+                    )
+                    event_payload['requestToken'] = request_token
+                    event_payload['status'] = status
                 elif action == 'request_item':
                     request_type = str(payload.get('requestType', '')).strip().lower()[:32]
                     request_text = str(payload.get('requestText', '')).strip()[:300]
@@ -1083,13 +1285,14 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                         conn.execute(
                             '''
                             UPDATE watch_rooms
-                            SET title=?, media_url='', theme_key='clean', is_private=0, delete_on_host_leave=1, playback_sec=0, is_playing=0, updated_at=datetime('now')
+                            SET title=?, media_url='', theme_key='clean', access_mode='public', is_private=0, delete_on_host_leave=1, playback_sec=0, is_playing=0, updated_at=datetime('now')
                             WHERE room_code=?
                             ''',
                             (f'Public Room {room_code_val[-2:]}', room_code_val),
                         )
                         conn.execute('DELETE FROM watch_participants WHERE room_code=?', (room_code_val,))
                         conn.execute('DELETE FROM watch_events WHERE room_code=?', (room_code_val,))
+                        conn.execute('DELETE FROM watch_join_requests WHERE room_code=?', (room_code_val,))
                         conn.execute(
                             '''
                             INSERT INTO watch_events(room_code, actor_name, event_type, payload_json, created_at)
