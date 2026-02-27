@@ -1,0 +1,16 @@
+[Unit]
+Description=Frenzy Telewatch Service
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/root/Frenzynet/telewatch-service
+ExecStart=/usr/bin/python3 /root/Frenzynet/telewatch-service/server.py
+Restart=always
+RestartSec=2
+Environment=TELEWATCH_HOST=127.0.0.1
+Environment=TELEWATCH_PORT=9191
+Environment=TELEWATCH_DB_PATH=/root/Frenzynet/telewatch-service/data/telewatch.db
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,505 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Frenzy Telewatch | Synced Watch Rooms</title>
+  <style>
+    :root {
+      --bg: #08111c;
+      --panel: #122235;
+      --panel2: #0d1a2b;
+      --line: #2b4b70;
+      --accent: #43d6ff;
+      --accent2: #1fa0d4;
+      --text: #e6f2ff;
+      --muted: #99b8d7;
+      --good: #7cffbf;
+      --warn: #ffd56f;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--text);
+      font-family: "Segoe UI", Tahoma, Arial, sans-serif;
+      background:
+        radial-gradient(circle at 10% 10%, rgba(67, 214, 255, 0.2), transparent 40%),
+        radial-gradient(circle at 90% 0%, rgba(124, 255, 191, 0.15), transparent 28%),
+        linear-gradient(160deg, #08111c, #0a1625 40%, #08101b 100%);
+      min-height: 100vh;
+    }
+    .wrap { width: min(1150px, calc(100% - 24px)); margin: 18px auto 28px; }
+    .top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(10, 20, 32, 0.82);
+      padding: 10px 12px;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: #0d2438;
+      border: 1px solid #2f587f;
+      color: #b8dcff;
+      font-weight: 700;
+      font-size: 13px;
+    }
+    .grid { margin-top: 12px; display: grid; grid-template-columns: 370px 1fr; gap: 12px; }
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: linear-gradient(180deg, var(--panel), var(--panel2));
+      padding: 12px;
+    }
+    h1, h2, h3 { margin: 0 0 10px; }
+    h1 { font-size: 22px; }
+    h2 { font-size: 17px; }
+    h3 { font-size: 14px; color: #b4cdea; letter-spacing: 0.02em; }
+    .muted { color: var(--muted); }
+    .stack { display: grid; gap: 8px; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; }
+    label { font-size: 12px; color: #a9c8e7; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+    input, button, textarea {
+      width: 100%;
+      border-radius: 9px;
+      border: 1px solid #305274;
+      background: #0a1829;
+      color: var(--text);
+      padding: 10px;
+      font: inherit;
+    }
+    textarea { min-height: 70px; resize: vertical; }
+    button {
+      width: auto;
+      background: linear-gradient(180deg, var(--accent), var(--accent2));
+      border: 0;
+      color: #00131f;
+      font-weight: 800;
+      cursor: pointer;
+      padding: 10px 14px;
+    }
+    button.secondary {
+      background: #0f2740;
+      border: 1px solid #2f587f;
+      color: #c7e5ff;
+    }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+    video {
+      width: 100%;
+      max-height: 420px;
+      border-radius: 10px;
+      border: 1px solid #2a496d;
+      background: #050b13;
+    }
+    .status-online { color: var(--good); }
+    .status-warn { color: var(--warn); }
+    .events {
+      max-height: 220px;
+      overflow: auto;
+      background: #081423;
+      border: 1px solid #284766;
+      border-radius: 8px;
+      padding: 8px;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .events div { padding: 3px 0; border-bottom: 1px dashed rgba(70, 108, 140, 0.4); }
+    .events div:last-child { border-bottom: 0; }
+    .footer { margin-top: 12px; color: #88a8c8; font-size: 13px; }
+    a { color: #70d8ff; }
+    @media (max-width: 980px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <h1>Frenzy Telewatch</h1>
+      <div class="row">
+        <span id="roomBadge" class="badge">Room: none</span>
+        <span id="roleBadge" class="badge">Role: viewer</span>
+        <span id="syncBadge" class="badge">Sync: idle</span>
+      </div>
+    </div>
+
+    <div class="grid">
+      <section class="card stack">
+        <h2>Session</h2>
+        <div>
+          <label for="displayName">Display Name</label>
+          <input id="displayName" placeholder="e.g. Ghost" />
+        </div>
+        <div>
+          <label for="roomInput">Room Code</label>
+          <input id="roomInput" placeholder="e.g. K7V9P2" />
+        </div>
+        <div class="row">
+          <button id="createBtn">Create Room</button>
+          <button id="joinBtn" class="secondary">Join Room</button>
+        </div>
+        <div class="muted" id="joinHint">Share your room code in Discord voice chat. Everyone runs their own stream account.</div>
+
+        <h3>Host Controls</h3>
+        <div>
+          <label for="titleInput">Title</label>
+          <input id="titleInput" placeholder="Episode / movie title" />
+        </div>
+        <div>
+          <label for="mediaInput">Media URL (Optional direct file)</label>
+          <input id="mediaInput" placeholder="https://.../video.mp4" />
+        </div>
+        <div class="row">
+          <button id="setMediaBtn" class="secondary">Set Media</button>
+          <button id="copyLinkBtn" class="secondary">Copy Invite Link</button>
+        </div>
+
+        <h3>Room Chat</h3>
+        <textarea id="chatInput" placeholder="Send timestamp notes, e.g. pause at 12:34"></textarea>
+        <button id="chatBtn" class="secondary">Send Note</button>
+      </section>
+
+      <section class="card stack">
+        <h2 id="nowTitle">Now Playing</h2>
+        <div id="connState" class="status-warn">Not connected</div>
+        <video id="player" controls playsinline></video>
+        <div class="row">
+          <button id="playBtn" class="secondary">Play</button>
+          <button id="pauseBtn" class="secondary">Pause</button>
+          <button id="resyncBtn" class="secondary">Force Re-sync</button>
+        </div>
+        <h3>Events</h3>
+        <div id="events" class="events"></div>
+      </section>
+    </div>
+
+    <div class="footer">
+      This sync layer coordinates playback timing only. It does not rebroadcast protected streams.
+      <a href="/">Back to FrenzyNets</a>
+    </div>
+  </div>
+
+  <script>
+    const API_PREFIXES = ['/api/telewatch'];
+    const POLL_MS = 1300;
+
+    const els = {
+      displayName: document.getElementById('displayName'),
+      roomInput: document.getElementById('roomInput'),
+      titleInput: document.getElementById('titleInput'),
+      mediaInput: document.getElementById('mediaInput'),
+      createBtn: document.getElementById('createBtn'),
+      joinBtn: document.getElementById('joinBtn'),
+      setMediaBtn: document.getElementById('setMediaBtn'),
+      copyLinkBtn: document.getElementById('copyLinkBtn'),
+      chatInput: document.getElementById('chatInput'),
+      chatBtn: document.getElementById('chatBtn'),
+      playBtn: document.getElementById('playBtn'),
+      pauseBtn: document.getElementById('pauseBtn'),
+      resyncBtn: document.getElementById('resyncBtn'),
+      roomBadge: document.getElementById('roomBadge'),
+      roleBadge: document.getElementById('roleBadge'),
+      syncBadge: document.getElementById('syncBadge'),
+      connState: document.getElementById('connState'),
+      nowTitle: document.getElementById('nowTitle'),
+      events: document.getElementById('events'),
+      player: document.getElementById('player')
+    };
+
+    const state = {
+      roomCode: '',
+      participantToken: '',
+      isHost: false,
+      sinceEventId: 0,
+      pollTimer: null,
+      suppressOutbound: false,
+      lastSeekSentAt: 0,
+      lastRoom: null
+    };
+
+    function qp(name) {
+      const u = new URL(window.location.href);
+      return u.searchParams.get(name) || '';
+    }
+
+    function setStatus(ok, text) {
+      els.connState.className = ok ? 'status-online' : 'status-warn';
+      els.connState.textContent = text;
+    }
+
+    function addEventLine(text) {
+      const d = document.createElement('div');
+      d.textContent = text;
+      els.events.prepend(d);
+      while (els.events.children.length > 120) {
+        els.events.removeChild(els.events.lastChild);
+      }
+    }
+
+    async function apiRequest(method, path, body, queryParams) {
+      let lastError = null;
+      for (const prefix of API_PREFIXES) {
+        try {
+          const url = new URL(prefix + path, window.location.origin);
+          if (queryParams) {
+            Object.entries(queryParams).forEach(([k, v]) => {
+              if (v !== undefined && v !== null && v !== '') {
+                url.searchParams.set(k, String(v));
+              }
+            });
+          }
+          const res = await fetch(url.toString(), {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: body ? JSON.stringify(body) : undefined,
+            cache: 'no-store'
+          });
+          const text = await res.text();
+          let data = {};
+          try { data = text ? JSON.parse(text) : {}; } catch (_) {}
+          if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+          return data;
+        } catch (err) {
+          lastError = err;
+        }
+      }
+      throw lastError || new Error('request_failed');
+    }
+
+    async function createRoom() {
+      const payload = {
+        displayName: els.displayName.value.trim() || 'Host',
+        title: els.titleInput.value.trim(),
+        mediaUrl: els.mediaInput.value.trim()
+      };
+      const data = await apiRequest('POST', '/api/watch/create', payload);
+      state.roomCode = data.roomCode;
+      state.participantToken = data.participantToken;
+      state.isHost = true;
+      state.sinceEventId = 0;
+      els.roomInput.value = state.roomCode;
+      onSessionStart();
+      addEventLine('Room created: ' + state.roomCode);
+    }
+
+    async function joinRoom() {
+      const payload = {
+        roomCode: (els.roomInput.value || '').trim().toUpperCase(),
+        displayName: els.displayName.value.trim() || ''
+      };
+      const data = await apiRequest('POST', '/api/watch/join', payload);
+      state.roomCode = payload.roomCode;
+      state.participantToken = data.participantToken;
+      state.isHost = false;
+      state.sinceEventId = 0;
+      onSessionStart();
+      applyRoomState(data.room || null, true);
+      addEventLine('Joined room: ' + state.roomCode);
+    }
+
+    function updateBadges() {
+      els.roomBadge.textContent = 'Room: ' + (state.roomCode || 'none');
+      els.roleBadge.textContent = 'Role: ' + (state.isHost ? 'host' : 'viewer');
+    }
+
+    function onSessionStart() {
+      updateBadges();
+      els.createBtn.disabled = true;
+      els.joinBtn.disabled = true;
+      els.setMediaBtn.disabled = !state.isHost;
+      els.playBtn.disabled = !state.isHost;
+      els.pauseBtn.disabled = !state.isHost;
+      els.chatBtn.disabled = false;
+      if (state.pollTimer) clearInterval(state.pollTimer);
+      state.pollTimer = setInterval(pollState, POLL_MS);
+      pollState();
+    }
+
+    function setSyncLabel(text) {
+      els.syncBadge.textContent = 'Sync: ' + text;
+    }
+
+    function applyRoomState(room, force) {
+      if (!room) return;
+      state.lastRoom = room;
+      els.nowTitle.textContent = room.title ? ('Now Playing: ' + room.title) : 'Now Playing';
+      if (!state.isHost) {
+        els.titleInput.value = room.title || '';
+        els.mediaInput.value = room.mediaUrl || '';
+      }
+
+      const p = els.player;
+      const mediaUrl = (room.mediaUrl || '').trim();
+      if (mediaUrl && p.src !== mediaUrl) {
+        state.suppressOutbound = true;
+        p.src = mediaUrl;
+        p.load();
+        state.suppressOutbound = false;
+      }
+
+      const drift = Math.abs((Number(p.currentTime) || 0) - (Number(room.playbackSec) || 0));
+      if (force || drift > 1.5) {
+        try {
+          state.suppressOutbound = true;
+          p.currentTime = Number(room.playbackSec) || 0;
+          state.suppressOutbound = false;
+          setSyncLabel('aligned');
+        } catch (_) {
+          state.suppressOutbound = false;
+        }
+      }
+
+      if (!state.isHost) {
+        if (room.isPlaying && p.paused) {
+          state.suppressOutbound = true;
+          p.play().catch(() => {});
+          state.suppressOutbound = false;
+        }
+        if (!room.isPlaying && !p.paused) {
+          state.suppressOutbound = true;
+          p.pause();
+          state.suppressOutbound = false;
+        }
+      }
+    }
+
+    async function sendControl(action, extra) {
+      if (!state.roomCode || !state.participantToken) return;
+      const body = Object.assign({
+        roomCode: state.roomCode,
+        participantToken: state.participantToken,
+        action
+      }, extra || {});
+      await apiRequest('POST', '/api/watch/control', body);
+    }
+
+    async function pollState() {
+      if (!state.roomCode || !state.participantToken) return;
+      try {
+        const data = await apiRequest('GET', '/api/watch/state', null, {
+          roomCode: state.roomCode,
+          participantToken: state.participantToken,
+          sinceEventId: state.sinceEventId
+        });
+        setStatus(true, 'Connected · active viewers: ' + (data.activeCount || 0));
+        applyRoomState(data.room || null, false);
+        for (const ev of (data.events || [])) {
+          state.sinceEventId = Math.max(state.sinceEventId, Number(ev.id) || 0);
+          const actor = ev.actor || 'user';
+          if (ev.type === 'chat') {
+            addEventLine(actor + ': ' + String(ev.payload?.message || ''));
+          } else {
+            addEventLine(actor + ' · ' + ev.type.replace('_', ' '));
+          }
+        }
+      } catch (err) {
+        setStatus(false, 'Reconnect pending: ' + (err?.message || 'network_error'));
+        setSyncLabel('retrying');
+      }
+    }
+
+    async function setupMedia() {
+      if (!state.isHost) return;
+      await sendControl('set_media', {
+        mediaUrl: els.mediaInput.value.trim(),
+        title: els.titleInput.value.trim()
+      });
+      setSyncLabel('media updated');
+    }
+
+    async function sendChat() {
+      const message = els.chatInput.value.trim();
+      if (!message) return;
+      await sendControl('chat', { message });
+      els.chatInput.value = '';
+    }
+
+    async function copyInviteLink() {
+      if (!state.roomCode) return;
+      const url = window.location.origin + '/telewatch/?room=' + encodeURIComponent(state.roomCode);
+      try {
+        await navigator.clipboard.writeText(url);
+        setSyncLabel('invite copied');
+      } catch (_) {
+        setSyncLabel(url);
+      }
+    }
+
+    els.createBtn.addEventListener('click', async () => {
+      try { await createRoom(); } catch (err) { setStatus(false, String(err.message || err)); }
+    });
+
+    els.joinBtn.addEventListener('click', async () => {
+      try { await joinRoom(); } catch (err) { setStatus(false, String(err.message || err)); }
+    });
+
+    els.setMediaBtn.addEventListener('click', async () => {
+      try { await setupMedia(); } catch (err) { setStatus(false, String(err.message || err)); }
+    });
+
+    els.chatBtn.addEventListener('click', async () => {
+      try { await sendChat(); } catch (err) { setStatus(false, String(err.message || err)); }
+    });
+
+    els.copyLinkBtn.addEventListener('click', copyInviteLink);
+
+    els.playBtn.addEventListener('click', async () => {
+      if (!state.isHost) return;
+      try {
+        await sendControl('play', { playbackSec: Number(els.player.currentTime) || 0 });
+        await els.player.play().catch(() => {});
+      } catch (err) { setStatus(false, String(err.message || err)); }
+    });
+
+    els.pauseBtn.addEventListener('click', async () => {
+      if (!state.isHost) return;
+      try {
+        await sendControl('pause', { playbackSec: Number(els.player.currentTime) || 0 });
+        els.player.pause();
+      } catch (err) { setStatus(false, String(err.message || err)); }
+    });
+
+    els.resyncBtn.addEventListener('click', () => applyRoomState(state.lastRoom, true));
+
+    els.player.addEventListener('play', async () => {
+      if (!state.isHost || state.suppressOutbound) return;
+      try { await sendControl('play', { playbackSec: Number(els.player.currentTime) || 0 }); } catch (_) {}
+    });
+
+    els.player.addEventListener('pause', async () => {
+      if (!state.isHost || state.suppressOutbound) return;
+      try { await sendControl('pause', { playbackSec: Number(els.player.currentTime) || 0 }); } catch (_) {}
+    });
+
+    els.player.addEventListener('seeked', async () => {
+      if (!state.isHost || state.suppressOutbound) return;
+      const now = Date.now();
+      if (now - state.lastSeekSentAt < 450) return;
+      state.lastSeekSentAt = now;
+      try { await sendControl('seek', { playbackSec: Number(els.player.currentTime) || 0 }); } catch (_) {}
+    });
+
+    (function init() {
+      const roomFromQuery = (qp('room') || '').trim().toUpperCase();
+      if (roomFromQuery) els.roomInput.value = roomFromQuery;
+      try {
+        const savedName = localStorage.getItem('telewatch_name') || '';
+        if (savedName) els.displayName.value = savedName;
+      } catch (_) {}
+      els.displayName.addEventListener('input', () => {
+        try { localStorage.setItem('telewatch_name', els.displayName.value.trim()); } catch (_) {}
+      });
+      updateBadges();
+      if (roomFromQuery) setStatus(false, 'Enter name and click Join Room');
+    })();
+  </script>
+</body>
+</html>
