@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#1d1512"/>
+      <stop offset="55%" stop-color="#2a1f19"/>
+      <stop offset="100%" stop-color="#120f0d"/>
+    </linearGradient>
+    <radialGradient id="lamp" cx="0.5" cy="0" r="0.7">
+      <stop offset="0%" stop-color="#ffcc86" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#ffcc86" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#bg)"/>
+  <rect width="1920" height="1080" fill="url(#lamp)" opacity="0.45"/>
+  <rect x="0" y="780" width="1920" height="300" fill="#0d0a09"/>
+  <g fill="#2f241d" opacity="0.95">
+    <rect x="180" y="590" width="300" height="220" rx="18"/>
+    <rect x="560" y="610" width="260" height="200" rx="18"/>
+    <rect x="900" y="575" width="340" height="235" rx="18"/>
+    <rect x="1300" y="620" width="300" height="190" rx="18"/>
+  </g>
+  <g stroke="#b68f66" stroke-width="3" opacity="0.5" fill="none">
+    <path d="M0 820 C260 760,530 860,790 810 S1320 760,1600 820 S1820 840,1920 810"/>
+    <path d="M0 880 C250 830,530 920,800 870 S1320 810,1600 880 S1820 900,1920 870"/>
+  </g>
+</svg>
