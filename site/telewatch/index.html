@@ -236,6 +236,29 @@
       background: var(--input-bg);
       color: var(--text);
     }
+    .side-controls {
+      display: grid;
+      gap: 6px;
+    }
+    .compact-mode .card,
+    .compact-mode .sidebar { padding: 10px; }
+    .compact-mode .block { padding: 8px; }
+    .compact-mode input,
+    .compact-mode button,
+    .compact-mode textarea,
+    .compact-mode select { padding: 8px 9px; }
+    .focus-mode [data-scene-card="open"],
+    .focus-mode .admin-delete,
+    .focus-mode #eventsBlock,
+    .focus-mode .tab-btn[data-tab-btn="admin"] { display: none !important; }
+    .empty-state {
+      border: 1px dashed var(--line);
+      border-radius: 10px;
+      padding: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      text-align: center;
+    }
     .card {
       border: 1px solid var(--line);
       border-radius: 15px;
@@ -671,6 +694,35 @@
     <div class="workspace">
       <aside class="sidebar">
         <div class="side-block">
+          <h3>Layout</h3>
+          <div class="side-controls">
+            <select id="layoutModeSelect">
+              <option value="standard">Standard Layout</option>
+              <option value="focus">Focus Mode</option>
+            </select>
+            <select id="densitySelect">
+              <option value="comfortable">Comfortable</option>
+              <option value="compact">Compact</option>
+            </select>
+          </div>
+        </div>
+        <div class="side-block">
+          <h3>Host Macros</h3>
+          <div class="side-controls">
+            <button id="macroStartBtn" class="secondary">Start Party</button>
+            <button id="macroIntermissionBtn" class="secondary">Intermission</button>
+            <button id="macroWrapBtn" class="secondary">Wrap Up</button>
+          </div>
+        </div>
+        <div class="side-block">
+          <h3>Room Templates</h3>
+          <div class="side-controls">
+            <select id="templateSelect"></select>
+            <button id="saveTemplateBtn" class="secondary">Save Template</button>
+            <button id="applyTemplateBtn" class="secondary">Apply Template</button>
+          </div>
+        </div>
+        <div class="side-block">
           <h3>Quick Rooms</h3>
           <div id="sideRooms" class="side-list"></div>
         </div>
@@ -774,6 +826,29 @@
                   </select>
                 </div>
                 <div>
+                  <label for="movieQualitySelect">Movie Quality</label>
+                  <select id="movieQualitySelect">
+                    <option value="high">Cinema High (1080p)</option>
+                    <option value="ultra">Cinema Ultra (1440p)</option>
+                    <option value="balanced">Balanced (720p)</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="webcamQualitySelect">Webcam Quality</label>
+                  <select id="webcamQualitySelect">
+                    <option value="high">Clear (1080p)</option>
+                    <option value="balanced">Balanced (720p)</option>
+                    <option value="ultra">Ultra (1440p)</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="audioProfileSelect">Audio Profile</label>
+                  <select id="audioProfileSelect">
+                    <option value="cinema">Cinema Clear</option>
+                    <option value="voice">Voice Crisp</option>
+                  </select>
+                </div>
+                <div>
                   <label for="accessModeSelect">Party Access</label>
                   <select id="accessModeSelect">
                     <option value="public">Public (Anyone can join)</option>
@@ -784,6 +859,16 @@
                 <div>
                   <label>&nbsp;</label>
                   <button id="setAccessModeBtn" class="secondary">Set Access Mode</button>
+                </div>
+                <div class="full">
+                  <label>Cohost Permission Matrix</label>
+                  <div class="row">
+                    <label><input id="cohostKickPerm" type="checkbox" checked /> Kick</label>
+                    <label><input id="cohostMutePerm" type="checkbox" checked /> Mute</label>
+                    <label><input id="cohostAccessPerm" type="checkbox" checked /> Access</label>
+                    <label><input id="cohostPinPerm" type="checkbox" checked /> Pin</label>
+                  </div>
+                  <button id="setCohostPermsBtn" class="secondary">Apply Cohost Permissions</button>
                 </div>
                 <div>
                   <label for="inviteTtlInput">Invite Expires (Minutes)</label>
@@ -941,6 +1026,9 @@
             <span class="status-chip" id="liveChip">Not Live</span>
             <span class="status-chip" id="shareChip">Not Sharing</span>
             <span class="status-chip" id="fullChip">Room Open</span>
+            <span class="status-chip" id="latencyChip">Latency --</span>
+            <span class="status-chip" id="driftChip">Drift --</span>
+            <span class="status-chip" id="reconnectChip">Reconnects 0</span>
           </div>
         </div>
         <div id="sceneBoard" class="scene-board">
@@ -1032,6 +1120,14 @@
       inviteInput: document.getElementById('inviteInput'),
       clientModeSelect: document.getElementById('clientModeSelect'),
       openDesktopBtn: document.getElementById('openDesktopBtn'),
+      layoutModeSelect: document.getElementById('layoutModeSelect'),
+      densitySelect: document.getElementById('densitySelect'),
+      macroStartBtn: document.getElementById('macroStartBtn'),
+      macroIntermissionBtn: document.getElementById('macroIntermissionBtn'),
+      macroWrapBtn: document.getElementById('macroWrapBtn'),
+      templateSelect: document.getElementById('templateSelect'),
+      saveTemplateBtn: document.getElementById('saveTemplateBtn'),
+      applyTemplateBtn: document.getElementById('applyTemplateBtn'),
       quickHostBtn: document.getElementById('quickHostBtn'),
       recentJoinBtn: document.getElementById('recentJoinBtn'),
       recentRoomsSelect: document.getElementById('recentRoomsSelect'),
@@ -1066,6 +1162,14 @@
       hostPreviewInfo: document.getElementById('hostPreviewInfo'),
       hostPreview: document.getElementById('hostPreview'),
       shareQualitySelect: document.getElementById('shareQualitySelect'),
+      movieQualitySelect: document.getElementById('movieQualitySelect'),
+      webcamQualitySelect: document.getElementById('webcamQualitySelect'),
+      audioProfileSelect: document.getElementById('audioProfileSelect'),
+      cohostKickPerm: document.getElementById('cohostKickPerm'),
+      cohostMutePerm: document.getElementById('cohostMutePerm'),
+      cohostAccessPerm: document.getElementById('cohostAccessPerm'),
+      cohostPinPerm: document.getElementById('cohostPinPerm'),
+      setCohostPermsBtn: document.getElementById('setCohostPermsBtn'),
       webcamPolicySelect: document.getElementById('webcamPolicySelect'),
       setWebcamPolicyBtn: document.getElementById('setWebcamPolicyBtn'),
       startWebcamBtn: document.getElementById('startWebcamBtn'),
@@ -1111,6 +1215,9 @@
       liveChip: document.getElementById('liveChip'),
       shareChip: document.getElementById('shareChip'),
       fullChip: document.getElementById('fullChip'),
+      latencyChip: document.getElementById('latencyChip'),
+      driftChip: document.getElementById('driftChip'),
+      reconnectChip: document.getElementById('reconnectChip'),
       openPartiesList: document.getElementById('openPartiesList'),
       sideRooms: document.getElementById('sideRooms'),
       sideVoice: document.getElementById('sideVoice'),
@@ -1165,7 +1272,12 @@
       clientMode: 'web',
       allowWebcam: true,
       chatMessages: new Map(),
-      pinnedMessageId: 0
+      pinnedMessageId: 0,
+      reconnectCount: 0,
+      lastPollLatencyMs: 0,
+      cohostPerms: { kick: true, mute: true, access: true, pin: true },
+      layoutMode: 'standard',
+      densityMode: 'comfortable'
     };
     const SESSION_KEY = 'telewatch_session';
     const ADMIN_SESSION_KEY = 'telewatch_admin_session';
@@ -1175,6 +1287,9 @@
     const INVITE_SETTINGS_KEY = 'telewatch_invite_settings';
     const CLIENT_MODE_KEY = 'telewatch_client_mode';
     const SCENE_ORDER_KEY = 'telewatch_scene_order';
+    const LAYOUT_MODE_KEY = 'telewatch_layout_mode';
+    const DENSITY_MODE_KEY = 'telewatch_density_mode';
+    const ROOM_TEMPLATE_KEY = 'telewatch_room_templates_v1';
 
     const THEMES = {
       clean: {
@@ -2087,6 +2202,20 @@
       if (els.screenView) {
         els.screenView.classList.toggle('hidden-media', !inRoom || !hasScreenMedia);
       }
+      if (els.chatFeed) {
+        els.chatFeed.classList.toggle('hidden-media', !inRoom);
+      }
+      if (els.chatInput) {
+        els.chatInput.disabled = !inRoom;
+      }
+      if (els.chatBtn) {
+        els.chatBtn.disabled = !inRoom;
+      }
+      if (els.pinnedChat) {
+        if (!inRoom) {
+          els.pinnedChat.textContent = 'Join a room to view room-only messages.';
+        }
+      }
     }
 
     function renderOpenParties(rooms) {
@@ -2251,8 +2380,8 @@
       return !!(rtc.localCamStream && rtc.localCamStream.getVideoTracks().length);
     }
 
-    function getShareQualityProfile() {
-      const raw = String((els.shareQualitySelect && els.shareQualitySelect.value) || 'balanced').toLowerCase();
+    function getQualityProfile(rawIn) {
+      const raw = String(rawIn || 'balanced').toLowerCase();
       if (raw === 'ultra') {
         return { key: 'ultra', maxBitrate: 10000000, maxFramerate: 60, width: 2560, height: 1440, frameRate: 60 };
       }
@@ -2260,6 +2389,18 @@
         return { key: 'high', maxBitrate: 6500000, maxFramerate: 60, width: 1920, height: 1080, frameRate: 60 };
       }
       return { key: 'balanced', maxBitrate: 3200000, maxFramerate: 30, width: 1280, height: 720, frameRate: 30 };
+    }
+
+    function getShareQualityProfile() {
+      return getQualityProfile((els.shareQualitySelect && els.shareQualitySelect.value) || 'balanced');
+    }
+
+    function getMovieQualityProfile() {
+      return getQualityProfile((els.movieQualitySelect && els.movieQualitySelect.value) || 'high');
+    }
+
+    function getWebcamQualityProfile() {
+      return getQualityProfile((els.webcamQualitySelect && els.webcamQualitySelect.value) || 'high');
     }
 
     async function setSenderQuality(sender, profile) {
@@ -2302,16 +2443,59 @@
       if (els.denyJoinBtn) els.denyJoinBtn.disabled = !hostCanModerate;
       if (els.setAccessModeBtn) els.setAccessModeBtn.disabled = !hostCanModerate;
       if (els.setWebcamPolicyBtn) els.setWebcamPolicyBtn.disabled = !hostCanModerate;
+      if (els.setCohostPermsBtn) els.setCohostPermsBtn.disabled = !hostCanModerate;
       if (els.webcamPolicySelect) {
         els.webcamPolicySelect.disabled = !hostCanModerate;
         els.webcamPolicySelect.value = state.allowWebcam ? 'allow' : 'deny';
       }
+      if (els.cohostKickPerm) els.cohostKickPerm.disabled = !hostCanModerate;
+      if (els.cohostMutePerm) els.cohostMutePerm.disabled = !hostCanModerate;
+      if (els.cohostAccessPerm) els.cohostAccessPerm.disabled = !hostCanModerate;
+      if (els.cohostPinPerm) els.cohostPinPerm.disabled = !hostCanModerate;
       const canUseWebcam = !!state.roomCode && (state.isHost || state.allowWebcam);
       if (els.startWebcamBtn) els.startWebcamBtn.disabled = !canUseWebcam || camOn();
       if (els.stopWebcamBtn) els.stopWebcamBtn.disabled = !camOn();
       if (els.remoteWebcamGrid) {
         els.remoteWebcamGrid.classList.toggle('hidden-media', !state.isHost || rtc.camEls.size < 1);
       }
+    }
+
+    async function setSenderAudioQuality(sender, maxBitrate) {
+      if (!sender || !sender.getParameters || !sender.setParameters) return;
+      try {
+        const params = sender.getParameters() || {};
+        if (!Array.isArray(params.encodings) || !params.encodings.length) params.encodings = [{}];
+        params.encodings[0].maxBitrate = maxBitrate;
+        await sender.setParameters(params);
+      } catch (_) {}
+    }
+
+    function getAudioProfile() {
+      const mode = String((els.audioProfileSelect && els.audioProfileSelect.value) || 'cinema').toLowerCase();
+      if (mode === 'voice') {
+        return {
+          constraints: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            sampleRate: 48000,
+            channelCount: 1,
+          },
+          voiceBitrate: 192000,
+          streamAudioBitrate: 256000,
+        };
+      }
+      return {
+        constraints: {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+          sampleRate: 48000,
+          channelCount: 2,
+        },
+        voiceBitrate: 256000,
+        streamAudioBitrate: 384000,
+      };
     }
 
     function refreshMuteTargets() {
@@ -2368,11 +2552,14 @@
       if (!rtc.localVoiceStream) return;
       const track = rtc.localVoiceStream.getAudioTracks()[0];
       if (!track) return;
+      const profile = getAudioProfile();
       const existing = pc.getSenders().find((s) => s.track && s.track.kind === 'audio');
       if (existing) {
         existing.replaceTrack(track).catch(() => {});
+        setSenderAudioQuality(existing, profile.voiceBitrate).catch(() => {});
       } else {
-        pc.addTrack(track, rtc.localVoiceStream);
+        const sender = pc.addTrack(track, rtc.localVoiceStream);
+        setSenderAudioQuality(sender, profile.voiceBitrate).catch(() => {});
       }
     }
 
@@ -2464,7 +2651,8 @@
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error('Voice chat unavailable in this browser.');
       }
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      const profile = getAudioProfile();
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: profile.constraints, video: false });
       rtc.localVoiceStream = stream;
       const mutedByHost = !!state.hostMuted[state.participantId || ''];
       for (const t of stream.getAudioTracks()) t.enabled = !mutedByHost;
@@ -2511,6 +2699,17 @@
       setStatus(true, allowWebcam ? 'Participant webcams enabled.' : 'Participant webcams blocked.');
     }
 
+    async function setCohostPerms() {
+      if (!state.isHost) return;
+      const canKick = !!(els.cohostKickPerm && els.cohostKickPerm.checked);
+      const canMute = !!(els.cohostMutePerm && els.cohostMutePerm.checked);
+      const canAccess = !!(els.cohostAccessPerm && els.cohostAccessPerm.checked);
+      const canPin = !!(els.cohostPinPerm && els.cohostPinPerm.checked);
+      await sendControl('set_cohost_perms', { canKick, canMute, canAccess, canPin });
+      state.cohostPerms = { kick: canKick, mute: canMute, access: canAccess, pin: canPin };
+      setStatus(true, 'Cohost permissions updated.');
+    }
+
     async function startWebcamShare() {
       if (!state.roomCode) return;
       if (!state.isHost && !state.allowWebcam) {
@@ -2520,8 +2719,9 @@
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error('Webcam is unavailable in this browser.');
       }
+      const q = getWebcamQualityProfile();
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30, max: 60 } },
+        video: { width: { ideal: q.width }, height: { ideal: q.height }, frameRate: { ideal: q.frameRate, max: q.maxFramerate } },
         audio: false
       });
       rtc.localCamStream = stream;
@@ -2667,7 +2867,7 @@
       const d = document.createElement('div');
       d.textContent = text;
       els.events.prepend(d);
-      while (els.events.children.length > 120) {
+      while (els.events.children.length > 80) {
         els.events.removeChild(els.events.lastChild);
       }
     }
@@ -2703,8 +2903,16 @@
 
     function renderChatFeed() {
       if (!els.chatFeed) return;
-      const entries = Array.from(state.chatMessages.values()).sort((a, b) => b.id - a.id).slice(0, 200);
+      const sorted = Array.from(state.chatMessages.values()).sort((a, b) => b.id - a.id);
+      const hiddenCount = Math.max(0, sorted.length - 80);
+      const entries = sorted.slice(0, 80);
       els.chatFeed.innerHTML = '';
+      if (hiddenCount > 0) {
+        const note = document.createElement('div');
+        note.className = 'empty-state';
+        note.textContent = `${hiddenCount} older messages archived`;
+        els.chatFeed.appendChild(note);
+      }
       for (const row of entries) {
         const d = document.createElement('div');
         d.className = 'msg-line';
@@ -2806,6 +3014,113 @@
         saved = JSON.parse(localStorage.getItem(SCENE_ORDER_KEY) || '[]');
       } catch (_) {}
       applySceneOrder(saved);
+    }
+
+    function applyLayoutMode(mode, persist) {
+      const clean = String(mode || 'standard').toLowerCase() === 'focus' ? 'focus' : 'standard';
+      state.layoutMode = clean;
+      document.body.classList.toggle('focus-mode', clean === 'focus');
+      if (els.layoutModeSelect) els.layoutModeSelect.value = clean;
+      if (persist) {
+        try { localStorage.setItem(LAYOUT_MODE_KEY, clean); } catch (_) {}
+      }
+    }
+
+    function applyDensityMode(mode, persist) {
+      const clean = String(mode || 'comfortable').toLowerCase() === 'compact' ? 'compact' : 'comfortable';
+      state.densityMode = clean;
+      document.body.classList.toggle('compact-mode', clean === 'compact');
+      if (els.densitySelect) els.densitySelect.value = clean;
+      if (persist) {
+        try { localStorage.setItem(DENSITY_MODE_KEY, clean); } catch (_) {}
+      }
+    }
+
+    function readRoomTemplates() {
+      try {
+        const raw = localStorage.getItem(ROOM_TEMPLATE_KEY) || '[]';
+        const arr = JSON.parse(raw);
+        return Array.isArray(arr) ? arr.slice(0, 12) : [];
+      } catch (_) {
+        return [];
+      }
+    }
+
+    function writeRoomTemplates(list) {
+      try { localStorage.setItem(ROOM_TEMPLATE_KEY, JSON.stringify((Array.isArray(list) ? list : []).slice(0, 12))); } catch (_) {}
+    }
+
+    function renderTemplateOptions() {
+      if (!els.templateSelect) return;
+      const rows = readRoomTemplates();
+      els.templateSelect.innerHTML = '';
+      const first = document.createElement('option');
+      first.value = '';
+      first.textContent = rows.length ? 'Select template' : 'No saved templates';
+      els.templateSelect.appendChild(first);
+      for (const t of rows) {
+        const opt = document.createElement('option');
+        opt.value = String(t.id || '');
+        opt.textContent = String(t.name || t.id || 'Template');
+        els.templateSelect.appendChild(opt);
+      }
+    }
+
+    function currentTemplateSnapshot() {
+      return {
+        accessMode: String((els.accessModeSelect && els.accessModeSelect.value) || 'public'),
+        shareQuality: String((els.shareQualitySelect && els.shareQualitySelect.value) || 'high'),
+        movieQuality: String((els.movieQualitySelect && els.movieQualitySelect.value) || 'high'),
+        webcamQuality: String((els.webcamQualitySelect && els.webcamQualitySelect.value) || 'high'),
+        audioProfile: String((els.audioProfileSelect && els.audioProfileSelect.value) || 'cinema'),
+        allowWebcam: String((els.webcamPolicySelect && els.webcamPolicySelect.value) || 'allow') !== 'deny',
+      };
+    }
+
+    function applyTemplateSnapshot(snap) {
+      if (!snap || typeof snap !== 'object') return;
+      if (els.accessModeSelect && snap.accessMode) els.accessModeSelect.value = String(snap.accessMode);
+      if (els.shareQualitySelect && snap.shareQuality) els.shareQualitySelect.value = String(snap.shareQuality);
+      if (els.movieQualitySelect && snap.movieQuality) els.movieQualitySelect.value = String(snap.movieQuality);
+      if (els.webcamQualitySelect && snap.webcamQuality) els.webcamQualitySelect.value = String(snap.webcamQuality);
+      if (els.audioProfileSelect && snap.audioProfile) els.audioProfileSelect.value = String(snap.audioProfile);
+      if (els.webcamPolicySelect) els.webcamPolicySelect.value = snap.allowWebcam ? 'allow' : 'deny';
+    }
+
+    async function runHostMacro(kind) {
+      if (!state.isHost) {
+        setStatus(false, 'Only host can run macros.');
+        return;
+      }
+      const k = String(kind || '').toLowerCase();
+      if (k === 'start') {
+        await sendControl('set_access_mode', { accessMode: 'public' });
+        await sendControl('set_webcam_policy', { allowWebcam: true });
+        setStatus(true, 'Macro: Start Party applied.');
+      } else if (k === 'intermission') {
+        await sendControl('pause', { playbackSec: Number(els.player.currentTime) || 0 });
+        await sendControl('chat', { message: 'Intermission started. We will resume shortly.' });
+        setStatus(true, 'Macro: Intermission applied.');
+      } else if (k === 'wrap') {
+        await sendControl('pause', { playbackSec: Number(els.player.currentTime) || 0 });
+        await sendControl('set_access_mode', { accessMode: 'closed' });
+        await sendControl('chat', { message: 'Watch party is wrapping up. Thanks for joining.' });
+        setStatus(true, 'Macro: Wrap Up applied.');
+      }
+    }
+
+    function updateHealthStrip(room) {
+      if (els.latencyChip) {
+        const ms = Math.max(0, Math.round(Number(state.lastPollLatencyMs || 0)));
+        els.latencyChip.textContent = `Latency ${ms}ms`;
+      }
+      if (els.reconnectChip) {
+        els.reconnectChip.textContent = `Reconnects ${Number(state.reconnectCount || 0)}`;
+      }
+      if (els.driftChip) {
+        const drift = room ? Math.abs((Number(els.player.currentTime) || 0) - (Number(room.playbackSec) || 0)) : 0;
+        els.driftChip.textContent = `Drift ${drift.toFixed(1)}s`;
+      }
     }
 
     async function apiRequest(method, path, body, queryParams) {
@@ -2981,7 +3296,8 @@
 
     async function syncHostTrackSenders(participantId, pc) {
       if (!state.isHost || !rtc.localScreenStream) return;
-      const profile = getShareQualityProfile();
+      const videoProfile = getMovieQualityProfile();
+      const audioProfile = getAudioProfile();
       const tracks = rtc.localScreenStream.getTracks().filter((t) => t.kind === 'video' || t.kind === 'audio');
       for (const track of tracks) {
         const existing = pc.getSenders().find((s) => s.track && s.track.kind === track.kind);
@@ -2991,9 +3307,8 @@
         } else {
           sender = pc.addTrack(track, rtc.localScreenStream);
         }
-        if (track.kind === 'video') {
-          await setSenderQuality(sender, profile);
-        }
+        if (track.kind === 'video') await setSenderQuality(sender, videoProfile);
+        if (track.kind === 'audio') await setSenderAudioQuality(sender, audioProfile.streamAudioBitrate);
       }
     }
 
@@ -3038,11 +3353,12 @@
       }
       const surface = String((els.shareSurfaceSelect && els.shareSurfaceSelect.value) || 'auto');
       const audioMode = String((els.shareAudioSelect && els.shareAudioSelect.value) || 'auto');
-      const quality = getShareQualityProfile();
+      const captureQuality = getShareQualityProfile();
+      const movieQuality = getMovieQualityProfile();
       const videoCfg = {};
-      videoCfg.width = { ideal: quality.width };
-      videoCfg.height = { ideal: quality.height };
-      videoCfg.frameRate = { ideal: quality.frameRate, max: quality.maxFramerate };
+      videoCfg.width = { ideal: captureQuality.width };
+      videoCfg.height = { ideal: captureQuality.height };
+      videoCfg.frameRate = { ideal: captureQuality.frameRate, max: captureQuality.maxFramerate };
       if (surface === 'browser') {
         videoCfg.displaySurface = 'browser';
         videoCfg.selfBrowserSurface = 'exclude';
@@ -3070,7 +3386,7 @@
       if (els.shareAudioInfo) {
         els.shareAudioInfo.textContent = 'Selected share audio: ' + (audTrack && audTrack.label ? audTrack.label : 'none');
       }
-      setStatus(true, `Sharing ${quality.key} quality (${quality.width}x${quality.height}).`);
+      setStatus(true, `Sharing capture ${captureQuality.key} / movie ${movieQuality.key}.`);
       els.screenView.srcObject = stream;
       els.screenView.muted = true;
       try { await els.screenView.play(); } catch (_) {}
@@ -3401,12 +3717,23 @@
       state.lastRoom = room;
       state.accessMode = String(room.accessMode || 'public');
       state.allowWebcam = room.allowWebcam !== false;
+      const perms = room.cohostPerms || {};
+      state.cohostPerms = {
+        kick: perms.kick !== false,
+        mute: perms.mute !== false,
+        access: perms.access !== false,
+        pin: perms.pin !== false,
+      };
       if (els.accessModeSelect && ['public', 'invite', 'closed'].includes(state.accessMode)) {
         els.accessModeSelect.value = state.accessMode;
       }
       if (els.webcamPolicySelect) {
         els.webcamPolicySelect.value = state.allowWebcam ? 'allow' : 'deny';
       }
+      if (els.cohostKickPerm) els.cohostKickPerm.checked = !!state.cohostPerms.kick;
+      if (els.cohostMutePerm) els.cohostMutePerm.checked = !!state.cohostPerms.mute;
+      if (els.cohostAccessPerm) els.cohostAccessPerm.checked = !!state.cohostPerms.access;
+      if (els.cohostPinPerm) els.cohostPinPerm.checked = !!state.cohostPerms.pin;
       const roomTheme = Object.prototype.hasOwnProperty.call(THEMES, String(room.themeKey || '')) ? String(room.themeKey) : 'clean';
       state.roomThemeKey = roomTheme;
       applyTheme(roomTheme, false);
@@ -3420,6 +3747,7 @@
         }
       }
       updateVoiceUi();
+      updateHealthStrip(room);
 
       const p = els.player;
       const mediaUrl = (room.mediaUrl || '').trim();
@@ -3514,6 +3842,7 @@
     async function pollState() {
       if (!state.roomCode || !state.participantToken) return false;
       try {
+        const pollStart = performance.now();
         const waitMs = state.sinceEventId > 0 ? LONG_POLL_WAIT_MS : 0;
         const data = await apiRequest('GET', '/api/watch/state', null, {
           roomCode: state.roomCode,
@@ -3521,6 +3850,7 @@
           sinceEventId: state.sinceEventId,
           waitMs
         });
+        state.lastPollLatencyMs = Math.max(0, performance.now() - pollStart);
         state.participantId = data.selfParticipantId || state.participantId;
         state.participants = Array.isArray(data.participants) ? data.participants : [];
         state.pendingJoinRequests = Array.isArray(data.pendingJoinRequests) ? data.pendingJoinRequests : [];
@@ -3606,6 +3936,20 @@
             }
             continue;
           }
+          if (ev.type === 'set_cohost_perms') {
+            const perms = ev.payload?.cohostPerms || {};
+            state.cohostPerms = {
+              kick: perms.kick !== false,
+              mute: perms.mute !== false,
+              access: perms.access !== false,
+              pin: perms.pin !== false,
+            };
+            if (els.cohostKickPerm) els.cohostKickPerm.checked = !!state.cohostPerms.kick;
+            if (els.cohostMutePerm) els.cohostMutePerm.checked = !!state.cohostPerms.mute;
+            if (els.cohostAccessPerm) els.cohostAccessPerm.checked = !!state.cohostPerms.access;
+            if (els.cohostPinPerm) els.cohostPinPerm.checked = !!state.cohostPerms.pin;
+            continue;
+          }
           if (ev.type === 'chat') {
             addChatLine(actor, String(ev.payload?.message || ''), Number(ev.id || 0), String(ev.createdAt || ''));
             continue;
@@ -3641,6 +3985,7 @@
           addEventLine(actor + ' · ' + ev.type.replace('_', ' '));
         }
       } catch (err) {
+        state.reconnectCount = Number(state.reconnectCount || 0) + 1;
         const msg = String(err && err.message ? err.message : 'network_error');
         if (msg.includes('invalid_participant')) {
           const prevRoom = String(state.roomCode || '');
@@ -3672,6 +4017,7 @@
         setStatus(false, 'Reconnect pending: ' + msg);
         setSyncLabel('retrying');
         updateStatusChips(0);
+        updateHealthStrip(state.lastRoom || null);
         updateMediaVisibility();
         return false;
       }
@@ -3792,6 +4138,11 @@
     if (els.setWebcamPolicyBtn) {
       els.setWebcamPolicyBtn.addEventListener('click', async () => {
         try { await setWebcamPolicy(); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
+      });
+    }
+    if (els.setCohostPermsBtn) {
+      els.setCohostPermsBtn.addEventListener('click', async () => {
+        try { await setCohostPerms(); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
       });
     }
     if (els.startWebcamBtn) {
@@ -3941,6 +4292,51 @@
     if (els.adminLogoutBtn) els.adminLogoutBtn.addEventListener('click', async () => {
       await adminLogout();
     });
+    if (els.layoutModeSelect) {
+      els.layoutModeSelect.addEventListener('change', () => applyLayoutMode(els.layoutModeSelect.value, true));
+    }
+    if (els.densitySelect) {
+      els.densitySelect.addEventListener('change', () => applyDensityMode(els.densitySelect.value, true));
+    }
+    if (els.macroStartBtn) {
+      els.macroStartBtn.addEventListener('click', async () => { try { await runHostMacro('start'); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); } });
+    }
+    if (els.macroIntermissionBtn) {
+      els.macroIntermissionBtn.addEventListener('click', async () => { try { await runHostMacro('intermission'); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); } });
+    }
+    if (els.macroWrapBtn) {
+      els.macroWrapBtn.addEventListener('click', async () => { try { await runHostMacro('wrap'); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); } });
+    }
+    if (els.saveTemplateBtn) {
+      els.saveTemplateBtn.addEventListener('click', () => {
+        const name = String(window.prompt('Template name') || '').trim();
+        if (!name) return;
+        const rows = readRoomTemplates();
+        const id = name.toLowerCase().replace(/[^a-z0-9_-]+/g, '-').slice(0, 24) || ('tpl-' + Date.now());
+        const without = rows.filter((r) => String(r.id || '') !== id);
+        without.unshift({ id, name, snapshot: currentTemplateSnapshot() });
+        writeRoomTemplates(without);
+        renderTemplateOptions();
+        if (els.templateSelect) els.templateSelect.value = id;
+        setStatus(true, 'Template saved.');
+      });
+    }
+    if (els.applyTemplateBtn) {
+      els.applyTemplateBtn.addEventListener('click', async () => {
+        const id = String((els.templateSelect && els.templateSelect.value) || '').trim();
+        const row = readRoomTemplates().find((r) => String(r.id || '') === id);
+        if (!row) {
+          setStatus(false, 'Select a template first.');
+          return;
+        }
+        applyTemplateSnapshot(row.snapshot || {});
+        if (state.isHost && state.roomCode) {
+          await setAccessMode().catch(() => {});
+          await setWebcamPolicy().catch(() => {});
+        }
+        setStatus(true, 'Template applied.');
+      });
+    }
     for (const btn of els.tabButtons) {
       btn.addEventListener('click', () => switchTab(btn.getAttribute('data-tab-btn') || 'session'));
     }
@@ -4042,6 +4438,7 @@
       switchTab('session');
       setWizardStep(1);
       updateStatusChips(0);
+      updateHealthStrip(null);
       updateMediaVisibility();
       renderParticipants();
       renderChatFeed();
@@ -4095,9 +4492,27 @@
       if (els.shareQualitySelect && !els.shareQualitySelect.value) {
         els.shareQualitySelect.value = 'high';
       }
+      if (els.movieQualitySelect && !els.movieQualitySelect.value) {
+        els.movieQualitySelect.value = 'high';
+      }
+      if (els.webcamQualitySelect && !els.webcamQualitySelect.value) {
+        els.webcamQualitySelect.value = 'high';
+      }
+      if (els.audioProfileSelect && !els.audioProfileSelect.value) {
+        els.audioProfileSelect.value = 'cinema';
+      }
       if (els.webcamPolicySelect && !els.webcamPolicySelect.value) {
         els.webcamPolicySelect.value = 'allow';
       }
+      const savedLayout = (() => {
+        try { return localStorage.getItem(LAYOUT_MODE_KEY) || 'standard'; } catch (_) { return 'standard'; }
+      })();
+      const savedDensity = (() => {
+        try { return localStorage.getItem(DENSITY_MODE_KEY) || 'comfortable'; } catch (_) { return 'comfortable'; }
+      })();
+      applyLayoutMode(savedLayout, false);
+      applyDensityMode(savedDensity, false);
+      renderTemplateOptions();
       const inviteSettings = readInviteSettings();
       if (els.inviteTtlInput) els.inviteTtlInput.value = String(inviteSettings.ttlMinutes);
       if (els.inviteMaxUsesInput) els.inviteMaxUsesInput.value = String(inviteSettings.maxUses);

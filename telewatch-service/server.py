@@ -101,6 +101,10 @@ def ensure_schema() -> None:
               media_url TEXT,
               theme_key TEXT NOT NULL DEFAULT 'clean',
               allow_webcam INTEGER NOT NULL DEFAULT 1,
+              cohost_can_kick INTEGER NOT NULL DEFAULT 1,
+              cohost_can_mute INTEGER NOT NULL DEFAULT 1,
+              cohost_can_access INTEGER NOT NULL DEFAULT 1,
+              cohost_can_pin INTEGER NOT NULL DEFAULT 1,
               access_mode TEXT NOT NULL DEFAULT 'public',
               is_private INTEGER NOT NULL DEFAULT 0,
               delete_on_host_leave INTEGER NOT NULL DEFAULT 1,
@@ -215,6 +219,22 @@ def ensure_schema() -> None:
             conn.execute("ALTER TABLE watch_rooms ADD COLUMN allow_webcam INTEGER NOT NULL DEFAULT 1")
         except sqlite3.OperationalError:
             pass
+        try:
+            conn.execute("ALTER TABLE watch_rooms ADD COLUMN cohost_can_kick INTEGER NOT NULL DEFAULT 1")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            conn.execute("ALTER TABLE watch_rooms ADD COLUMN cohost_can_mute INTEGER NOT NULL DEFAULT 1")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            conn.execute("ALTER TABLE watch_rooms ADD COLUMN cohost_can_access INTEGER NOT NULL DEFAULT 1")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            conn.execute("ALTER TABLE watch_rooms ADD COLUMN cohost_can_pin INTEGER NOT NULL DEFAULT 1")
+        except sqlite3.OperationalError:
+            pass
         conn.execute(
             '''
             UPDATE watch_rooms
@@ -311,6 +331,12 @@ def room_payload(room_row: sqlite3.Row) -> dict:
         'mediaUrl': room_row['media_url'] or '',
         'themeKey': clean_theme_key(room_row['theme_key'] if 'theme_key' in room_row.keys() else 'clean'),
         'allowWebcam': bool(room_row['allow_webcam']) if 'allow_webcam' in room_row.keys() else True,
+        'cohostPerms': {
+            'kick': bool(room_row['cohost_can_kick']) if 'cohost_can_kick' in room_row.keys() else True,
+            'mute': bool(room_row['cohost_can_mute']) if 'cohost_can_mute' in room_row.keys() else True,
+            'access': bool(room_row['cohost_can_access']) if 'cohost_can_access' in room_row.keys() else True,
+            'pin': bool(room_row['cohost_can_pin']) if 'cohost_can_pin' in room_row.keys() else True,
+        },
         'accessMode': access_mode,
         'isPrivate': bool(room_row['is_private']),
         'deleteOnHostLeave': bool(room_row['delete_on_host_leave']),
@@ -424,7 +450,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                 rooms = []
                 for code in public_room_codes():
                     room = conn.execute(
-                        'SELECT room_code, title, media_url, theme_key, allow_webcam, access_mode, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
+                        'SELECT room_code, title, media_url, theme_key, allow_webcam, cohost_can_kick, cohost_can_mute, cohost_can_access, cohost_can_pin, access_mode, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
                         (code,),
                     ).fetchone()
                     if room is None:
@@ -486,7 +512,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             conn.execute("UPDATE watch_participants SET last_seen_at=datetime('now') WHERE participant_token=?", (participant_token,))
 
             room = conn.execute(
-                'SELECT room_code, title, media_url, theme_key, allow_webcam, access_mode, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
+                'SELECT room_code, title, media_url, theme_key, allow_webcam, cohost_can_kick, cohost_can_mute, cohost_can_access, cohost_can_pin, access_mode, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
                 (room_code_val,),
             ).fetchone()
             if room is None:
@@ -596,7 +622,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     return
                 if str(room_tick['updated_at'] or '') != baseline_room_updated:
                     room = conn.execute(
-                        'SELECT room_code, title, media_url, theme_key, allow_webcam, access_mode, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
+                        'SELECT room_code, title, media_url, theme_key, allow_webcam, cohost_can_kick, cohost_can_mute, cohost_can_access, cohost_can_pin, access_mode, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
                         (room_code_val,),
                     ).fetchone()
                     break
@@ -675,7 +701,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                 ).fetchone()[0]
             )
             room = conn.execute(
-                'SELECT room_code, title, media_url, theme_key, allow_webcam, access_mode, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
+                'SELECT room_code, title, media_url, theme_key, allow_webcam, cohost_can_kick, cohost_can_mute, cohost_can_access, cohost_can_pin, access_mode, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
                 (room_code_val,),
             ).fetchone()
             if room is None:
@@ -1063,7 +1089,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     conn.execute(
                         '''
                         UPDATE watch_rooms
-                        SET title=?, media_url='', theme_key='clean', allow_webcam=1, access_mode='public', is_private=0, delete_on_host_leave=1, playback_sec=0, is_playing=0, updated_at=datetime('now')
+                        SET title=?, media_url='', theme_key='clean', allow_webcam=1, cohost_can_kick=1, cohost_can_mute=1, cohost_can_access=1, cohost_can_pin=1, access_mode='public', is_private=0, delete_on_host_leave=1, playback_sec=0, is_playing=0, updated_at=datetime('now')
                         WHERE room_code=?
                         ''',
                         (f'Public Room {room_code_val[-2:]}', room_code_val),
@@ -1173,7 +1199,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                 ensure_public_rooms(conn)
                 cleanup_rooms(conn)
                 room = conn.execute(
-                    'SELECT room_code, title, media_url, theme_key, allow_webcam, access_mode, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
+                    'SELECT room_code, title, media_url, theme_key, allow_webcam, cohost_can_kick, cohost_can_mute, cohost_can_access, cohost_can_pin, access_mode, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
                     (room_code_val,),
                 ).fetchone()
                 if room is None:
@@ -1373,7 +1399,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
 
                 conn.execute("UPDATE watch_participants SET last_seen_at=datetime('now') WHERE participant_token=?", (participant_token,))
                 room = conn.execute(
-                    'SELECT room_code, title, media_url, theme_key, allow_webcam, access_mode, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
+                    'SELECT room_code, title, media_url, theme_key, allow_webcam, cohost_can_kick, cohost_can_mute, cohost_can_access, cohost_can_pin, access_mode, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
                     (room_code_val,),
                 ).fetchone()
                 if room is None:
@@ -1382,10 +1408,26 @@ class TelewatchHandler(BaseHTTPRequestHandler):
 
                 is_host = bool(part['is_host'])
                 is_cohost = bool(part['is_cohost'])
-                if action in {'play', 'pause', 'seek', 'set_media', 'set_title', 'set_theme', 'set_webcam_policy', 'delete_room', 'reset_room', 'resolve_request', 'create_invite', 'set_cohost'} and not is_host:
+                cohost_can_kick = bool(room['cohost_can_kick']) if 'cohost_can_kick' in room.keys() else True
+                cohost_can_mute = bool(room['cohost_can_mute']) if 'cohost_can_mute' in room.keys() else True
+                cohost_can_access = bool(room['cohost_can_access']) if 'cohost_can_access' in room.keys() else True
+                cohost_can_pin = bool(room['cohost_can_pin']) if 'cohost_can_pin' in room.keys() else True
+                if action in {'play', 'pause', 'seek', 'set_media', 'set_title', 'set_theme', 'set_webcam_policy', 'delete_room', 'reset_room', 'resolve_request', 'create_invite', 'set_cohost', 'set_cohost_perms'} and not is_host:
                     self._json(HTTPStatus.FORBIDDEN, {'error': 'host_required'})
                     return
-                if action in {'set_access_mode', 'kick_user', 'resolve_join_request', 'mute_user', 'list_invites', 'revoke_invite', 'pin_chat'} and not (is_host or is_cohost):
+                if action == 'set_access_mode' and not (is_host or (is_cohost and cohost_can_access)):
+                    self._json(HTTPStatus.FORBIDDEN, {'error': 'moderator_required'})
+                    return
+                if action == 'kick_user' and not (is_host or (is_cohost and cohost_can_kick)):
+                    self._json(HTTPStatus.FORBIDDEN, {'error': 'moderator_required'})
+                    return
+                if action == 'mute_user' and not (is_host or (is_cohost and cohost_can_mute)):
+                    self._json(HTTPStatus.FORBIDDEN, {'error': 'moderator_required'})
+                    return
+                if action in {'resolve_join_request', 'list_invites', 'revoke_invite'} and not (is_host or (is_cohost and cohost_can_access)):
+                    self._json(HTTPStatus.FORBIDDEN, {'error': 'moderator_required'})
+                    return
+                if action == 'pin_chat' and not (is_host or (is_cohost and cohost_can_pin)):
                     self._json(HTTPStatus.FORBIDDEN, {'error': 'moderator_required'})
                     return
 
@@ -1449,6 +1491,25 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                         (1 if allow_webcam else 0, room_code_val),
                     )
                     event_payload['allowWebcam'] = allow_webcam
+                elif action == 'set_cohost_perms':
+                    can_kick = bool(payload.get('canKick', True))
+                    can_mute = bool(payload.get('canMute', True))
+                    can_access = bool(payload.get('canAccess', True))
+                    can_pin = bool(payload.get('canPin', True))
+                    conn.execute(
+                        '''
+                        UPDATE watch_rooms
+                        SET cohost_can_kick=?, cohost_can_mute=?, cohost_can_access=?, cohost_can_pin=?, updated_at=datetime('now')
+                        WHERE room_code=?
+                        ''',
+                        (1 if can_kick else 0, 1 if can_mute else 0, 1 if can_access else 0, 1 if can_pin else 0, room_code_val),
+                    )
+                    event_payload['cohostPerms'] = {
+                        'kick': bool(can_kick),
+                        'mute': bool(can_mute),
+                        'access': bool(can_access),
+                        'pin': bool(can_pin),
+                    }
                 elif action == 'create_invite':
                     ttl_minutes_raw = payload.get('ttlMinutes')
                     max_uses_raw = payload.get('maxUses')
@@ -1684,7 +1745,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                         conn.execute(
                             '''
                             UPDATE watch_rooms
-                            SET title=?, media_url='', theme_key='clean', allow_webcam=1, access_mode='public', is_private=0, delete_on_host_leave=1, playback_sec=0, is_playing=0, updated_at=datetime('now')
+                            SET title=?, media_url='', theme_key='clean', allow_webcam=1, cohost_can_kick=1, cohost_can_mute=1, cohost_can_access=1, cohost_can_pin=1, access_mode='public', is_private=0, delete_on_host_leave=1, playback_sec=0, is_playing=0, updated_at=datetime('now')
                             WHERE room_code=?
                             ''',
                             (f'Public Room {room_code_val[-2:]}', room_code_val),
@@ -1723,7 +1784,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     event_id = int(cur.lastrowid or 0)
 
                 room_after = conn.execute(
-                    'SELECT room_code, title, media_url, theme_key, allow_webcam, access_mode, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
+                    'SELECT room_code, title, media_url, theme_key, allow_webcam, cohost_can_kick, cohost_can_mute, cohost_can_access, cohost_can_pin, access_mode, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
                     (room_code_val,),
                 ).fetchone()
                 conn.commit()
