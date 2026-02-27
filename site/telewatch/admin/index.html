@@ -56,6 +56,40 @@
       background: #f6f9ff;
       font-weight: 700;
     }
+    .tv-console {
+      background: linear-gradient(160deg, #0f1b33, #152746);
+      border-color: #2b466e;
+      color: #eaf2ff;
+    }
+    .tv-console h3 { color: #eaf2ff; }
+    .tv-console .muted { color: #a8bbd7; }
+    .tv-console .pill {
+      border-color: #406394;
+      background: #1a3156;
+      color: #dcebff;
+    }
+    .tv-console input,
+    .tv-console select {
+      background: #11213d;
+      border-color: #355482;
+      color: #ecf3ff;
+    }
+    .tv-console label { color: #9fb5d6; }
+    .tv-console button.secondary {
+      background: #163157;
+      border-color: #36588a;
+      color: #dcebff;
+    }
+    .tv-console .stream-frame {
+      border-color: #33547f;
+      background: #070e1b;
+      min-height: 640px;
+    }
+    .tv-console button.big {
+      min-height: 46px;
+      font-size: 15px;
+      letter-spacing: .02em;
+    }
     @media (max-width: 760px) {
       .wrap { width: calc(100% - 14px); margin: 10px auto; }
       .row > * { min-width: 100%; flex-basis: 100%; }
@@ -139,8 +173,17 @@
       </div>
       </div>
 
-      <div class="tool-section">
-      <h3 style="margin:0 0 8px">Main Event Hosting</h3>
+      <div class="tool-section tv-console">
+      <div class="row" style="align-items:center">
+        <h3 style="margin:0">Main Event TV Console</h3>
+        <div style="text-align:right"><span class="pill">Big Night Mode</span></div>
+      </div>
+      <div class="muted" style="margin:6px 0 8px">Fast workflow: Prep, Create Event, Load Stream Console, then Go Live.</div>
+      <div class="row" style="margin-bottom:8px">
+        <button id="mainEventPrepBtn" class="secondary big">1) Prep Console</button>
+        <button id="createMainEventBtn" class="big">2) Create + Enable</button>
+        <button id="mainEventGoLiveBtn" class="big">3) Go Live</button>
+      </div>
       <div class="row">
         <div>
           <label for="mainEventHostName">Host Display Name</label>
@@ -167,7 +210,6 @@
       </div>
       <div class="row" style="margin-top:8px">
         <button id="refreshRoomsBtn" class="secondary">Refresh Rooms</button>
-        <button id="createMainEventBtn">Create + Enable Main Event</button>
       </div>
       <div class="row" style="margin-top:8px">
         <button id="enableMainEventBtn">Enable Lockdown</button>
@@ -182,7 +224,7 @@
       <div id="mainEventHostInfo" class="muted" style="margin-top:4px">Host controls: not attached</div>
       </div>
 
-      <div class="tool-section">
+      <div class="tool-section tv-console">
       <h3 style="margin:0 0 8px">Main Event Studio</h3>
       <div class="row">
         <div>
@@ -241,7 +283,7 @@
       </div>
       </div>
 
-      <div class="tool-section">
+      <div class="tool-section tv-console">
       <h3 style="margin:0 0 8px">Streaming Console</h3>
       <div class="row">
         <div>
@@ -302,7 +344,9 @@
       mainEventMode: document.getElementById('mainEventMode'),
       mainEventRooms: document.getElementById('mainEventRooms'),
       refreshRoomsBtn: document.getElementById('refreshRoomsBtn'),
+      mainEventPrepBtn: document.getElementById('mainEventPrepBtn'),
       createMainEventBtn: document.getElementById('createMainEventBtn'),
+      mainEventGoLiveBtn: document.getElementById('mainEventGoLiveBtn'),
       enableMainEventBtn: document.getElementById('enableMainEventBtn'),
       disableMainEventBtn: document.getElementById('disableMainEventBtn'),
       stopMainEventBtn: document.getElementById('stopMainEventBtn'),
@@ -594,6 +638,22 @@
       }
     });
 
+    els.mainEventPrepBtn.addEventListener('click', async () => {
+      try {
+        if (!els.mainEventCountdown.value) {
+          els.mainEventCountdown.value = nextSaturdayLocalInput();
+        }
+        els.mainEventMode.value = 'broadcast';
+        els.studioAccessMode.value = 'public';
+        els.studioTheme.value = 'clean';
+        await refreshAdminRooms();
+        await loadMainEventSettings();
+        setStatus('Console prepped for big night.');
+      } catch (e) {
+        setStatus('Prep failed: ' + (e.message || e));
+      }
+    });
+
     els.createMainEventBtn.addEventListener('click', async () => {
       try {
         const roomCode = cleanCode(els.mainEventRoomCode.value);
@@ -625,6 +685,16 @@
         setStatus(`Main Event started in room ${code}.`);
       } catch (e) {
         setStatus('Create Main Event failed: ' + (e.message || e));
+      }
+    });
+
+    els.mainEventGoLiveBtn.addEventListener('click', async () => {
+      try {
+        await sendMainControl('play', {});
+        await sendMainControl('chat', { message: 'Main Event is now LIVE. Enjoy the show.' });
+        setStatus('Main Event is LIVE.');
+      } catch (e) {
+        setStatus('Go Live failed: ' + (e.message || e));
       }
     });
 
