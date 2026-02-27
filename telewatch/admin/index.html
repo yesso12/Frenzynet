@@ -440,6 +440,103 @@
       <iframe id="studioStreamFrame" class="stream-frame" loading="lazy" referrerpolicy="strict-origin-when-cross-origin"></iframe>
       </div>
 
+      <div class="tool-section tv-console">
+      <h3 style="margin:0 0 8px">Advanced Event Ops</h3>
+      <div class="row">
+        <button id="macroIntermissionBtn" class="secondary">Intermission Macro</button>
+        <button id="macroResumeBtn" class="secondary">Resume Macro</button>
+        <button id="panicModeBtn" class="danger">Panic Mode (Close Joins)</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <div>
+          <label for="delayedStartMinutes">Delayed Start (minutes)</label>
+          <input id="delayedStartMinutes" type="number" min="1" max="120" value="5" />
+        </div>
+        <div style="align-self:end">
+          <button id="scheduleGoLiveBtn">Schedule Go Live</button>
+        </div>
+        <div style="align-self:end">
+          <button id="cancelGoLiveBtn" class="secondary">Cancel Scheduled Live</button>
+        </div>
+      </div>
+      <div id="delayedStartStatus" class="muted" style="margin-top:6px">No delayed start scheduled.</div>
+
+      <div class="row" style="margin-top:10px">
+        <div>
+          <label for="qualityAutoToggle">Auto Quality Switch</label>
+          <select id="qualityAutoToggle">
+            <option value="off">Off</option>
+            <option value="on">On</option>
+          </select>
+        </div>
+        <div>
+          <label for="qualityHighThreshold">Viewer Threshold (SFU)</label>
+          <input id="qualityHighThreshold" type="number" min="20" max="2000" value="80" />
+        </div>
+        <div style="align-self:end">
+          <button id="applyQualityModeBtn" class="secondary">Apply Mode Now</button>
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:10px">
+        <div>
+          <label for="autoRecoveryToggle">Host Auto-Recovery</label>
+          <select id="autoRecoveryToggle">
+            <option value="on">On (Recommended)</option>
+            <option value="off">Off</option>
+          </select>
+        </div>
+        <div style="align-self:end">
+          <button id="promoteBackupNowBtn" class="secondary">Promote Backup Now</button>
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:10px">
+        <button id="muteAllBtn" class="secondary">Mute All Mics</button>
+        <button id="lockRoomBtn" class="secondary">Lock Room</button>
+        <button id="clearChatBtn" class="secondary">Clear Chat (Host Notice)</button>
+      </div>
+
+      <div class="row" style="margin-top:10px">
+        <div>
+          <label for="inviteTtlAdmin">Invite TTL (minutes)</label>
+          <input id="inviteTtlAdmin" type="number" min="5" max="10080" value="180" />
+        </div>
+        <div>
+          <label for="inviteUsesAdmin">Invite Max Uses</label>
+          <input id="inviteUsesAdmin" type="number" min="0" max="500" value="50" />
+        </div>
+        <div style="align-self:end">
+          <button id="createInviteBtn" class="secondary">Create Invite</button>
+        </div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <div>
+          <label for="inviteListSelect">Invite Tokens</label>
+          <select id="inviteListSelect"></select>
+        </div>
+        <div style="align-self:end">
+          <button id="refreshInvitesBtn" class="secondary">Refresh Invites</button>
+        </div>
+        <div style="align-self:end">
+          <button id="revokeInviteBtn" class="danger">Revoke Selected Invite</button>
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:10px">
+        <button id="deviceTestBtn" class="secondary">Run Device Test</button>
+        <button id="incidentRecoverBtn" class="secondary">Incident Recovery</button>
+      </div>
+      <div id="deviceTestStatus" class="muted" style="margin-top:6px">Device test not run.</div>
+      <div id="incidentStatus" class="muted" style="margin-top:4px">No active incident detected.</div>
+
+      <div style="margin-top:10px">
+        <label>Live Metrics</label>
+        <div id="metricsSummary" class="muted">Viewers: -- | Join rate: --/min | Mode: --</div>
+        <pre id="metricsGraph" style="margin:6px 0 0; white-space:pre-wrap; background:#132541; color:#d7e9ff; border:1px solid #4b6893; border-radius:10px; padding:8px;">No metrics yet.</pre>
+      </div>
+      </div>
+
       <details class="tool-section">
       <summary>Other Admin Tools (optional)</summary>
       <div class="row" style="margin-top:10px">
@@ -543,6 +640,33 @@
       studioLoadStreamBtn: document.getElementById('studioLoadStreamBtn'),
       studioPopoutStreamBtn: document.getElementById('studioPopoutStreamBtn'),
       studioRefreshStreamBtn: document.getElementById('studioRefreshStreamBtn'),
+      macroIntermissionBtn: document.getElementById('macroIntermissionBtn'),
+      macroResumeBtn: document.getElementById('macroResumeBtn'),
+      panicModeBtn: document.getElementById('panicModeBtn'),
+      delayedStartMinutes: document.getElementById('delayedStartMinutes'),
+      scheduleGoLiveBtn: document.getElementById('scheduleGoLiveBtn'),
+      cancelGoLiveBtn: document.getElementById('cancelGoLiveBtn'),
+      delayedStartStatus: document.getElementById('delayedStartStatus'),
+      qualityAutoToggle: document.getElementById('qualityAutoToggle'),
+      qualityHighThreshold: document.getElementById('qualityHighThreshold'),
+      applyQualityModeBtn: document.getElementById('applyQualityModeBtn'),
+      autoRecoveryToggle: document.getElementById('autoRecoveryToggle'),
+      promoteBackupNowBtn: document.getElementById('promoteBackupNowBtn'),
+      muteAllBtn: document.getElementById('muteAllBtn'),
+      lockRoomBtn: document.getElementById('lockRoomBtn'),
+      clearChatBtn: document.getElementById('clearChatBtn'),
+      inviteTtlAdmin: document.getElementById('inviteTtlAdmin'),
+      inviteUsesAdmin: document.getElementById('inviteUsesAdmin'),
+      createInviteBtn: document.getElementById('createInviteBtn'),
+      inviteListSelect: document.getElementById('inviteListSelect'),
+      refreshInvitesBtn: document.getElementById('refreshInvitesBtn'),
+      revokeInviteBtn: document.getElementById('revokeInviteBtn'),
+      deviceTestBtn: document.getElementById('deviceTestBtn'),
+      incidentRecoverBtn: document.getElementById('incidentRecoverBtn'),
+      deviceTestStatus: document.getElementById('deviceTestStatus'),
+      incidentStatus: document.getElementById('incidentStatus'),
+      metricsSummary: document.getElementById('metricsSummary'),
+      metricsGraph: document.getElementById('metricsGraph'),
       newAdminUser: document.getElementById('newAdminUser'),
       newAdminPass: document.getElementById('newAdminPass'),
       adminList: document.getElementById('adminList'),
@@ -556,7 +680,20 @@
       refreshBtn: document.getElementById('refreshBtn'),
       removeAdminBtn: document.getElementById('removeAdminBtn'),
     };
-    const state = { token: '', username: '', mainHostToken: '', mainHostRoomCode: '', liveStarted: false, adminCodeFailCount: 0, adminCodeLockUntil: 0 };
+    const state = {
+      token: '',
+      username: '',
+      mainHostToken: '',
+      mainHostRoomCode: '',
+      liveStarted: false,
+      adminCodeFailCount: 0,
+      adminCodeLockUntil: 0,
+      delayedGoLiveTimer: null,
+      delayedGoLiveAt: 0,
+      metricsHistory: [],
+      prevViewerCount: 0,
+      prevViewerTs: 0,
+    };
 
     async function api(path, body) {
       if (state.adminCodeLockUntil && Date.now() < state.adminCodeLockUntil) {
@@ -627,6 +764,7 @@
       if (msg === 'room_capacity_reached') return 'Max room capacity reached on server.';
       if (msg === 'main_event_room_locked') return 'Main Event room is locked to another code.';
       if (msg === 'backup_participant_required') return 'Pick a backup co-host first.';
+      if (msg === 'inviteToken_required') return 'Select an invite token first.';
       return msg;
     }
     function cleanCode(v) {
@@ -729,11 +867,33 @@
       const participantToken = String(state.mainHostToken || '').trim();
       if (!roomCode) throw new Error('main_event_room_required');
       if (!participantToken) throw new Error('host_controls_not_attached');
-      return api('/api/watch/control', Object.assign({
-        roomCode,
-        participantToken,
-        action
-      }, extra || {}));
+      try {
+        return await api('/api/watch/control', Object.assign({
+          roomCode,
+          participantToken,
+          action
+        }, extra || {}));
+      } catch (err) {
+        const code = String(err && err.message ? err.message : err);
+        const recoverEnabled = String(els.autoRecoveryToggle && els.autoRecoveryToggle.value || 'on') === 'on';
+        if (recoverEnabled && code === 'invalid_participant') {
+          const rejoin = await api('/api/watch/join', {
+            roomCode,
+            displayName: String(els.mainEventHostName.value || '').trim() || 'MainHost'
+          });
+          if (!rejoin || !rejoin.isHost) throw err;
+          state.mainHostToken = String(rejoin.participantToken || '').trim();
+          state.mainHostRoomCode = roomCode;
+          save();
+          render();
+          return api('/api/watch/control', Object.assign({
+            roomCode,
+            participantToken: state.mainHostToken,
+            action
+          }, extra || {}));
+        }
+        throw err;
+      }
     }
 
     async function refreshAdmins() {
@@ -891,6 +1051,79 @@
       setChecklist();
     }
 
+    function renderMetricsGraph() {
+      const rows = state.metricsHistory.slice(-24);
+      if (!rows.length) {
+        els.metricsGraph.textContent = 'No metrics yet.';
+        return;
+      }
+      const max = Math.max(1, ...rows);
+      const bars = rows.map((v) => {
+        const n = Math.max(1, Math.round((v / max) * 12));
+        return '▇'.repeat(n);
+      });
+      els.metricsGraph.textContent = bars.join('\n');
+    }
+
+    async function refreshLiveMetrics() {
+      try {
+        const roomCode = selectedMainRoomCode();
+        const token = String(state.mainHostToken || '').trim();
+        if (!roomCode || !token) return;
+        const data = await api('/api/watch/state', { roomCode, participantToken: token, sinceEventId: 0 });
+        const viewers = Array.isArray(data.participants) ? data.participants.length : 0;
+        const now = Date.now();
+        let joinRate = 0;
+        if (state.prevViewerTs > 0) {
+          const mins = Math.max(0.016, (now - state.prevViewerTs) / 60000);
+          joinRate = (viewers - state.prevViewerCount) / mins;
+        }
+        state.prevViewerCount = viewers;
+        state.prevViewerTs = now;
+        state.metricsHistory.push(viewers);
+        if (state.metricsHistory.length > 120) state.metricsHistory.shift();
+        const mode = String(data.room && data.room.mediaMode || 'unknown');
+        els.metricsSummary.textContent = `Viewers: ${viewers} | Join rate: ${joinRate.toFixed(1)}/min | Mode: ${mode}`;
+        renderMetricsGraph();
+
+        const autoMode = String(els.qualityAutoToggle && els.qualityAutoToggle.value || 'off');
+        if (autoMode === 'on') {
+          const threshold = Math.max(20, Number(els.qualityHighThreshold.value || 80));
+          const targetMode = viewers >= threshold ? 'broadcast' : 'sfu';
+          if (targetMode !== mode) {
+            await sendMainControl('set_media_mode', { mediaMode: targetMode });
+            setStatus(`Auto quality switched to ${targetMode}.`);
+          }
+        }
+      } catch (_) {}
+    }
+
+    async function refreshInvites() {
+      try {
+        const data = await sendMainControl('list_invites', {});
+        const rows = Array.isArray(data && data.actionPayload && data.actionPayload.invites)
+          ? data.actionPayload.invites
+          : [];
+        els.inviteListSelect.innerHTML = '';
+        for (const row of rows) {
+          const token = String(row.inviteToken || '').trim();
+          if (!token) continue;
+          const o = document.createElement('option');
+          o.value = token;
+          o.textContent = `${token} · uses ${Number(row.usedCount || 0)}/${Number(row.maxUses || 0) || '∞'}`;
+          els.inviteListSelect.appendChild(o);
+        }
+        if (!els.inviteListSelect.options.length) {
+          const o = document.createElement('option');
+          o.value = '';
+          o.textContent = 'No invites';
+          els.inviteListSelect.appendChild(o);
+        }
+      } catch (e) {
+        setStatus('Invite refresh failed: ' + describeApiError(e));
+      }
+    }
+
     els.loginBtn.addEventListener('click', async () => {
       try {
         const data = await api('/api/watch/admin/login', {
@@ -905,6 +1138,8 @@
         await refreshAdminRooms();
         await loadMainEventSettings();
         await refreshHealthBadges();
+        await refreshInvites();
+        await refreshLiveMetrics();
       } catch (e) {
         setStatus('Login failed: ' + describeApiError(e));
       }
@@ -914,6 +1149,9 @@
       try { await api('/api/watch/admin/logout', { adminToken: state.token }); } catch (_) {}
       state.token = '';
       state.username = '';
+      state.mainHostToken = '';
+      state.mainHostRoomCode = '';
+      state.liveStarted = false;
       save();
       render();
       refreshHealthBadges().catch(() => {});
@@ -977,6 +1215,7 @@
         els.studioStreamUrl.value = mainEventStudioUrl(code);
       }
       setChecklist();
+      refreshInvites().catch(() => {});
     });
 
     els.mainEventRoomCode.addEventListener('input', () => {
@@ -985,6 +1224,7 @@
       els.mainEventInfo.textContent = code ? `Main Event Link: ${mainEventJoinUrl(code)}` : 'No main event room selected.';
       els.studioStreamUrl.value = mainEventStudioUrl(code);
       setChecklist();
+      refreshInvites().catch(() => {});
     });
 
     els.refreshRoomsBtn.addEventListener('click', async () => {
@@ -1006,6 +1246,37 @@
         await runPreflight();
       } catch (e) {
         setStatus('Preflight failed: ' + describeApiError(e));
+      }
+    });
+
+    els.macroIntermissionBtn.addEventListener('click', async () => {
+      try {
+        await sendMainControl('pause', {});
+        await sendMainControl('chat', { message: 'Intermission started. We resume shortly.' });
+        setStatus('Intermission macro executed.');
+      } catch (e) {
+        setStatus('Intermission failed: ' + describeApiError(e));
+      }
+    });
+
+    els.macroResumeBtn.addEventListener('click', async () => {
+      try {
+        await sendMainControl('chat', { message: 'Resuming now. Enjoy.' });
+        await sendMainControl('play', {});
+        setStatus('Resume macro executed.');
+      } catch (e) {
+        setStatus('Resume failed: ' + describeApiError(e));
+      }
+    });
+
+    els.panicModeBtn.addEventListener('click', async () => {
+      try {
+        if (!window.confirm('Panic Mode will close new joins immediately. Continue?')) return;
+        await sendMainControl('set_access_mode', { accessMode: 'closed' });
+        await sendMainControl('chat', { message: 'Panic mode enabled: new joins are closed.' });
+        setStatus('Panic mode enabled.');
+      } catch (e) {
+        setStatus('Panic mode failed: ' + describeApiError(e));
       }
     });
 
@@ -1139,6 +1410,171 @@
       } catch (e) {
         setQuickState('Quick Stop failed.');
         setStatus('Quick Stop failed: ' + describeApiError(e));
+      }
+    });
+
+    els.scheduleGoLiveBtn.addEventListener('click', async () => {
+      try {
+        const mins = Math.max(1, Math.min(120, Number(els.delayedStartMinutes.value || 5)));
+        if (state.delayedGoLiveTimer) clearTimeout(state.delayedGoLiveTimer);
+        state.delayedGoLiveAt = Date.now() + (mins * 60000);
+        els.delayedStartStatus.textContent = `Go Live scheduled in ${mins} minute(s).`;
+        state.delayedGoLiveTimer = setTimeout(async () => {
+          try {
+            await sendMainControl('play', {});
+            await sendMainControl('chat', { message: 'Main Event is now LIVE. Enjoy the show.' });
+            state.liveStarted = true;
+            setChecklist();
+            els.delayedStartStatus.textContent = 'Delayed Go Live executed.';
+            setStatus('Scheduled Go Live executed.');
+          } catch (e) {
+            els.delayedStartStatus.textContent = 'Scheduled Go Live failed.';
+            setStatus('Scheduled Go Live failed: ' + describeApiError(e));
+          }
+        }, mins * 60000);
+      } catch (e) {
+        setStatus('Schedule failed: ' + describeApiError(e));
+      }
+    });
+
+    els.cancelGoLiveBtn.addEventListener('click', () => {
+      if (state.delayedGoLiveTimer) {
+        clearTimeout(state.delayedGoLiveTimer);
+        state.delayedGoLiveTimer = null;
+      }
+      state.delayedGoLiveAt = 0;
+      els.delayedStartStatus.textContent = 'No delayed start scheduled.';
+      setStatus('Scheduled Go Live canceled.');
+    });
+
+    els.applyQualityModeBtn.addEventListener('click', async () => {
+      try {
+        const roomCode = selectedMainRoomCode();
+        const token = String(state.mainHostToken || '').trim();
+        if (!roomCode || !token) throw new Error('host_controls_not_attached');
+        const data = await api('/api/watch/state', { roomCode, participantToken: token, sinceEventId: 0 });
+        const viewers = Array.isArray(data.participants) ? data.participants.length : 0;
+        const threshold = Math.max(20, Number(els.qualityHighThreshold.value || 80));
+        const target = viewers >= threshold ? 'broadcast' : 'sfu';
+        await sendMainControl('set_media_mode', { mediaMode: target });
+        setStatus(`Quality mode applied: ${target} (${viewers} viewers).`);
+      } catch (e) {
+        setStatus('Apply quality mode failed: ' + describeApiError(e));
+      }
+    });
+
+    els.promoteBackupNowBtn.addEventListener('click', async () => {
+      try {
+        const pid = String(els.backupCohostSelect.value || '').trim().toLowerCase();
+        if (!pid) throw new Error('backup_participant_required');
+        await sendMainControl('set_cohost', { toParticipantId: pid, enabled: true });
+        await sendMainControl('chat', { message: 'Backup co-host has been promoted for failover readiness.' });
+        setStatus('Backup promoted.');
+      } catch (e) {
+        setStatus('Promote backup failed: ' + describeApiError(e));
+      }
+    });
+
+    els.muteAllBtn.addEventListener('click', async () => {
+      try {
+        const roomCode = selectedMainRoomCode();
+        const token = String(state.mainHostToken || '').trim();
+        if (!roomCode || !token) throw new Error('host_controls_not_attached');
+        const data = await api('/api/watch/state', { roomCode, participantToken: token, sinceEventId: 0 });
+        const participants = Array.isArray(data.participants) ? data.participants : [];
+        for (const p of participants) {
+          const id = String(p.participantId || '').trim().toLowerCase();
+          if (!id || p.isHost) continue;
+          await sendMainControl('mute_user', { toParticipantId: id, muted: true });
+        }
+        setStatus('All participant mics muted.');
+      } catch (e) {
+        setStatus('Mute all failed: ' + describeApiError(e));
+      }
+    });
+
+    els.lockRoomBtn.addEventListener('click', async () => {
+      try {
+        await sendMainControl('set_access_mode', { accessMode: 'closed' });
+        setStatus('Room locked (closed to new joins).');
+      } catch (e) {
+        setStatus('Lock room failed: ' + describeApiError(e));
+      }
+    });
+
+    els.clearChatBtn.addEventListener('click', async () => {
+      try {
+        await sendMainControl('chat', { message: '[Host] Chat reset notice: continue with fresh messages.' });
+        setStatus('Chat reset notice sent.');
+      } catch (e) {
+        setStatus('Clear chat notice failed: ' + describeApiError(e));
+      }
+    });
+
+    els.createInviteBtn.addEventListener('click', async () => {
+      try {
+        const ttlMinutes = Math.max(5, Math.min(10080, Number(els.inviteTtlAdmin.value || 180)));
+        const maxUses = Math.max(0, Math.min(500, Number(els.inviteUsesAdmin.value || 50)));
+        await sendMainControl('create_invite', { ttlMinutes, maxUses });
+        await refreshInvites();
+        setStatus('Invite created.');
+      } catch (e) {
+        setStatus('Create invite failed: ' + describeApiError(e));
+      }
+    });
+
+    els.refreshInvitesBtn.addEventListener('click', async () => {
+      await refreshInvites();
+      setStatus('Invites refreshed.');
+    });
+
+    els.revokeInviteBtn.addEventListener('click', async () => {
+      try {
+        const inviteToken = String(els.inviteListSelect.value || '').trim();
+        if (!inviteToken) throw new Error('inviteToken_required');
+        await sendMainControl('revoke_invite', { inviteToken });
+        await refreshInvites();
+        setStatus('Invite revoked.');
+      } catch (e) {
+        setStatus('Revoke invite failed: ' + describeApiError(e));
+      }
+    });
+
+    els.deviceTestBtn.addEventListener('click', async () => {
+      const result = [];
+      try {
+        if (!navigator.mediaDevices) throw new Error('media_devices_unavailable');
+        const mic = await navigator.mediaDevices.getUserMedia({ audio: true });
+        result.push('Mic OK');
+        mic.getTracks().forEach((t) => t.stop());
+      } catch (_) {
+        result.push('Mic FAIL');
+      }
+      try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) throw new Error('display_unavailable');
+        const disp = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+        result.push('Screen OK');
+        disp.getTracks().forEach((t) => t.stop());
+      } catch (_) {
+        result.push('Screen FAIL');
+      }
+      els.deviceTestStatus.textContent = `Device test: ${result.join(' | ')}`;
+    });
+
+    els.incidentRecoverBtn.addEventListener('click', async () => {
+      try {
+        await runPreflight();
+        if (!els.authHealthBadge.classList.contains('ok')) {
+          els.incidentStatus.textContent = 'Recovery: sign in again to restore admin auth.';
+          return;
+        }
+        if (!els.apiHealthBadge.classList.contains('ok')) {
+          els.incidentStatus.textContent = 'Recovery: API appears down. Keep page open and retry preflight.';
+          return;
+        }
+        els.incidentStatus.textContent = 'No major incident found. System looks healthy.';
+      } catch (e) {
+        els.incidentStatus.textContent = `Recovery check failed: ${describeApiError(e)}`;
       }
     });
 
@@ -1497,10 +1933,24 @@
     render();
     refreshHealthBadges().catch(() => {});
     setInterval(() => { refreshHealthBadges().catch(() => {}); }, 20000);
+    setInterval(() => { refreshLiveMetrics().catch(() => {}); }, 8000);
+    setInterval(() => {
+      if (!state.delayedGoLiveAt) return;
+      const left = state.delayedGoLiveAt - Date.now();
+      if (left <= 0) {
+        state.delayedGoLiveAt = 0;
+        if (!state.delayedGoLiveTimer) els.delayedStartStatus.textContent = 'No delayed start scheduled.';
+        return;
+      }
+      const sec = Math.ceil(left / 1000);
+      els.delayedStartStatus.textContent = `Go Live scheduled in ${sec}s.`;
+    }, 1000);
     if (state.token) {
       refreshAdmins().catch(() => {});
       refreshAdminRooms().catch(() => {});
       loadMainEventSettings().catch(() => {});
+      refreshInvites().catch(() => {});
+      refreshLiveMetrics().catch(() => {});
     }
   </script>
 </body>
