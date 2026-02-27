@@ -916,7 +916,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     self._json(HTTPStatus.NOT_FOUND, {'error': 'room_not_found'})
                     return
 
-                if action in {'play', 'pause', 'seek', 'set_media', 'set_title', 'delete_room', 'reset_room', 'mute_user'} and not bool(part['is_host']):
+                if action in {'play', 'pause', 'seek', 'set_media', 'set_title', 'delete_room', 'reset_room', 'mute_user', 'resolve_request'} and not bool(part['is_host']):
                     self._json(HTTPStatus.FORBIDDEN, {'error': 'host_required'})
                     return
 
@@ -994,6 +994,37 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                         return
                     event_payload['toParticipantId'] = to_participant_id
                     event_payload['muted'] = bool(muted)
+                elif action == 'request_item':
+                    request_type = str(payload.get('requestType', '')).strip().lower()[:32]
+                    request_text = str(payload.get('requestText', '')).strip()[:300]
+                    if request_type not in {'media', 'skip_intro', 'next_episode', 'cohost', 'general'}:
+                        self._json(HTTPStatus.BAD_REQUEST, {'error': 'invalid_request_type'})
+                        return
+                    if not request_text:
+                        self._json(HTTPStatus.BAD_REQUEST, {'error': 'requestText_required'})
+                        return
+                    event_payload['requestType'] = request_type
+                    event_payload['requestText'] = request_text
+                elif action == 'resolve_request':
+                    request_id = int(payload.get('requestId', 0) or 0)
+                    status = str(payload.get('status', '')).strip().lower()[:16]
+                    note = str(payload.get('note', '')).strip()[:200]
+                    if request_id <= 0:
+                        self._json(HTTPStatus.BAD_REQUEST, {'error': 'requestId_required'})
+                        return
+                    if status not in {'approved', 'denied'}:
+                        self._json(HTTPStatus.BAD_REQUEST, {'error': 'invalid_status'})
+                        return
+                    event_payload['requestId'] = request_id
+                    event_payload['status'] = status
+                    if note:
+                        event_payload['note'] = note
+                elif action == 'reaction':
+                    emoji = str(payload.get('emoji', '')).strip()[:8]
+                    if not emoji:
+                        self._json(HTTPStatus.BAD_REQUEST, {'error': 'emoji_required'})
+                        return
+                    event_payload['emoji'] = emoji
                 elif action == 'chat':
                     msg = str(payload.get('message', '')).strip()
                     if not msg:

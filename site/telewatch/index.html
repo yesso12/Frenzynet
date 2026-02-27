@@ -259,6 +259,55 @@
     .msg-line { display: grid; gap: 1px; }
     .msg-head { font-size: 11px; color: #6f7d8f; }
     .msg-body { font-size: 13px; color: #1d2a39; word-break: break-word; }
+    .participants-grid {
+      display: grid;
+      gap: 8px;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    }
+    .participant-card {
+      border: 1px solid var(--line-soft);
+      background: var(--panel-2);
+      border-radius: 10px;
+      padding: 8px;
+      display: grid;
+      gap: 3px;
+    }
+    .participant-name { font-weight: 700; font-size: 13px; }
+    .participant-meta { font-size: 11px; color: var(--muted); }
+    .reaction-bar {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .reaction-btn {
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 16px;
+      line-height: 1;
+      border: 1px solid var(--input-line);
+      background: var(--input-bg);
+      cursor: pointer;
+    }
+    .reaction-overlay {
+      position: absolute;
+      right: 14px;
+      bottom: 20px;
+      display: grid;
+      gap: 6px;
+      pointer-events: none;
+      z-index: 4;
+    }
+    .reaction-pop {
+      font-size: 24px;
+      animation: floatUp 1.7s ease forwards;
+      text-shadow: 0 4px 12px rgba(0,0,0,.25);
+    }
+    @keyframes floatUp {
+      0% { transform: translateY(0) scale(0.9); opacity: 0; }
+      15% { transform: translateY(-4px) scale(1); opacity: 1; }
+      100% { transform: translateY(-46px) scale(1.05); opacity: 0; }
+    }
     .admin-tools.hidden { display: none; }
     .admin-login.hidden { display: none; }
     .host-grid {
@@ -445,6 +494,15 @@
                 <button id="unmuteTargetBtn" class="secondary">Unmute</button>
               </div>
             </div>
+            <div class="block stack full">
+              <h3>Request Queue (Host)</h3>
+              <select id="requestQueueSelect"></select>
+              <div class="row">
+                <input id="requestResolveNote" placeholder="Optional note to requester" />
+                <button id="approveRequestBtn" class="secondary">Approve</button>
+                <button id="denyRequestBtn" class="secondary">Deny</button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -453,6 +511,18 @@
             <h3>Room Messages</h3>
             <textarea id="chatInput" placeholder="Send timestamp notes, e.g. pause at 12:34"></textarea>
             <button id="chatBtn" class="secondary">Send Message</button>
+            <h3>Make Request</h3>
+            <div class="row">
+              <select id="requestTypeSelect">
+                <option value="general">General Request</option>
+                <option value="media">Media Request</option>
+                <option value="skip_intro">Skip Intro Vote</option>
+                <option value="next_episode">Next Episode Vote</option>
+                <option value="cohost">Co-host Request</option>
+              </select>
+              <button id="sendRequestBtn" class="secondary">Send Request</button>
+            </div>
+            <input id="requestTextInput" placeholder="Request text, e.g. play episode 2 or skip intro" />
           </div>
         </div>
 
@@ -513,8 +583,18 @@
           </div>
         </div>
         <div class="stage">
-          <video id="player" controls playsinline></video>
+          <div style="position:relative">
+            <video id="player" controls playsinline></video>
+            <div id="reactionOverlay" class="reaction-overlay"></div>
+          </div>
           <video id="screenView" controls autoplay playsinline muted></video>
+          <div class="reaction-bar">
+            <button class="reaction-btn" data-react="🔥">🔥</button>
+            <button class="reaction-btn" data-react="😂">😂</button>
+            <button class="reaction-btn" data-react="👏">👏</button>
+            <button class="reaction-btn" data-react="❤️">❤️</button>
+            <button class="reaction-btn" data-react="😮">😮</button>
+          </div>
           <div class="row">
             <button id="playBtn" class="secondary">Play</button>
             <button id="pauseBtn" class="secondary">Pause</button>
@@ -524,6 +604,8 @@
 
         <div class="duo">
           <div class="block stack">
+            <h3>Participants</h3>
+            <div id="participantsGrid" class="participants-grid"></div>
             <h3>Room Messages</h3>
             <div class="muted">Live room chat appears here. Newest messages show first.</div>
             <div id="chatFeed" class="chat-feed"></div>
@@ -566,6 +648,10 @@
       quickHostBtn: document.getElementById('quickHostBtn'),
       recentJoinBtn: document.getElementById('recentJoinBtn'),
       recentRoomsSelect: document.getElementById('recentRoomsSelect'),
+      requestQueueSelect: document.getElementById('requestQueueSelect'),
+      requestResolveNote: document.getElementById('requestResolveNote'),
+      approveRequestBtn: document.getElementById('approveRequestBtn'),
+      denyRequestBtn: document.getElementById('denyRequestBtn'),
       adminKeyInput: document.getElementById('adminKeyInput'),
       adminUserInput: document.getElementById('adminUserInput'),
       adminPassInput: document.getElementById('adminPassInput'),
@@ -603,6 +689,9 @@
       resetRoomBtn: document.getElementById('resetRoomBtn'),
       deleteRoomBtn: document.getElementById('deleteRoomBtn'),
       chatInput: document.getElementById('chatInput'),
+      requestTypeSelect: document.getElementById('requestTypeSelect'),
+      requestTextInput: document.getElementById('requestTextInput'),
+      sendRequestBtn: document.getElementById('sendRequestBtn'),
       chatBtn: document.getElementById('chatBtn'),
       playBtn: document.getElementById('playBtn'),
       pauseBtn: document.getElementById('pauseBtn'),
@@ -619,6 +708,9 @@
       adminRoomsSelect: document.getElementById('adminRoomsSelect'),
       copyAdminRoomBtn: document.getElementById('copyAdminRoomBtn'),
       nowTitle: document.getElementById('nowTitle'),
+      reactionOverlay: document.getElementById('reactionOverlay'),
+      reactionButtons: Array.from(document.querySelectorAll('.reaction-btn')),
+      participantsGrid: document.getElementById('participantsGrid'),
       events: document.getElementById('events'),
       chatFeed: document.getElementById('chatFeed'),
       player: document.getElementById('player'),
@@ -644,7 +736,8 @@
       lastSeekSentAt: 0,
       lastRoom: null,
       hostMuted: {},
-      adminRooms: []
+      adminRooms: [],
+      requests: []
     };
     const SESSION_KEY = 'telewatch_session';
     const ADMIN_SESSION_KEY = 'telewatch_admin_session';
@@ -1018,6 +1111,120 @@
         els.fullChip.textContent = full ? 'Room Full' : 'Room Open';
         els.fullChip.classList.toggle('ok', !full);
       }
+    }
+
+    function renderParticipants() {
+      if (!els.participantsGrid) return;
+      const rows = Array.isArray(state.participants) ? state.participants : [];
+      els.participantsGrid.innerHTML = '';
+      if (!rows.length) {
+        const d = document.createElement('div');
+        d.className = 'muted';
+        d.textContent = 'No participants yet';
+        els.participantsGrid.appendChild(d);
+        return;
+      }
+      for (const p of rows) {
+        const card = document.createElement('div');
+        card.className = 'participant-card';
+        const mutedByHost = !!state.hostMuted[String(p.participantId || '').toLowerCase()];
+        card.innerHTML = `
+          <div class="participant-name">${String(p.displayName || 'Guest')}</div>
+          <div class="participant-meta">${p.isHost ? 'Host' : 'Viewer'}${p.isSelf ? ' · You' : ''}</div>
+          <div class="participant-meta">${mutedByHost ? 'Muted by host' : 'Unmuted'}</div>
+        `;
+        els.participantsGrid.appendChild(card);
+      }
+    }
+
+    function addReaction(emoji, actor) {
+      if (!els.reactionOverlay) return;
+      const d = document.createElement('div');
+      d.className = 'reaction-pop';
+      d.textContent = String(emoji || '👏');
+      d.title = actor || '';
+      els.reactionOverlay.appendChild(d);
+      setTimeout(() => {
+        try { d.remove(); } catch (_) {}
+      }, 1800);
+    }
+
+    async function sendReaction(emoji) {
+      const clean = String(emoji || '').trim().slice(0, 4);
+      if (!clean) return;
+      await sendControl('reaction', { emoji: clean });
+      addReaction(clean, 'you');
+    }
+
+    function upsertRequestFromEvent(ev) {
+      if (!ev || ev.type !== 'request_item') return;
+      const req = {
+        id: Number(ev.id) || 0,
+        actor: String(ev.actor || 'user'),
+        type: String(ev.payload?.requestType || 'general'),
+        text: String(ev.payload?.requestText || ''),
+        status: 'pending',
+        note: '',
+      };
+      if (!req.id) return;
+      state.requests = state.requests.filter((r) => r.id !== req.id);
+      state.requests.unshift(req);
+    }
+
+    function resolveRequestFromEvent(ev) {
+      if (!ev || ev.type !== 'resolve_request') return;
+      const id = Number(ev.payload?.requestId || 0);
+      if (!id) return;
+      const status = String(ev.payload?.status || 'denied');
+      const note = String(ev.payload?.note || '');
+      state.requests = state.requests.map((r) => {
+        if (r.id !== id) return r;
+        return Object.assign({}, r, { status, note });
+      });
+    }
+
+    function renderRequestQueue() {
+      if (!els.requestQueueSelect) return;
+      const pending = (state.requests || []).filter((r) => r.status === 'pending');
+      els.requestQueueSelect.innerHTML = '';
+      if (!pending.length) {
+        const o = document.createElement('option');
+        o.value = '';
+        o.textContent = 'No pending requests';
+        els.requestQueueSelect.appendChild(o);
+        return;
+      }
+      for (const r of pending) {
+        const o = document.createElement('option');
+        o.value = String(r.id);
+        o.textContent = `#${r.id} ${r.actor} · ${r.type} · ${r.text}`;
+        els.requestQueueSelect.appendChild(o);
+      }
+    }
+
+    async function sendRequestItem() {
+      const type = String((els.requestTypeSelect && els.requestTypeSelect.value) || 'general');
+      const text = String((els.requestTextInput && els.requestTextInput.value) || '').trim();
+      if (!text) {
+        setStatus(false, 'Request text required.');
+        return;
+      }
+      await sendControl('request_item', { requestType: type, requestText: text });
+      els.requestTextInput.value = '';
+      setStatus(true, 'Request sent.');
+    }
+
+    async function resolveSelectedRequest(status) {
+      if (!state.isHost) return;
+      const requestId = Number((els.requestQueueSelect && els.requestQueueSelect.value) || 0);
+      const note = String((els.requestResolveNote && els.requestResolveNote.value) || '').trim();
+      if (!requestId) {
+        setStatus(false, 'Select a request first.');
+        return;
+      }
+      await sendControl('resolve_request', { requestId, status, note });
+      if (els.requestResolveNote) els.requestResolveNote.value = '';
+      setStatus(true, `Request #${requestId} ${status}.`);
     }
 
     function voiceOn() {
@@ -1818,6 +2025,7 @@
         state.participants = Array.isArray(data.participants) ? data.participants : [];
         refreshMuteTargets();
         updateVoiceUi();
+        renderParticipants();
         setStatus(true, 'Connected · active viewers: ' + (data.activeCount || 0));
         updateStatusChips(data.activeCount || 0);
         applyRoomState(data.room || null, false);
@@ -1834,6 +2042,22 @@
             await processSignal(ev.payload || {});
             continue;
           }
+          if (ev.type === 'reaction') {
+            addReaction(String(ev.payload?.emoji || '👏'), actor);
+            continue;
+          }
+          if (ev.type === 'request_item') {
+            upsertRequestFromEvent(ev);
+            renderRequestQueue();
+            addEventLine(actor + ' · request submitted');
+            continue;
+          }
+          if (ev.type === 'resolve_request') {
+            resolveRequestFromEvent(ev);
+            renderRequestQueue();
+            addEventLine(actor + ' · request ' + String(ev.payload?.status || 'resolved'));
+            continue;
+          }
           if (ev.type === 'mute_user') {
             const targetId = String(ev.payload?.toParticipantId || '').toLowerCase();
             const muted = !!ev.payload?.muted;
@@ -1842,6 +2066,7 @@
               for (const t of rtc.localVoiceStream.getAudioTracks()) t.enabled = !muted;
               updateVoiceUi();
             }
+            renderParticipants();
             continue;
           }
           if (ev.type === 'chat') {
@@ -1955,6 +2180,26 @@
         } catch (_) {
           setStatus(true, 'Room code: ' + code);
         }
+      });
+    }
+    if (els.sendRequestBtn) {
+      els.sendRequestBtn.addEventListener('click', async () => {
+        try { await sendRequestItem(); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
+      });
+    }
+    if (els.approveRequestBtn) {
+      els.approveRequestBtn.addEventListener('click', async () => {
+        try { await resolveSelectedRequest('approved'); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
+      });
+    }
+    if (els.denyRequestBtn) {
+      els.denyRequestBtn.addEventListener('click', async () => {
+        try { await resolveSelectedRequest('denied'); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
+      });
+    }
+    for (const rbtn of (els.reactionButtons || [])) {
+      rbtn.addEventListener('click', async () => {
+        try { await sendReaction(rbtn.getAttribute('data-react') || '👏'); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
       });
     }
     if (els.adminLoginBtn) els.adminLoginBtn.addEventListener('click', async () => {
@@ -2119,6 +2364,8 @@
       switchTab('session');
       setWizardStep(1);
       updateStatusChips(0);
+      renderParticipants();
+      renderRequestQueue();
       const roomFromQuery = normalizeRoomCode(qp('room') || '');
       if (roomFromQuery) els.roomInput.value = roomFromQuery;
       els.roomInput.addEventListener('input', () => {
