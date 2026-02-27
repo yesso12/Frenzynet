@@ -141,6 +141,55 @@
       background: rgba(53, 122, 92, 0.45);
       color: #ecfff6;
     }
+    .health-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin: 10px 0 0;
+    }
+    .health-badge {
+      border: 1px solid #d1dae5;
+      border-radius: 999px;
+      padding: 5px 10px;
+      font-size: 12px;
+      font-weight: 700;
+      background: #fff;
+      color: #334960;
+    }
+    .health-badge.ok {
+      border-color: #8ad2ab;
+      background: #edf9f2;
+      color: #196947;
+    }
+    .health-badge.bad {
+      border-color: #ed9ea3;
+      background: #fff0f1;
+      color: #9f2631;
+    }
+    .sticky-checklist {
+      position: sticky;
+      top: 12px;
+      z-index: 3;
+      border: 1px solid #4f6990;
+      border-radius: 10px;
+      padding: 10px;
+      background: #1f3453;
+      margin-bottom: 10px;
+      color: #eaf2ff;
+    }
+    .sticky-checklist .item {
+      font-size: 12px;
+      border: 1px solid #6886b2;
+      border-radius: 999px;
+      padding: 5px 9px;
+      margin: 6px 0 0;
+      display: inline-block;
+      background: rgba(255,255,255,.07);
+    }
+    .sticky-checklist .item.done {
+      border-color: #8ad2ab;
+      background: rgba(38, 115, 78, .55);
+    }
     @media (max-width: 760px) {
       .wrap { width: calc(100% - 14px); margin: 10px auto; }
       .row > * { min-width: 100%; flex-basis: 100%; }
@@ -184,6 +233,11 @@
       </div>
 
       <div class="muted" style="margin-top:8px">Main Event workspace is isolated below for fast big-night operation.</div>
+      <div class="health-row">
+        <span id="apiHealthBadge" class="health-badge">API: checking...</span>
+        <span id="authHealthBadge" class="health-badge">Auth: checking...</span>
+        <button id="runPreflightBtn" class="secondary" style="width:auto">Run Preflight</button>
+      </div>
 
       <div class="tool-section">
       <h3 style="margin:0 0 8px">Main Event Control</h3>
@@ -220,6 +274,14 @@
         <h3 style="margin:0">Main Event TV Console</h3>
         <div style="text-align:right"><span class="pill">Big Night Mode</span></div>
       </div>
+      <div class="sticky-checklist">
+        <div style="font-weight:800; font-size:12px; text-transform:uppercase; letter-spacing:.05em;">Live Checklist</div>
+        <span id="checklist1" class="item">Admin code entered</span>
+        <span id="checklist2" class="item">Main event room set</span>
+        <span id="checklist3" class="item">Host controls attached</span>
+        <span id="checklist4" class="item">Stream console loaded</span>
+        <span id="checklist5" class="item">Live started</span>
+      </div>
       <div class="guide-panel">
         <div class="guide-title">Big Night Quick Guide</div>
         <div id="guideStep1" class="guide-step">1. Click Quick Start Main Event</div>
@@ -232,6 +294,7 @@
         <div class="row">
           <button id="quickStartMainEventBtn" class="big">Quick Start Main Event (Recommended)</button>
           <button id="quickStopMainEventBtn" class="danger big">Quick Stop</button>
+          <button id="rollbackMainEventBtn" class="secondary big">Rollback To Normal</button>
         </div>
         <div id="quickMainEventState" class="muted">Ready. Click Quick Start to auto-configure main event.</div>
       </div>
@@ -261,11 +324,20 @@
           </select>
         </div>
         <div>
+          <label for="mainEventTemplate">Template</label>
+          <select id="mainEventTemplate">
+            <option value="big_movie">Big Movie Night</option>
+            <option value="anime_night">Anime Night</option>
+            <option value="sports_watch">Sports Watch</option>
+          </select>
+        </div>
+        <div>
           <label for="mainEventRooms">Existing Active Rooms</label>
           <select id="mainEventRooms"></select>
         </div>
       </div>
       <div class="row" style="margin-top:8px">
+        <button id="applyTemplateBtn" class="secondary">Apply Template</button>
         <button id="refreshRoomsBtn" class="secondary">Refresh Rooms</button>
       </div>
       <div class="muted" style="margin-top:4px">For huge nights, keep Transport Mode on Broadcast.</div>
@@ -298,6 +370,15 @@
         <button id="studioAttachHostBtn" class="secondary">Attach Host Controls</button>
         <button id="studioSetMediaBtn">Set Movie</button>
         <button id="studioSetTitleBtn" class="secondary">Set Title Only</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <div>
+          <label for="backupCohostSelect">Backup Co-host</label>
+          <select id="backupCohostSelect"></select>
+        </div>
+        <div style="align-self:end">
+          <button id="assignBackupBtn" class="secondary">Assign Backup Co-host</button>
+        </div>
       </div>
       <div class="row" style="margin-top:8px">
         <div>
@@ -410,12 +491,23 @@
       mainEventHostName: document.getElementById('mainEventHostName'),
       mainEventTitle: document.getElementById('mainEventTitle'),
       mainEventMode: document.getElementById('mainEventMode'),
+      mainEventTemplate: document.getElementById('mainEventTemplate'),
+      applyTemplateBtn: document.getElementById('applyTemplateBtn'),
       mainEventRooms: document.getElementById('mainEventRooms'),
       refreshRoomsBtn: document.getElementById('refreshRoomsBtn'),
       mainEventPrepBtn: document.getElementById('mainEventPrepBtn'),
       quickStartMainEventBtn: document.getElementById('quickStartMainEventBtn'),
       quickStopMainEventBtn: document.getElementById('quickStopMainEventBtn'),
+      rollbackMainEventBtn: document.getElementById('rollbackMainEventBtn'),
       quickMainEventState: document.getElementById('quickMainEventState'),
+      runPreflightBtn: document.getElementById('runPreflightBtn'),
+      apiHealthBadge: document.getElementById('apiHealthBadge'),
+      authHealthBadge: document.getElementById('authHealthBadge'),
+      checklist1: document.getElementById('checklist1'),
+      checklist2: document.getElementById('checklist2'),
+      checklist3: document.getElementById('checklist3'),
+      checklist4: document.getElementById('checklist4'),
+      checklist5: document.getElementById('checklist5'),
       guideStep1: document.getElementById('guideStep1'),
       guideStep2: document.getElementById('guideStep2'),
       guideStep3: document.getElementById('guideStep3'),
@@ -436,6 +528,8 @@
       studioAccessMode: document.getElementById('studioAccessMode'),
       studioMessage: document.getElementById('studioMessage'),
       studioAttachHostBtn: document.getElementById('studioAttachHostBtn'),
+      backupCohostSelect: document.getElementById('backupCohostSelect'),
+      assignBackupBtn: document.getElementById('assignBackupBtn'),
       studioSetMediaBtn: document.getElementById('studioSetMediaBtn'),
       studioSetTitleBtn: document.getElementById('studioSetTitleBtn'),
       studioPlayBtn: document.getElementById('studioPlayBtn'),
@@ -462,9 +556,12 @@
       refreshBtn: document.getElementById('refreshBtn'),
       removeAdminBtn: document.getElementById('removeAdminBtn'),
     };
-    const state = { token: '', username: '', mainHostToken: '', mainHostRoomCode: '' };
+    const state = { token: '', username: '', mainHostToken: '', mainHostRoomCode: '', liveStarted: false, adminCodeFailCount: 0, adminCodeLockUntil: 0 };
 
     async function api(path, body) {
+      if (state.adminCodeLockUntil && Date.now() < state.adminCodeLockUntil) {
+        throw new Error('admin_code_temporarily_locked');
+      }
       const res = await fetch(API + path, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -474,7 +571,21 @@
       const txt = await res.text();
       let data = {};
       try { data = txt ? JSON.parse(txt) : {}; } catch (_) {}
-      if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+      if (!res.ok) {
+        const code = String(data.error || ('HTTP ' + res.status));
+        if (code === 'admin_code_invalid') {
+          state.adminCodeFailCount += 1;
+          if (state.adminCodeFailCount >= 5) {
+            state.adminCodeLockUntil = Date.now() + 30000;
+          }
+        } else {
+          state.adminCodeFailCount = 0;
+          state.adminCodeLockUntil = 0;
+        }
+        throw new Error(code);
+      }
+      state.adminCodeFailCount = 0;
+      state.adminCodeLockUntil = 0;
       return data;
     }
 
@@ -503,16 +614,19 @@
       if (code) return code;
       setStatus('Admin code is required for this action.');
       els.adminCode.focus();
+      setChecklist();
       throw new Error('admin_code_required');
     }
     function describeApiError(err) {
       const msg = String(err && err.message ? err.message : err);
       if (msg === 'admin_auth_invalid' || msg === 'admin_auth_required') return 'Session expired. Sign in again.';
       if (msg === 'admin_code_required' || msg === 'admin_code_invalid') return 'Enter the correct admin code.';
+      if (msg === 'admin_code_temporarily_locked') return 'Too many bad admin-code attempts. Wait 30 seconds.';
       if (msg === 'room_code_taken') return 'That room code already exists. Choose another room code.';
       if (msg === 'host_router_limit') return 'This network already has an active hosted room. End it first.';
       if (msg === 'room_capacity_reached') return 'Max room capacity reached on server.';
       if (msg === 'main_event_room_locked') return 'Main Event room is locked to another code.';
+      if (msg === 'backup_participant_required') return 'Pick a backup co-host first.';
       return msg;
     }
     function cleanCode(v) {
@@ -536,6 +650,18 @@
         if (!node) continue;
         node.classList.toggle('done', i < stepNum);
       }
+    }
+    function setChecklist() {
+      const hasCode = !!readAdminCode();
+      const hasRoom = !!selectedMainRoomCode();
+      const hasHost = !!(state.mainHostToken && cleanCode(state.mainHostRoomCode));
+      const hasStream = !!String(els.studioStreamFrame && els.studioStreamFrame.src || '').trim();
+      const live = !!state.liveStarted;
+      if (els.checklist1) els.checklist1.classList.toggle('done', hasCode);
+      if (els.checklist2) els.checklist2.classList.toggle('done', hasRoom);
+      if (els.checklist3) els.checklist3.classList.toggle('done', hasHost);
+      if (els.checklist4) els.checklist4.classList.toggle('done', hasStream);
+      if (els.checklist5) els.checklist5.classList.toggle('done', live);
     }
     function toLocalInputValue(iso) {
       const d = new Date(String(iso || '').trim());
@@ -568,6 +694,7 @@
       els.mainEventHostInfo.textContent = hostReady
         ? `Host controls attached to ${cleanCode(state.mainHostRoomCode)}`
         : 'Host controls: not attached';
+      setChecklist();
     }
     function save() {
       try {
@@ -650,6 +777,8 @@
       const selected = cleanCode(els.mainEventRoomCode.value || els.mainEventRooms.value);
       els.mainEventInfo.textContent = selected ? `Main Event Link: ${mainEventJoinUrl(selected)}` : 'No main event room selected.';
       els.studioStreamUrl.value = mainEventStudioUrl(selected);
+      setChecklist();
+      await refreshBackupCandidates();
     }
 
     async function loadMainEventSettings() {
@@ -661,6 +790,105 @@
       const c = cleanCode(s.mainEventRoomCode || '');
       els.mainEventInfo.textContent = c ? `Main Event Link: ${mainEventJoinUrl(c)}` : 'No main event room selected.';
       els.studioStreamUrl.value = mainEventStudioUrl(c);
+      setChecklist();
+    }
+
+    async function refreshHealthBadges() {
+      try {
+        const r = await fetch('https://api.frenzynets.com/api/telewatch/public-settings', { cache: 'no-store' });
+        const ok = !!r.ok;
+        els.apiHealthBadge.textContent = ok ? 'API: online' : `API: error (${r.status})`;
+        els.apiHealthBadge.classList.toggle('ok', ok);
+        els.apiHealthBadge.classList.toggle('bad', !ok);
+      } catch (_) {
+        els.apiHealthBadge.textContent = 'API: offline';
+        els.apiHealthBadge.classList.remove('ok');
+        els.apiHealthBadge.classList.add('bad');
+      }
+      try {
+        if (!state.token) throw new Error('no_token');
+        await api('/api/watch/admin/list', { adminToken: state.token });
+        els.authHealthBadge.textContent = 'Auth: valid';
+        els.authHealthBadge.classList.add('ok');
+        els.authHealthBadge.classList.remove('bad');
+      } catch (_) {
+        els.authHealthBadge.textContent = 'Auth: sign in required';
+        els.authHealthBadge.classList.remove('ok');
+        els.authHealthBadge.classList.add('bad');
+      }
+    }
+
+    function applyTemplate() {
+      const t = String(els.mainEventTemplate.value || 'big_movie').trim();
+      if (t === 'anime_night') {
+        els.mainEventTitle.value = els.mainEventTitle.value || 'Anime Marathon';
+        els.studioTheme.value = 'anime';
+        els.mainEventMode.value = 'broadcast';
+        els.studioAccessMode.value = 'public';
+        return;
+      }
+      if (t === 'sports_watch') {
+        els.mainEventTitle.value = els.mainEventTitle.value || 'Sports Main Event';
+        els.studioTheme.value = 'city';
+        els.mainEventMode.value = 'broadcast';
+        els.studioAccessMode.value = 'public';
+        return;
+      }
+      els.mainEventTitle.value = els.mainEventTitle.value || 'Big Movie Night';
+      els.studioTheme.value = 'clean';
+      els.mainEventMode.value = 'broadcast';
+      els.studioAccessMode.value = 'public';
+    }
+
+    async function refreshBackupCandidates() {
+      if (!els.backupCohostSelect) return;
+      els.backupCohostSelect.innerHTML = '';
+      try {
+        const roomCode = selectedMainRoomCode();
+        const token = String(state.mainHostToken || '').trim();
+        if (!roomCode || !token) throw new Error('host_controls_not_attached');
+        const data = await api('/api/watch/state', { roomCode, participantToken: token, sinceEventId: 0 });
+        const participants = Array.isArray(data.participants) ? data.participants : [];
+        const rows = participants.filter((p) => !p.isHost);
+        for (const p of rows) {
+          const id = String(p.participantId || '').trim().toLowerCase();
+          if (!id) continue;
+          const o = document.createElement('option');
+          o.value = id;
+          o.textContent = `${String(p.displayName || 'Guest')} (${id})`;
+          els.backupCohostSelect.appendChild(o);
+        }
+        if (!els.backupCohostSelect.options.length) {
+          const o = document.createElement('option');
+          o.value = '';
+          o.textContent = 'No backup candidates';
+          els.backupCohostSelect.appendChild(o);
+        }
+      } catch (_) {
+        const o = document.createElement('option');
+        o.value = '';
+        o.textContent = 'Attach host controls first';
+        els.backupCohostSelect.appendChild(o);
+      }
+    }
+
+    async function runPreflight() {
+      const checks = [];
+      const adminCodeOk = !!readAdminCode();
+      checks.push(adminCodeOk ? 'Admin code: OK' : 'Admin code: MISSING');
+      const roomCode = selectedMainRoomCode();
+      checks.push(roomCode ? `Room: ${roomCode}` : 'Room: NOT SET');
+      const hostOk = !!(state.mainHostToken && cleanCode(state.mainHostRoomCode));
+      checks.push(hostOk ? 'Host controls: ATTACHED' : 'Host controls: NOT ATTACHED');
+      const streamLoaded = !!String(els.studioStreamFrame && els.studioStreamFrame.src || '').trim();
+      checks.push(streamLoaded ? 'Stream console: LOADED' : 'Stream console: NOT LOADED');
+      await refreshHealthBadges();
+      const apiOk = els.apiHealthBadge.classList.contains('ok');
+      const authOk = els.authHealthBadge.classList.contains('ok');
+      checks.push(apiOk ? 'API health: OK' : 'API health: FAIL');
+      checks.push(authOk ? 'Auth health: OK' : 'Auth health: FAIL');
+      setStatus(`Preflight -> ${checks.join(' | ')}`);
+      setChecklist();
     }
 
     els.loginBtn.addEventListener('click', async () => {
@@ -676,6 +904,7 @@
         await refreshAdmins();
         await refreshAdminRooms();
         await loadMainEventSettings();
+        await refreshHealthBadges();
       } catch (e) {
         setStatus('Login failed: ' + describeApiError(e));
       }
@@ -687,10 +916,12 @@
       state.username = '';
       save();
       render();
+      refreshHealthBadges().catch(() => {});
     });
 
     els.deleteRoomBtn.addEventListener('click', async () => {
       try {
+        if (!window.confirm('Delete this room now? This cannot be undone.')) return;
         const adminCode = ensureAdminCode();
         await api('/api/watch/delete', {
           roomCode: String(els.roomCodeDelete.value || '').trim().toUpperCase(),
@@ -745,6 +976,7 @@
         els.mainEventInfo.textContent = `Main Event Link: ${mainEventJoinUrl(code)}`;
         els.studioStreamUrl.value = mainEventStudioUrl(code);
       }
+      setChecklist();
     });
 
     els.mainEventRoomCode.addEventListener('input', () => {
@@ -752,6 +984,7 @@
       els.mainEventRoomCode.value = code;
       els.mainEventInfo.textContent = code ? `Main Event Link: ${mainEventJoinUrl(code)}` : 'No main event room selected.';
       els.studioStreamUrl.value = mainEventStudioUrl(code);
+      setChecklist();
     });
 
     els.refreshRoomsBtn.addEventListener('click', async () => {
@@ -760,6 +993,19 @@
         setStatus('Rooms refreshed.');
       } catch (e) {
         setStatus('Room refresh failed: ' + (e.message || e));
+      }
+    });
+
+    els.applyTemplateBtn.addEventListener('click', () => {
+      applyTemplate();
+      setStatus('Template applied.');
+    });
+
+    els.runPreflightBtn.addEventListener('click', async () => {
+      try {
+        await runPreflight();
+      } catch (e) {
+        setStatus('Preflight failed: ' + describeApiError(e));
       }
     });
 
@@ -844,6 +1090,7 @@
         const url = mainEventStudioUrl(code);
         els.studioStreamUrl.value = url;
         els.studioStreamFrame.src = url;
+        state.liveStarted = false;
         save();
         render();
         await refreshAdminRooms();
@@ -859,6 +1106,7 @@
 
     els.quickStopMainEventBtn.addEventListener('click', async () => {
       try {
+        if (!window.confirm('Quick Stop will end the event, disable lockdown, and delete the room. Continue?')) return;
         const adminCode = ensureAdminCode();
         const code = cleanCode(els.mainEventRoomCode.value || els.mainEventRooms.value || state.mainHostRoomCode);
         if (!code) throw new Error('main_event_room_required');
@@ -876,6 +1124,7 @@
         });
         state.mainHostToken = '';
         state.mainHostRoomCode = '';
+        state.liveStarted = false;
         els.mainEventRoomCode.value = '';
         els.mainEventLockdown.value = '0';
         els.studioStreamFrame.src = '';
@@ -908,6 +1157,7 @@
         const code = cleanCode(created.roomCode || roomCode);
         state.mainHostToken = String(created.participantToken || '').trim();
         state.mainHostRoomCode = code;
+        state.liveStarted = false;
         els.mainEventRoomCode.value = code;
         await api('/api/watch/admin/settings', {
           adminToken: state.token,
@@ -932,6 +1182,8 @@
       try {
         await sendMainControl('play', {});
         await sendMainControl('chat', { message: 'Main Event is now LIVE. Enjoy the show.' });
+        state.liveStarted = true;
+        setChecklist();
         setGuideProgress(3);
         setStatus('Main Event is LIVE.');
       } catch (e) {
@@ -990,9 +1242,21 @@
         state.mainHostRoomCode = roomCode;
         save();
         render();
+        await refreshBackupCandidates();
         setStatus(`Host controls attached to ${roomCode}.`);
       } catch (e) {
         setStatus('Attach failed: ' + (e.message || e));
+      }
+    });
+
+    els.assignBackupBtn.addEventListener('click', async () => {
+      try {
+        const pid = String(els.backupCohostSelect.value || '').trim().toLowerCase();
+        if (!pid) throw new Error('backup_participant_required');
+        await sendMainControl('set_cohost', { toParticipantId: pid, enabled: true });
+        setStatus('Backup co-host assigned.');
+      } catch (e) {
+        setStatus('Assign backup failed: ' + describeApiError(e));
       }
     });
 
@@ -1078,6 +1342,7 @@
 
     els.stopMainEventBtn.addEventListener('click', async () => {
       try {
+        if (!window.confirm('Stop + Delete this Main Event room now?')) return;
         const adminCode = ensureAdminCode();
         const code = cleanCode(els.mainEventRoomCode.value || els.mainEventRooms.value);
         if (!code) throw new Error('main_event_room_required');
@@ -1097,6 +1362,7 @@
         els.mainEventLockdown.value = '0';
         state.mainHostToken = '';
         state.mainHostRoomCode = '';
+        state.liveStarted = false;
         await refreshAdminRooms();
         await loadMainEventSettings();
         save();
@@ -1124,11 +1390,35 @@
       }
     });
 
+    els.rollbackMainEventBtn.addEventListener('click', async () => {
+      try {
+        const adminCode = ensureAdminCode();
+        await api('/api/watch/admin/settings', {
+          adminToken: state.token,
+          adminCode,
+          action: 'set',
+          mainEventLockdown: false,
+          mainEventRoomCode: ''
+        });
+        els.mainEventLockdown.value = '0';
+        els.mainEventRoomCode.value = '';
+        state.liveStarted = false;
+        setGuideProgress(0);
+        setChecklist();
+        await refreshAdminRooms();
+        await loadMainEventSettings();
+        setStatus('Rollback complete. Normal room hosting is open again.');
+      } catch (e) {
+        setStatus('Rollback failed: ' + describeApiError(e));
+      }
+    });
+
     els.studioLoadStreamBtn.addEventListener('click', () => {
       const code = selectedMainRoomCode();
       const url = mainEventStudioUrl(code);
       els.studioStreamUrl.value = url;
       els.studioStreamFrame.src = url;
+      setChecklist();
       setGuideProgress(2);
       setStatus(`Stream console loaded for ${cleanCode(code) || 'admin mode'}.`);
     });
@@ -1150,6 +1440,7 @@
         return;
       }
       els.studioStreamFrame.src = current;
+      setChecklist();
       setStatus('Stream console refreshed.');
     });
 
@@ -1198,12 +1489,14 @@
 
     load();
     loadAdminCode();
-    els.adminCode.addEventListener('input', persistAdminCode);
+    els.adminCode.addEventListener('input', () => { persistAdminCode(); setChecklist(); });
     els.username.value = state.username || 'Trimbledustn@gmail.com';
     els.mainEventHostName.value = 'DFrenzy';
     els.mainEventCountdown.value = nextSaturdayLocalInput();
     els.studioStreamUrl.value = mainEventStudioUrl('');
     render();
+    refreshHealthBadges().catch(() => {});
+    setInterval(() => { refreshHealthBadges().catch(() => {}); }, 20000);
     if (state.token) {
       refreshAdmins().catch(() => {});
       refreshAdminRooms().catch(() => {});
