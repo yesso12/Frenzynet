@@ -27,6 +27,7 @@ TELEWATCH_OWNER_USERNAME = os.getenv('TELEWATCH_OWNER_USERNAME', 'Trimbledustn@g
 TELEWATCH_OWNER_PASSWORD = os.getenv('TELEWATCH_OWNER_PASSWORD', '1978Luke$$').strip()
 TELEWATCH_AUTH_SALT = os.getenv('TELEWATCH_AUTH_SALT', 'frenzy-telewatch-salt-v1').strip()
 ADMIN_SESSION_TTL_HOURS = max(1, min(168, int(os.getenv('TELEWATCH_ADMIN_SESSION_TTL_HOURS', '24'))))
+USER_SESSION_TTL_HOURS = max(1, min(720, int(os.getenv('TELEWATCH_USER_SESSION_TTL_HOURS', '168'))))
 
 
 def utc_iso() -> str:
@@ -183,12 +184,51 @@ def ensure_schema() -> None:
               setting_value TEXT NOT NULL,
               updated_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
+            CREATE TABLE IF NOT EXISTS watch_users (
+              username TEXT PRIMARY KEY,
+              password_hash TEXT NOT NULL,
+              display_name TEXT NOT NULL,
+              created_at TEXT NOT NULL DEFAULT (datetime('now')),
+              updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            CREATE TABLE IF NOT EXISTS watch_user_sessions (
+              session_token TEXT PRIMARY KEY,
+              username TEXT NOT NULL,
+              created_at TEXT NOT NULL DEFAULT (datetime('now')),
+              last_seen_at TEXT NOT NULL DEFAULT (datetime('now')),
+              FOREIGN KEY (username) REFERENCES watch_users(username) ON DELETE CASCADE
+            );
+            CREATE TABLE IF NOT EXISTS watch_user_saved_rooms (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              username TEXT NOT NULL,
+              room_code TEXT NOT NULL,
+              room_title TEXT NOT NULL DEFAULT '',
+              saved_name TEXT NOT NULL DEFAULT '',
+              created_at TEXT NOT NULL DEFAULT (datetime('now')),
+              updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+              UNIQUE(username, room_code),
+              FOREIGN KEY (username) REFERENCES watch_users(username) ON DELETE CASCADE
+            );
+            CREATE TABLE IF NOT EXISTS watch_ip_blocks (
+              ip_addr TEXT PRIMARY KEY,
+              reason TEXT NOT NULL DEFAULT '',
+              created_by TEXT NOT NULL DEFAULT '',
+              created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            CREATE TABLE IF NOT EXISTS watch_user_blocks (
+              username TEXT PRIMARY KEY,
+              reason TEXT NOT NULL DEFAULT '',
+              created_by TEXT NOT NULL DEFAULT '',
+              created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
             CREATE INDEX IF NOT EXISTS idx_watch_participants_room ON watch_participants(room_code, last_seen_at);
             CREATE INDEX IF NOT EXISTS idx_watch_events_room ON watch_events(room_code, id);
             CREATE INDEX IF NOT EXISTS idx_watch_join_requests_room_status ON watch_join_requests(room_code, status, created_at);
             CREATE INDEX IF NOT EXISTS idx_watch_room_invites_room_expires ON watch_room_invites(room_code, expires_at);
             CREATE INDEX IF NOT EXISTS idx_watch_room_bans_room_name ON watch_room_bans(room_code, display_name_norm, expires_at);
             CREATE INDEX IF NOT EXISTS idx_watch_admin_sessions_last_seen ON watch_admin_sessions(last_seen_at);
+            CREATE INDEX IF NOT EXISTS idx_watch_user_sessions_last_seen ON watch_user_sessions(last_seen_at);
+            CREATE INDEX IF NOT EXISTS idx_watch_user_saved_rooms_user ON watch_user_saved_rooms(username, updated_at);
             '''
         )
         try:
@@ -273,6 +313,10 @@ def ensure_schema() -> None:
         conn.execute(
             "DELETE FROM watch_admin_sessions WHERE last_seen_at < datetime('now', ?)",
             (f'-{ADMIN_SESSION_TTL_HOURS} hours',),
+        )
+        conn.execute(
+            "DELETE FROM watch_user_sessions WHERE last_seen_at < datetime('now', ?)",
+            (f'-{USER_SESSION_TTL_HOURS} hours',),
         )
         conn.execute(
             '''
@@ -379,6 +423,18 @@ def create_admin_session(conn: sqlite3.Connection, username: str) -> str:
     return session_token
 
 
+def create_user_session(conn: sqlite3.Connection, username: str) -> str:
+    session_token = secrets.token_urlsafe(40)
+    conn.execute(
+        '''
+        INSERT INTO watch_user_sessions(session_token, username, created_at, last_seen_at)
+        VALUES(?,?,datetime('now'),datetime('now'))
+        ''',
+        (session_token, clean_username(username)),
+    )
+    return session_token
+
+
 def validate_admin_session(conn: sqlite3.Connection, session_token: str) -> sqlite3.Row | None:
     token = str(session_token or '').strip()
     if not token:
@@ -396,6 +452,26 @@ def validate_admin_session(conn: sqlite3.Connection, session_token: str) -> sqli
     if row is None:
         return None
     conn.execute("UPDATE watch_admin_sessions SET last_seen_at=datetime('now') WHERE session_token=?", (token,))
+    return row
+
+
+def validate_user_session(conn: sqlite3.Connection, session_token: str) -> sqlite3.Row | None:
+    token = str(session_token or '').strip()
+    if not token:
+        return None
+    row = conn.execute(
+        '''
+        SELECT s.session_token, s.username, u.display_name
+        FROM watch_user_sessions s
+        JOIN watch_users u ON u.username=s.username
+        WHERE s.session_token=? AND s.last_seen_at >= datetime('now', ?)
+        LIMIT 1
+        ''',
+        (token, f'-{USER_SESSION_TTL_HOURS} hours'),
+    ).fetchone()
+    if row is None:
+        return None
+    conn.execute("UPDATE watch_user_sessions SET last_seen_at=datetime('now') WHERE session_token=?", (token,))
     return row
 
 
@@ -425,6 +501,15 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             return json.loads(raw.decode('utf-8', errors='replace') or '{}'), None
         except Exception:
             return None, 'invalid_json'
+
+    def _client_ip(self) -> str:
+        forwarded = str(self.headers.get('X-Forwarded-For', '')).strip()
+        if forwarded:
+            # Use the first IP from standard X-Forwarded-For chain.
+            return forwarded.split(',')[0].strip()[:64]
+        if self.client_address and self.client_address[0]:
+            return str(self.client_address[0]).strip()[:64]
+        return ''
 
     def do_OPTIONS(self):
         self.send_response(HTTPStatus.NO_CONTENT)
@@ -804,8 +889,467 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             '/api/telewatch/watch/admin/settings',
             '/api/telewatch/api/watch/admin/settings',
         }
+        user_register_paths = {
+            '/watch/user/register',
+            '/api/watch/user/register',
+            '/api/telewatch/watch/user/register',
+            '/api/telewatch/api/watch/user/register',
+        }
+        user_login_paths = {
+            '/watch/user/login',
+            '/api/watch/user/login',
+            '/api/telewatch/watch/user/login',
+            '/api/telewatch/api/watch/user/login',
+        }
+        user_me_paths = {
+            '/watch/user/me',
+            '/api/watch/user/me',
+            '/api/telewatch/watch/user/me',
+            '/api/telewatch/api/watch/user/me',
+        }
+        user_saved_rooms_paths = {
+            '/watch/user/saved-rooms',
+            '/api/watch/user/saved-rooms',
+            '/api/telewatch/watch/user/saved-rooms',
+            '/api/telewatch/api/watch/user/saved-rooms',
+        }
+        user_save_room_paths = {
+            '/watch/user/save-room',
+            '/api/watch/user/save-room',
+            '/api/telewatch/watch/user/save-room',
+            '/api/telewatch/api/watch/user/save-room',
+        }
+        user_delete_saved_room_paths = {
+            '/watch/user/delete-saved-room',
+            '/api/watch/user/delete-saved-room',
+            '/api/telewatch/watch/user/delete-saved-room',
+            '/api/telewatch/api/watch/user/delete-saved-room',
+        }
+        user_logout_paths = {
+            '/watch/user/logout',
+            '/api/watch/user/logout',
+            '/api/telewatch/watch/user/logout',
+            '/api/telewatch/api/watch/user/logout',
+        }
+        admin_ip_block_add_paths = {
+            '/watch/admin/ip-block/add',
+            '/api/watch/admin/ip-block/add',
+            '/api/telewatch/watch/admin/ip-block/add',
+            '/api/telewatch/api/watch/admin/ip-block/add',
+        }
+        admin_ip_block_remove_paths = {
+            '/watch/admin/ip-block/remove',
+            '/api/watch/admin/ip-block/remove',
+            '/api/telewatch/watch/admin/ip-block/remove',
+            '/api/telewatch/api/watch/admin/ip-block/remove',
+        }
+        admin_ip_block_list_paths = {
+            '/watch/admin/ip-block/list',
+            '/api/watch/admin/ip-block/list',
+            '/api/telewatch/watch/admin/ip-block/list',
+            '/api/telewatch/api/watch/admin/ip-block/list',
+        }
+        admin_user_block_add_paths = {
+            '/watch/admin/user-block/add',
+            '/api/watch/admin/user-block/add',
+            '/api/telewatch/watch/admin/user-block/add',
+            '/api/telewatch/api/watch/admin/user-block/add',
+        }
+        admin_user_block_remove_paths = {
+            '/watch/admin/user-block/remove',
+            '/api/watch/admin/user-block/remove',
+            '/api/telewatch/watch/admin/user-block/remove',
+            '/api/telewatch/api/watch/admin/user-block/remove',
+        }
+        admin_user_block_list_paths = {
+            '/watch/admin/user-block/list',
+            '/api/watch/admin/user-block/list',
+            '/api/telewatch/watch/admin/user-block/list',
+            '/api/telewatch/api/watch/admin/user-block/list',
+        }
         delete_paths = {'/watch/delete', '/api/watch/delete', '/api/telewatch/watch/delete', '/api/telewatch/api/watch/delete'}
         control_paths = {'/watch/control', '/api/watch/control', '/api/telewatch/watch/control', '/api/telewatch/api/watch/control'}
+        client_ip = self._client_ip()
+
+        def is_ip_blocked(conn: sqlite3.Connection, ip_addr: str) -> bool:
+            if not ip_addr:
+                return False
+            row = conn.execute(
+                'SELECT 1 FROM watch_ip_blocks WHERE ip_addr=? LIMIT 1',
+                (str(ip_addr).strip()[:64],),
+            ).fetchone()
+            return row is not None
+
+        def is_user_blocked(conn: sqlite3.Connection, username: str) -> bool:
+            clean = clean_username(username)
+            if not clean:
+                return False
+            row = conn.execute(
+                'SELECT 1 FROM watch_user_blocks WHERE username=? LIMIT 1',
+                (clean,),
+            ).fetchone()
+            return row is not None
+
+        if path in user_register_paths:
+            username = clean_username(payload.get('username', ''))
+            password = str(payload.get('password', '')).strip()
+            display_name = clean_name(payload.get('displayName', ''), 'Viewer')
+            if len(username) < 3 or '@' not in username:
+                self._json(HTTPStatus.BAD_REQUEST, {'error': 'username_invalid'})
+                return
+            if len(password) < 8:
+                self._json(HTTPStatus.BAD_REQUEST, {'error': 'password_too_short'})
+                return
+            with get_db() as conn:
+                ensure_public_rooms(conn)
+                cleanup_rooms(conn)
+                if is_ip_blocked(conn, client_ip):
+                    self._json(HTTPStatus.FORBIDDEN, {'error': 'ip_blocked'})
+                    return
+                if is_user_blocked(conn, username):
+                    self._json(HTTPStatus.FORBIDDEN, {'error': 'user_blocked'})
+                    return
+                exists = conn.execute('SELECT 1 FROM watch_users WHERE username=? LIMIT 1', (username,)).fetchone()
+                if exists is not None:
+                    self._json(HTTPStatus.CONFLICT, {'error': 'user_exists'})
+                    return
+                conn.execute(
+                    '''
+                    INSERT INTO watch_users(username, password_hash, display_name, created_at, updated_at)
+                    VALUES(?,?,?,datetime('now'),datetime('now'))
+                    ''',
+                    (username, hash_password(password), display_name),
+                )
+                token = create_user_session(conn, username)
+                conn.commit()
+            self._json(HTTPStatus.OK, {'ok': True, 'userToken': token, 'username': username, 'displayName': display_name})
+            return
+
+        if path in user_login_paths:
+            username = clean_username(payload.get('username', ''))
+            password = str(payload.get('password', '')).strip()
+            if not username or not password:
+                self._json(HTTPStatus.BAD_REQUEST, {'error': 'username_password_required'})
+                return
+            with get_db() as conn:
+                ensure_public_rooms(conn)
+                cleanup_rooms(conn)
+                if is_ip_blocked(conn, client_ip):
+                    self._json(HTTPStatus.FORBIDDEN, {'error': 'ip_blocked'})
+                    return
+                if is_user_blocked(conn, username):
+                    self._json(HTTPStatus.FORBIDDEN, {'error': 'user_blocked'})
+                    return
+                row = conn.execute(
+                    'SELECT username, password_hash, display_name FROM watch_users WHERE username=? LIMIT 1',
+                    (username,),
+                ).fetchone()
+                if row is None or not verify_password(password, row['password_hash']):
+                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'user_login_invalid'})
+                    return
+                token = create_user_session(conn, username)
+                conn.commit()
+            self._json(
+                HTTPStatus.OK,
+                {'ok': True, 'userToken': token, 'username': username, 'displayName': str(row['display_name'] or username)},
+            )
+            return
+
+        if path in user_me_paths:
+            user_token = str(payload.get('userToken', '')).strip()
+            with get_db() as conn:
+                ensure_public_rooms(conn)
+                cleanup_rooms(conn)
+                row = validate_user_session(conn, user_token)
+                if row is None:
+                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'user_auth_invalid'})
+                    return
+                conn.commit()
+            self._json(
+                HTTPStatus.OK,
+                {'ok': True, 'username': str(row['username'] or ''), 'displayName': str(row['display_name'] or '')},
+            )
+            return
+
+        if path in user_saved_rooms_paths:
+            user_token = str(payload.get('userToken', '')).strip()
+            with get_db() as conn:
+                ensure_public_rooms(conn)
+                cleanup_rooms(conn)
+                user = validate_user_session(conn, user_token)
+                if user is None:
+                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'user_auth_invalid'})
+                    return
+                rows = conn.execute(
+                    '''
+                    SELECT room_code, room_title, saved_name, updated_at
+                    FROM watch_user_saved_rooms
+                    WHERE username=?
+                    ORDER BY updated_at DESC
+                    LIMIT 80
+                    ''',
+                    (str(user['username']),),
+                ).fetchall()
+                conn.commit()
+            self._json(
+                HTTPStatus.OK,
+                {
+                    'ok': True,
+                    'rooms': [
+                        {
+                            'roomCode': str(r['room_code'] or ''),
+                            'roomTitle': str(r['room_title'] or ''),
+                            'savedName': str(r['saved_name'] or ''),
+                            'updatedAt': str(r['updated_at'] or ''),
+                        }
+                        for r in rows
+                    ],
+                },
+            )
+            return
+
+        if path in user_save_room_paths:
+            user_token = str(payload.get('userToken', '')).strip()
+            room_code_val = normalize_room_code(payload.get('roomCode', ''), '')
+            room_title = str(payload.get('roomTitle', '')).strip()[:160]
+            saved_name = str(payload.get('savedName', '')).strip()[:120]
+            if not room_code_val:
+                self._json(HTTPStatus.BAD_REQUEST, {'error': 'roomCode_required'})
+                return
+            with get_db() as conn:
+                ensure_public_rooms(conn)
+                cleanup_rooms(conn)
+                user = validate_user_session(conn, user_token)
+                if user is None:
+                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'user_auth_invalid'})
+                    return
+                conn.execute(
+                    '''
+                    INSERT INTO watch_user_saved_rooms(username, room_code, room_title, saved_name, created_at, updated_at)
+                    VALUES(?,?,?,?,datetime('now'),datetime('now'))
+                    ON CONFLICT(username, room_code) DO UPDATE SET
+                      room_title=excluded.room_title,
+                      saved_name=excluded.saved_name,
+                      updated_at=datetime('now')
+                    ''',
+                    (str(user['username']), room_code_val, room_title, saved_name),
+                )
+                conn.commit()
+            self._json(HTTPStatus.OK, {'ok': True, 'saved': True, 'roomCode': room_code_val})
+            return
+
+        if path in user_delete_saved_room_paths:
+            user_token = str(payload.get('userToken', '')).strip()
+            room_code_val = normalize_room_code(payload.get('roomCode', ''), '')
+            if not room_code_val:
+                self._json(HTTPStatus.BAD_REQUEST, {'error': 'roomCode_required'})
+                return
+            with get_db() as conn:
+                ensure_public_rooms(conn)
+                cleanup_rooms(conn)
+                user = validate_user_session(conn, user_token)
+                if user is None:
+                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'user_auth_invalid'})
+                    return
+                conn.execute(
+                    'DELETE FROM watch_user_saved_rooms WHERE username=? AND room_code=?',
+                    (str(user['username']), room_code_val),
+                )
+                conn.commit()
+            self._json(HTTPStatus.OK, {'ok': True, 'deleted': True, 'roomCode': room_code_val})
+            return
+
+        if path in user_logout_paths:
+            user_token = str(payload.get('userToken', '')).strip()
+            if not user_token:
+                self._json(HTTPStatus.BAD_REQUEST, {'error': 'userToken_required'})
+                return
+            with get_db() as conn:
+                conn.execute('DELETE FROM watch_user_sessions WHERE session_token=?', (user_token,))
+                conn.commit()
+            self._json(HTTPStatus.OK, {'ok': True, 'loggedOut': True})
+            return
+
+        if path in admin_ip_block_add_paths:
+            admin_token = str(payload.get('adminToken', '')).strip()
+            admin_code = str(payload.get('adminCode', '')).strip()
+            ip_addr = str(payload.get('ipAddress', '')).strip()[:64]
+            reason = str(payload.get('reason', '')).strip()[:180]
+            if not admin_token:
+                self._json(HTTPStatus.UNAUTHORIZED, {'error': 'admin_auth_required'})
+                return
+            if not ip_addr:
+                self._json(HTTPStatus.BAD_REQUEST, {'error': 'ipAddress_required'})
+                return
+            if TELEWATCH_ADMIN_CODE and admin_code != TELEWATCH_ADMIN_CODE:
+                self._json(HTTPStatus.FORBIDDEN, {'error': 'admin_code_invalid'})
+                return
+            with get_db() as conn:
+                actor = validate_admin_session(conn, admin_token)
+                if actor is None:
+                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'admin_auth_invalid'})
+                    return
+                conn.execute(
+                    '''
+                    INSERT INTO watch_ip_blocks(ip_addr, reason, created_by, created_at)
+                    VALUES(?,?,?,datetime('now'))
+                    ON CONFLICT(ip_addr) DO UPDATE SET
+                      reason=excluded.reason,
+                      created_by=excluded.created_by,
+                      created_at=datetime('now')
+                    ''',
+                    (ip_addr, reason, str(actor['username'] or 'admin')),
+                )
+                conn.commit()
+            self._json(HTTPStatus.OK, {'ok': True, 'blocked': True, 'ipAddress': ip_addr})
+            return
+
+        if path in admin_ip_block_remove_paths:
+            admin_token = str(payload.get('adminToken', '')).strip()
+            admin_code = str(payload.get('adminCode', '')).strip()
+            ip_addr = str(payload.get('ipAddress', '')).strip()[:64]
+            if not admin_token:
+                self._json(HTTPStatus.UNAUTHORIZED, {'error': 'admin_auth_required'})
+                return
+            if not ip_addr:
+                self._json(HTTPStatus.BAD_REQUEST, {'error': 'ipAddress_required'})
+                return
+            if TELEWATCH_ADMIN_CODE and admin_code != TELEWATCH_ADMIN_CODE:
+                self._json(HTTPStatus.FORBIDDEN, {'error': 'admin_code_invalid'})
+                return
+            with get_db() as conn:
+                actor = validate_admin_session(conn, admin_token)
+                if actor is None:
+                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'admin_auth_invalid'})
+                    return
+                conn.execute('DELETE FROM watch_ip_blocks WHERE ip_addr=?', (ip_addr,))
+                conn.commit()
+            self._json(HTTPStatus.OK, {'ok': True, 'removed': True, 'ipAddress': ip_addr})
+            return
+
+        if path in admin_ip_block_list_paths:
+            admin_token = str(payload.get('adminToken', '')).strip()
+            with get_db() as conn:
+                actor = validate_admin_session(conn, admin_token)
+                if actor is None:
+                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'admin_auth_invalid'})
+                    return
+                rows = conn.execute(
+                    '''
+                    SELECT ip_addr, reason, created_by, created_at
+                    FROM watch_ip_blocks
+                    ORDER BY created_at DESC
+                    LIMIT 300
+                    '''
+                ).fetchall()
+                conn.commit()
+            self._json(
+                HTTPStatus.OK,
+                {
+                    'ok': True,
+                    'blocks': [
+                        {
+                            'ipAddress': str(r['ip_addr'] or ''),
+                            'reason': str(r['reason'] or ''),
+                            'createdBy': str(r['created_by'] or ''),
+                            'createdAt': str(r['created_at'] or ''),
+                        }
+                        for r in rows
+                    ],
+                },
+            )
+            return
+
+        if path in admin_user_block_add_paths:
+            admin_token = str(payload.get('adminToken', '')).strip()
+            admin_code = str(payload.get('adminCode', '')).strip()
+            username = clean_username(payload.get('username', ''))
+            reason = str(payload.get('reason', '')).strip()[:180]
+            if not admin_token:
+                self._json(HTTPStatus.UNAUTHORIZED, {'error': 'admin_auth_required'})
+                return
+            if not username:
+                self._json(HTTPStatus.BAD_REQUEST, {'error': 'username_required'})
+                return
+            if TELEWATCH_ADMIN_CODE and admin_code != TELEWATCH_ADMIN_CODE:
+                self._json(HTTPStatus.FORBIDDEN, {'error': 'admin_code_invalid'})
+                return
+            with get_db() as conn:
+                actor = validate_admin_session(conn, admin_token)
+                if actor is None:
+                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'admin_auth_invalid'})
+                    return
+                conn.execute(
+                    '''
+                    INSERT INTO watch_user_blocks(username, reason, created_by, created_at)
+                    VALUES(?,?,?,datetime('now'))
+                    ON CONFLICT(username) DO UPDATE SET
+                      reason=excluded.reason,
+                      created_by=excluded.created_by,
+                      created_at=datetime('now')
+                    ''',
+                    (username, reason, str(actor['username'] or 'admin')),
+                )
+                conn.execute('DELETE FROM watch_user_sessions WHERE username=?', (username,))
+                conn.commit()
+            self._json(HTTPStatus.OK, {'ok': True, 'blocked': True, 'username': username})
+            return
+
+        if path in admin_user_block_remove_paths:
+            admin_token = str(payload.get('adminToken', '')).strip()
+            admin_code = str(payload.get('adminCode', '')).strip()
+            username = clean_username(payload.get('username', ''))
+            if not admin_token:
+                self._json(HTTPStatus.UNAUTHORIZED, {'error': 'admin_auth_required'})
+                return
+            if not username:
+                self._json(HTTPStatus.BAD_REQUEST, {'error': 'username_required'})
+                return
+            if TELEWATCH_ADMIN_CODE and admin_code != TELEWATCH_ADMIN_CODE:
+                self._json(HTTPStatus.FORBIDDEN, {'error': 'admin_code_invalid'})
+                return
+            with get_db() as conn:
+                actor = validate_admin_session(conn, admin_token)
+                if actor is None:
+                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'admin_auth_invalid'})
+                    return
+                conn.execute('DELETE FROM watch_user_blocks WHERE username=?', (username,))
+                conn.commit()
+            self._json(HTTPStatus.OK, {'ok': True, 'removed': True, 'username': username})
+            return
+
+        if path in admin_user_block_list_paths:
+            admin_token = str(payload.get('adminToken', '')).strip()
+            with get_db() as conn:
+                actor = validate_admin_session(conn, admin_token)
+                if actor is None:
+                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'admin_auth_invalid'})
+                    return
+                rows = conn.execute(
+                    '''
+                    SELECT username, reason, created_by, created_at
+                    FROM watch_user_blocks
+                    ORDER BY created_at DESC
+                    LIMIT 300
+                    '''
+                ).fetchall()
+                conn.commit()
+            self._json(
+                HTTPStatus.OK,
+                {
+                    'ok': True,
+                    'blocks': [
+                        {
+                            'username': str(r['username'] or ''),
+                            'reason': str(r['reason'] or ''),
+                            'createdBy': str(r['created_by'] or ''),
+                            'createdAt': str(r['created_at'] or ''),
+                        }
+                        for r in rows
+                    ],
+                },
+            )
+            return
 
         if path in admin_login_paths:
             username = clean_username(payload.get('username', ''))
@@ -1125,6 +1669,9 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             with get_db() as conn:
                 ensure_public_rooms(conn)
                 cleanup_rooms(conn)
+                if is_ip_blocked(conn, client_ip):
+                    self._json(HTTPStatus.FORBIDDEN, {'error': 'ip_blocked'})
+                    return
                 custom_room_count = conn.execute(
                     f"SELECT COUNT(*) FROM watch_rooms WHERE room_code NOT IN ({','.join(['?'] * len(public_room_codes()))})",
                     tuple(public_room_codes()),
@@ -1198,6 +1745,9 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             with get_db() as conn:
                 ensure_public_rooms(conn)
                 cleanup_rooms(conn)
+                if is_ip_blocked(conn, client_ip):
+                    self._json(HTTPStatus.FORBIDDEN, {'error': 'ip_blocked'})
+                    return
                 room = conn.execute(
                     'SELECT room_code, title, media_url, theme_key, allow_webcam, cohost_can_kick, cohost_can_mute, cohost_can_access, cohost_can_pin, access_mode, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
                     (room_code_val,),
