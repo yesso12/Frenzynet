@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="sky" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0%" stop-color="#f2d8ff"/>
+      <stop offset="45%" stop-color="#b792ff"/>
+      <stop offset="100%" stop-color="#33245f"/>
+    </linearGradient>
+    <linearGradient id="city" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0%" stop-color="#28284e"/>
+      <stop offset="100%" stop-color="#161633"/>
+    </linearGradient>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#sky)"/>
+  <circle cx="1490" cy="180" r="130" fill="#fff3d4" opacity="0.8"/>
+  <g fill="url(#city)">
+    <rect x="40" y="500" width="170" height="580"/>
+    <rect x="220" y="460" width="150" height="620"/>
+    <rect x="380" y="540" width="180" height="540"/>
+    <rect x="570" y="420" width="200" height="660"/>
+    <rect x="790" y="500" width="160" height="580"/>
+    <rect x="960" y="370" width="220" height="710"/>
+    <rect x="1190" y="520" width="180" height="560"/>
+    <rect x="1380" y="440" width="210" height="640"/>
+    <rect x="1600" y="500" width="190" height="580"/>
+  </g>
+  <g fill="#ffea9e" opacity="0.8">
+    <rect x="90" y="560" width="10" height="14"/><rect x="120" y="610" width="10" height="14"/><rect x="150" y="680" width="10" height="14"/>
+    <rect x="250" y="520" width="10" height="14"/><rect x="280" y="590" width="10" height="14"/><rect x="320" y="670" width="10" height="14"/>
+    <rect x="620" y="480" width="10" height="14"/><rect x="650" y="550" width="10" height="14"/><rect x="700" y="630" width="10" height="14"/>
+    <rect x="1020" y="430" width="10" height="14"/><rect x="1060" y="500" width="10" height="14"/><rect x="1110" y="590" width="10" height="14"/>
+    <rect x="1440" y="500" width="10" height="14"/><rect x="1490" y="580" width="10" height="14"/><rect x="1530" y="650" width="10" height="14"/>
+  </g>
+  <rect x="0" y="830" width="1920" height="250" fill="#10142c"/>
+  <g fill="#0c1127" opacity="0.95">
+    <ellipse cx="960" cy="900" rx="200" ry="54"/>
+    <path d="M960 660 C900 678 874 736 890 805 L914 892 L1008 892 L1027 780 C1034 725 1010 677 960 660 Z"/>
+    <circle cx="960" cy="617" r="54"/>
+    <path d="M1000 780 C1070 820 1125 870 1150 920 L1095 920 C1068 884 1030 848 980 818 Z"/>
+  </g>
+</svg>
