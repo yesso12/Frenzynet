@@ -64,27 +64,27 @@
       font-weight: 700;
     }
     .tv-console {
-      background: linear-gradient(160deg, #0f1b33, #152746);
-      border-color: #2b466e;
+      background: linear-gradient(160deg, #1a2841, #203452);
+      border-color: #3b5478;
       color: #eaf2ff;
     }
     .tv-console h3 { color: #eaf2ff; }
     .tv-console .muted { color: #a8bbd7; }
     .tv-console .pill {
-      border-color: #406394;
-      background: #1a3156;
+      border-color: #5a7398;
+      background: #2a3f62;
       color: #dcebff;
     }
     .tv-console input,
     .tv-console select {
-      background: #11213d;
-      border-color: #355482;
+      background: #1f3252;
+      border-color: #4d678f;
       color: #ecf3ff;
     }
     .tv-console label { color: #9fb5d6; }
     .tv-console button.secondary {
-      background: #163157;
-      border-color: #36588a;
+      background: #2a3f62;
+      border-color: #5c77a0;
       color: #dcebff;
     }
     .tv-console .stream-frame {
@@ -101,12 +101,42 @@
       display: grid;
       gap: 8px;
       margin-bottom: 10px;
-      border: 1px solid #3a5d8e;
+      border: 1px solid #506d96;
       border-radius: 10px;
       padding: 10px;
-      background: linear-gradient(160deg, #0f2140, #173056);
+      background: linear-gradient(160deg, #233a5d, #2a466f);
     }
     .easy-bar .muted { color: #c2d5f0; }
+    .guide-panel {
+      border: 1px solid #5d77a0;
+      border-radius: 10px;
+      padding: 10px;
+      background: rgba(255, 255, 255, 0.06);
+      margin-bottom: 10px;
+      display: grid;
+      gap: 6px;
+    }
+    .guide-title {
+      font-size: 13px;
+      font-weight: 800;
+      color: #eaf2ff;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+    .guide-step {
+      font-size: 13px;
+      border: 1px solid #5f7ca8;
+      border-radius: 999px;
+      padding: 6px 10px;
+      color: #d8e7ff;
+      background: rgba(255, 255, 255, 0.06);
+      width: fit-content;
+    }
+    .guide-step.done {
+      border-color: #7fd4a8;
+      background: rgba(53, 122, 92, 0.45);
+      color: #ecfff6;
+    }
     @media (max-width: 760px) {
       .wrap { width: calc(100% - 14px); margin: 10px auto; }
       .row > * { min-width: 100%; flex-basis: 100%; }
@@ -186,9 +216,17 @@
         <h3 style="margin:0">Main Event TV Console</h3>
         <div style="text-align:right"><span class="pill">Big Night Mode</span></div>
       </div>
+      <div class="guide-panel">
+        <div class="guide-title">Big Night Quick Guide</div>
+        <div id="guideStep1" class="guide-step">1. Click Quick Start Main Event</div>
+        <div id="guideStep2" class="guide-step">2. In Streaming Console, start your screen share</div>
+        <div id="guideStep3" class="guide-step">3. Click Go Live</div>
+        <div id="guideStep4" class="guide-step">4. Share the Main Event link</div>
+        <div class="muted">If timing changes: update countdown in Main Event Control, then save.</div>
+      </div>
       <div class="easy-bar">
         <div class="row">
-          <button id="quickStartMainEventBtn" class="big">Quick Start Main Event</button>
+          <button id="quickStartMainEventBtn" class="big">Quick Start Main Event (Recommended)</button>
           <button id="quickStopMainEventBtn" class="danger big">Quick Stop</button>
         </div>
         <div id="quickMainEventState" class="muted">Ready. Click Quick Start to auto-configure main event.</div>
@@ -226,6 +264,7 @@
       <div class="row" style="margin-top:8px">
         <button id="refreshRoomsBtn" class="secondary">Refresh Rooms</button>
       </div>
+      <div class="muted" style="margin-top:4px">For huge nights, keep Transport Mode on Broadcast.</div>
       <div class="row" style="margin-top:8px">
         <button id="enableMainEventBtn">Enable Lockdown</button>
         <button id="disableMainEventBtn" class="secondary">Disable Lockdown</button>
@@ -312,6 +351,7 @@
         <button id="studioRefreshStreamBtn" class="secondary">Refresh Console</button>
       </div>
       <div style="margin-top:8px"><span class="pill">Use this panel to run the actual share/stream workflow live.</span></div>
+      <div class="muted" style="margin-top:6px">When the stream preview looks right, come back and click Go Live.</div>
       <iframe id="studioStreamFrame" class="stream-frame" loading="lazy" referrerpolicy="strict-origin-when-cross-origin"></iframe>
       </div>
 
@@ -371,6 +411,10 @@
       quickStartMainEventBtn: document.getElementById('quickStartMainEventBtn'),
       quickStopMainEventBtn: document.getElementById('quickStopMainEventBtn'),
       quickMainEventState: document.getElementById('quickMainEventState'),
+      guideStep1: document.getElementById('guideStep1'),
+      guideStep2: document.getElementById('guideStep2'),
+      guideStep3: document.getElementById('guideStep3'),
+      guideStep4: document.getElementById('guideStep4'),
       createMainEventBtn: document.getElementById('createMainEventBtn'),
       mainEventGoLiveBtn: document.getElementById('mainEventGoLiveBtn'),
       enableMainEventBtn: document.getElementById('enableMainEventBtn'),
@@ -443,6 +487,14 @@
     }
     function setQuickState(msg) {
       if (els.quickMainEventState) els.quickMainEventState.textContent = msg;
+    }
+    function setGuideProgress(stepNum) {
+      const nodes = [els.guideStep1, els.guideStep2, els.guideStep3, els.guideStep4];
+      for (let i = 0; i < nodes.length; i += 1) {
+        const node = nodes[i];
+        if (!node) continue;
+        node.classList.toggle('done', i < stepNum);
+      }
     }
     function toLocalInputValue(iso) {
       const d = new Date(String(iso || '').trim());
@@ -751,6 +803,7 @@
         render();
         await refreshAdminRooms();
         await loadMainEventSettings();
+        setGuideProgress(1);
         setQuickState(`Ready: room ${code} configured. Use Go Live when stream is ready.`);
         setStatus(`Main Event quick setup complete for ${code}.`);
       } catch (e) {
@@ -785,6 +838,7 @@
         render();
         await refreshAdminRooms();
         await loadMainEventSettings();
+        setGuideProgress(0);
         setQuickState('Stopped. Main Event is fully disabled.');
         setStatus(`Main Event stopped and room ${code} deleted.`);
       } catch (e) {
@@ -831,6 +885,7 @@
       try {
         await sendMainControl('play', {});
         await sendMainControl('chat', { message: 'Main Event is now LIVE. Enjoy the show.' });
+        setGuideProgress(3);
         setStatus('Main Event is LIVE.');
       } catch (e) {
         setStatus('Go Live failed: ' + (e.message || e));
@@ -1004,6 +1059,7 @@
 
     els.openMainEventBtn.addEventListener('click', () => {
       const code = cleanCode(els.mainEventRoomCode.value || els.mainEventRooms.value);
+      setGuideProgress(4);
       window.open(mainEventJoinUrl(code), '_blank', 'noopener');
     });
 
@@ -1011,6 +1067,7 @@
       try {
         const code = cleanCode(els.mainEventRoomCode.value || els.mainEventRooms.value);
         await navigator.clipboard.writeText(mainEventJoinUrl(code));
+        setGuideProgress(4);
         setStatus('Main Event public link copied.');
       } catch (_) {
         setStatus('Copy failed. Browser blocked clipboard.');
@@ -1022,6 +1079,7 @@
       const url = mainEventStudioUrl(code);
       els.studioStreamUrl.value = url;
       els.studioStreamFrame.src = url;
+      setGuideProgress(2);
       setStatus(`Stream console loaded for ${cleanCode(code) || 'admin mode'}.`);
     });
 
