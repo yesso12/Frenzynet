@@ -311,6 +311,30 @@
       background: color-mix(in srgb, var(--panel-2) 90%, #ffffff 10%);
       padding: 9px;
     }
+    .collapse-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .collapse-head .collapse-title {
+      margin: 0;
+      font-size: 13px;
+      color: #516072;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+    .collapse-btn {
+      width: auto;
+      min-width: 34px;
+      padding: 5px 10px;
+      border-radius: 8px;
+      font-size: 13px;
+      line-height: 1;
+    }
+    .collapse-body { display: grid; gap: 8px; }
+    .is-collapsed .collapse-body { display: none !important; }
     .row { display: flex; gap: 8px; flex-wrap: wrap; }
     .row > * { flex: 1; min-width: 120px; }
     label {
@@ -3444,6 +3468,57 @@
       applySceneOrder(saved);
     }
 
+    function initCollapsibleBlocks() {
+      const roots = Array.from(document.querySelectorAll('.side-block, .block'));
+      let idx = 0;
+      for (const root of roots) {
+        if (!root || root.dataset.collapseReady === '1') continue;
+        const titleEl = root.querySelector(':scope > h3, :scope > h2');
+        const titleText = String((titleEl && titleEl.textContent) || 'Section').trim() || 'Section';
+        const children = Array.from(root.children);
+        const body = document.createElement('div');
+        body.className = 'collapse-body';
+        for (const child of children) {
+          if (titleEl && child === titleEl) continue;
+          body.appendChild(child);
+        }
+        const head = document.createElement('div');
+        head.className = 'collapse-head';
+        const label = document.createElement('h3');
+        label.className = 'collapse-title';
+        label.textContent = titleText;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'secondary collapse-btn';
+        btn.setAttribute('aria-expanded', 'true');
+        btn.textContent = '−';
+        const key = `telewatch_block_collapsed_${root.id || root.getAttribute('data-scene-card') || ('idx_' + idx)}`;
+        idx += 1;
+        const setCollapsed = (next) => {
+          const collapsed = !!next;
+          root.classList.toggle('is-collapsed', collapsed);
+          btn.textContent = collapsed ? '+' : '−';
+          btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+          try { localStorage.setItem(key, collapsed ? '1' : '0'); } catch (_) {}
+        };
+        btn.addEventListener('click', () => {
+          setCollapsed(!root.classList.contains('is-collapsed'));
+        });
+        head.appendChild(label);
+        head.appendChild(btn);
+        if (titleEl) {
+          try { titleEl.remove(); } catch (_) {}
+        }
+        root.prepend(head);
+        root.appendChild(body);
+        root.dataset.collapseReady = '1';
+        const saved = (() => {
+          try { return localStorage.getItem(key) || '0'; } catch (_) { return '0'; }
+        })();
+        if (saved === '1') setCollapsed(true);
+      }
+    }
+
     function applyLayoutMode(mode, persist) {
       const clean = String(mode || 'standard').toLowerCase() === 'focus' ? 'focus' : 'standard';
       state.layoutMode = clean;
@@ -5252,6 +5327,7 @@
     (function init() {
       initThemeSelector();
       initSceneDrag();
+      initCollapsibleBlocks();
       switchTab('session');
       setWizardStep(1);
       updateStatusChips(0);
