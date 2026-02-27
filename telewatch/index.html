@@ -600,6 +600,25 @@
     .admin-tools.hidden { display: none; }
     .admin-login.hidden { display: none; }
     .hidden { display: none !important; }
+    .admin-accordion {
+      display: grid;
+      gap: 8px;
+    }
+    .admin-accordion details.dropdown {
+      background: var(--panel-2);
+      border: 1px solid var(--line-soft);
+      border-radius: 10px;
+    }
+    .admin-accordion details[open] {
+      border-color: var(--tab-active-line);
+      box-shadow: 0 0 0 2px rgba(255, 95, 31, 0.08);
+    }
+    .admin-accordion details > summary {
+      font-size: 12px;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      color: #4f6074;
+    }
     .host-grid {
       display: grid;
       gap: 8px;
@@ -1059,70 +1078,87 @@
             <button id="adminLoginBtn" class="secondary">Sign In Admin</button>
           </div>
 
-          <div class="block stack admin-tools hidden" id="adminToolsPanel">
+          <div class="block stack admin-tools hidden" id="adminToolsPanel" data-start-collapsed="1">
             <h3>Admin Tools</h3>
             <div class="muted" id="adminWhoami">Admin: not signed in</div>
-            <div>
-              <label for="adminKeyInput">Admin Code</label>
-              <input id="adminKeyInput" type="password" placeholder="Required for protected options" />
-            </div>
-            <div>
-              <label for="newAdminUserInput">Add Admin Username</label>
-              <input id="newAdminUserInput" type="email" placeholder="newadmin@email.com" />
-            </div>
-            <div>
-              <label for="newAdminPassInput">Add Admin Password</label>
-              <input id="newAdminPassInput" type="password" placeholder="At least 8 characters" />
-            </div>
-            <div class="row">
-              <button id="addAdminBtn" class="secondary">Add / Update Admin</button>
-              <button id="refreshAdminsBtn" class="secondary">Refresh Admins</button>
-            </div>
-            <div>
-              <label for="adminListSelect">Admin Accounts</label>
-              <select id="adminListSelect"></select>
-            </div>
-            <div class="row">
-              <button id="removeAdminBtn" class="danger-btn">Remove Selected Admin</button>
-              <button id="adminLogoutBtn" class="secondary">Sign Out</button>
-            </div>
-            <div class="block stack">
-              <h3>Block Lists</h3>
-              <div class="row">
-                <input id="blockUserInput" type="email" placeholder="user@email.com" />
-                <input id="blockIpInput" placeholder="IP address" />
-              </div>
-              <input id="blockReasonInput" placeholder="Reason (optional)" />
-              <div class="row">
-                <button id="blockUserBtn" class="danger-btn">Block User</button>
-                <button id="unblockUserBtn" class="secondary">Unblock User</button>
-              </div>
-              <div class="row">
-                <button id="blockIpBtn" class="danger-btn">Block IP</button>
-                <button id="unblockIpBtn" class="secondary">Unblock IP</button>
-              </div>
-              <div class="row">
-                <select id="blockedUsersSelect"></select>
-                <select id="blockedIpsSelect"></select>
-              </div>
-              <button id="refreshBlocksBtn" class="secondary">Refresh Blocks</button>
-            </div>
-            <div class="block stack">
-              <h3>Donation Tier</h3>
-              <div class="muted">Grant premium options by donation tier (manual until payment setup).</div>
-              <div class="row">
-                <input id="tierUserInput" type="email" placeholder="user@email.com" />
-                <select id="tierLevelSelect">
-                  <option value="free">Free</option>
-                  <option value="supporter">Supporter</option>
-                  <option value="pro">Pro</option>
-                </select>
-              </div>
-              <div class="row">
-                <button id="setTierBtn" class="secondary">Set Tier</button>
-                <button id="getTierBtn" class="secondary">Get Tier</button>
-              </div>
-              <div id="tierResult" class="muted">Tier status: n/a</div>
+            <div class="admin-accordion">
+              <details class="dropdown" open>
+                <summary>Admin Session</summary>
+                <div class="stack" style="margin-top:8px">
+                  <div>
+                    <label for="adminKeyInput">Admin Code</label>
+                    <input id="adminKeyInput" type="password" placeholder="Required for protected options" />
+                  </div>
+                  <div class="row">
+                    <button id="refreshAdminsBtn" class="secondary">Refresh Admins</button>
+                    <button id="adminLogoutBtn" class="secondary">Sign Out</button>
+                  </div>
+                </div>
+              </details>
+
+              <details class="dropdown">
+                <summary>Admin Accounts</summary>
+                <div class="stack" style="margin-top:8px">
+                  <div>
+                    <label for="newAdminUserInput">Add Admin Username</label>
+                    <input id="newAdminUserInput" type="email" placeholder="newadmin@email.com" />
+                  </div>
+                  <div>
+                    <label for="newAdminPassInput">Add Admin Password</label>
+                    <input id="newAdminPassInput" type="password" placeholder="At least 8 characters" />
+                  </div>
+                  <button id="addAdminBtn" class="secondary">Add / Update Admin</button>
+                  <div>
+                    <label for="adminListSelect">Admin Accounts</label>
+                    <select id="adminListSelect"></select>
+                  </div>
+                  <button id="removeAdminBtn" class="danger-btn">Remove Selected Admin</button>
+                </div>
+              </details>
+
+              <details class="dropdown">
+                <summary>Security Block Lists</summary>
+                <div class="stack" style="margin-top:8px">
+                  <div class="row">
+                    <input id="blockUserInput" type="email" placeholder="user@email.com" />
+                    <input id="blockIpInput" placeholder="IP address" />
+                  </div>
+                  <input id="blockReasonInput" placeholder="Reason (optional)" />
+                  <div class="row">
+                    <button id="blockUserBtn" class="danger-btn">Block User</button>
+                    <button id="unblockUserBtn" class="secondary">Unblock User</button>
+                  </div>
+                  <div class="row">
+                    <button id="blockIpBtn" class="danger-btn">Block IP</button>
+                    <button id="unblockIpBtn" class="secondary">Unblock IP</button>
+                  </div>
+                  <div class="row">
+                    <select id="blockedUsersSelect"></select>
+                    <select id="blockedIpsSelect"></select>
+                  </div>
+                  <button id="refreshBlocksBtn" class="secondary">Refresh Blocks</button>
+                </div>
+              </details>
+
+              <details class="dropdown">
+                <summary>Donation Tier Controls</summary>
+                <div class="stack" style="margin-top:8px">
+                  <div class="muted">Grant premium options by donation tier (manual until payment setup).</div>
+                  <div class="row">
+                    <input id="tierUserInput" type="email" placeholder="user@email.com" />
+                    <select id="tierLevelSelect">
+                      <option value="free">Free</option>
+                      <option value="supporter">Supporter</option>
+                      <option value="pro">Pro</option>
+                    </select>
+                  </div>
+                  <div class="row">
+                    <button id="setTierBtn" class="secondary">Set Tier</button>
+                    <button id="getTierBtn" class="secondary">Get Tier</button>
+                  </div>
+                  <div id="tierResult" class="muted">Tier status: n/a</div>
+                </div>
+              </details>
             </div>
           </div>
         </div>
@@ -1192,8 +1228,8 @@
                   <div id="events" class="events"></div>
                 </div>
               </div>
-              <div class="block admin-delete">
-                <h3>Admin Console</h3>
+            <div class="block admin-delete" data-start-collapsed="1">
+              <h3>Admin Console</h3>
                 <div class="muted">Open the dedicated admin dashboard for room deletes and account management.</div>
                 <div id="adminRoomsBlock" class="hidden" style="margin-top:8px" data-advanced-ui="true">
                   <label for="adminRoomsSelect">Active Rooms (Auto-detected)</label>
@@ -3593,7 +3629,11 @@
         const saved = (() => {
           try { return localStorage.getItem(key) || '0'; } catch (_) { return '0'; }
         })();
-        if (saved === '1') setCollapsed(true);
+        if (saved === '1') {
+          setCollapsed(true);
+        } else if (saved === '0' && root.getAttribute('data-start-collapsed') === '1') {
+          setCollapsed(true);
+        }
       }
     }
 
