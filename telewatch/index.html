@@ -69,6 +69,26 @@
       font-weight: 700;
       font-size: 12px;
     }
+    .wizard {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+    .wizard-step {
+      font-size: 11px;
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 999px;
+      padding: 4px 9px;
+      color: #607184;
+      font-weight: 700;
+    }
+    .wizard-step.active {
+      border-color: #ff925f;
+      background: #fff3ec;
+      color: #a43f12;
+    }
     .workspace {
       margin-top: 14px;
       display: grid;
@@ -250,6 +270,27 @@
       font-size: 12px;
       color: #33475f;
     }
+    .status-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .status-chip {
+      font-size: 11px;
+      border: 1px solid #d4dee9;
+      background: #fff;
+      border-radius: 999px;
+      padding: 4px 10px;
+      color: #44586f;
+      font-weight: 700;
+    }
+    .status-chip.ok {
+      border-color: #8fd7b8;
+      background: #edf9f3;
+      color: #0e6b42;
+    }
+    .adv-wrap.hidden { display: none; }
     @media (max-width: 1080px) {
       .workspace { grid-template-columns: 1fr; }
       .duo { grid-template-columns: 1fr; }
@@ -273,6 +314,11 @@
       <div class="hero">
         <h1>Frenzy Telewatch</h1>
         <p>Host or join synced watch rooms in one clean dashboard.</p>
+        <div class="wizard">
+          <span id="stepSession" class="wizard-step active">1. Session</span>
+          <span id="stepRoom" class="wizard-step">2. Room</span>
+          <span id="stepShare" class="wizard-step">3. Share</span>
+        </div>
       </div>
       <div class="row">
         <span id="roomBadge" class="badge">Room: none</span>
@@ -301,9 +347,21 @@
               <label for="roomInput">Room Code</label>
               <input id="roomInput" placeholder="e.g. DADDYR" />
             </div>
+            <div>
+              <label for="inviteInput">Paste Invite Link (optional)</label>
+              <input id="inviteInput" placeholder="https://frenzynets.com/telewatch/?room=CODE" />
+            </div>
             <div class="row">
               <button id="createBtn">Create Room</button>
               <button id="joinBtn" class="secondary">Join Room</button>
+            </div>
+            <div class="row">
+              <button id="quickHostBtn">Quick Host</button>
+              <button id="recentJoinBtn" class="secondary">Join Recent</button>
+            </div>
+            <div>
+              <label for="recentRoomsSelect">Recent Rooms</label>
+              <select id="recentRoomsSelect"></select>
             </div>
             <div class="muted" id="joinHint">Share your room code in Discord voice chat. Everyone runs their own stream account.</div>
           </div>
@@ -321,29 +379,48 @@
                 <label for="mediaInput">Media URL (Optional Direct File)</label>
                 <input id="mediaInput" placeholder="https://.../video.mp4" />
               </div>
-              <div>
-                <label for="shareSurfaceSelect">Share Source</label>
-                <select id="shareSurfaceSelect">
-                  <option value="auto">Auto (picker default)</option>
-                  <option value="browser">Browser Tab</option>
-                  <option value="window">Window/App</option>
-                  <option value="monitor">Monitor/Screen</option>
-                </select>
-              </div>
-              <div>
-                <label for="shareAudioSelect">Share Audio</label>
-                <select id="shareAudioSelect">
-                  <option value="auto">Auto</option>
-                  <option value="tab">Prefer Tab Audio</option>
-                  <option value="system">Prefer System Audio</option>
-                  <option value="off">No Audio</option>
-                </select>
+              <button id="advancedToggleBtn" class="secondary full">Show Advanced</button>
+              <div id="advancedWrap" class="adv-wrap hidden full host-grid">
+                <div>
+                  <label for="shareSurfaceSelect">Share Source</label>
+                  <select id="shareSurfaceSelect">
+                    <option value="auto">Auto (picker default)</option>
+                    <option value="browser">Browser Tab</option>
+                    <option value="window">Window/App</option>
+                    <option value="monitor">Monitor/Screen</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="shareAudioSelect">Share Audio</label>
+                  <select id="shareAudioSelect">
+                    <option value="auto">Auto</option>
+                    <option value="tab">Prefer Tab Audio</option>
+                    <option value="system">Prefer System Audio</option>
+                    <option value="off">No Audio</option>
+                  </select>
+                </div>
               </div>
               <button id="setMediaBtn" class="secondary">Set Media</button>
               <button id="copyLinkBtn" class="secondary">Copy Invite</button>
               <button id="startShareBtn" class="secondary">Share Monitor / Tab</button>
               <button id="stopShareBtn" class="secondary" disabled>Stop Share</button>
+              <button id="resetRoomBtn" class="secondary">Reset Room</button>
               <button id="deleteRoomBtn" class="secondary full">Delete Room</button>
+            </div>
+            <div class="block stack full">
+              <h3>Voice Chat</h3>
+              <div id="voiceStatus" class="muted">Voice: off</div>
+              <div id="shareSourceInfo" class="muted">Selected share source: none</div>
+              <div id="shareAudioInfo" class="muted">Selected share audio: none</div>
+              <div class="row">
+                <button id="joinVoiceBtn" class="secondary">Join Voice</button>
+                <button id="leaveVoiceBtn" class="secondary" disabled>Leave Voice</button>
+              </div>
+              <div class="row">
+                <select id="muteTargetSelect"></select>
+                <button id="muteTargetBtn" class="secondary">Mute</button>
+                <button id="unmuteTargetBtn" class="secondary">Unmute</button>
+              </div>
             </div>
           </div>
         </div>
@@ -405,7 +482,12 @@
       <section class="card stack">
         <div class="row">
           <h2 id="nowTitle">Now Playing</h2>
-          <span class="count-pill" id="connState">Not connected</span>
+          <div class="status-strip">
+            <span class="count-pill" id="connState">Not connected</span>
+            <span class="status-chip" id="liveChip">Not Live</span>
+            <span class="status-chip" id="shareChip">Not Sharing</span>
+            <span class="status-chip" id="fullChip">Room Open</span>
+          </div>
         </div>
         <div class="stage">
           <video id="player" controls playsinline></video>
@@ -427,11 +509,17 @@
             <div id="events" class="events"></div>
           </div>
           <div class="block admin-delete">
-            <h3>Admin Delete Room</h3>
-            <label for="adminDeleteCodeInput">Room Code (blank = current room)</label>
-            <input id="adminDeleteCodeInput" placeholder="Room code to delete" />
+            <h3>Admin Console</h3>
+            <div class="muted">Open the dedicated admin dashboard for room deletes and account management.</div>
+            <div id="adminRoomsBlock" class="hidden" style="margin-top:8px">
+              <label for="adminRoomsSelect">Admin Room Codes</label>
+              <select id="adminRoomsSelect"></select>
+              <div class="row" style="margin-top:8px">
+                <button id="copyAdminRoomBtn" class="secondary">Copy Code</button>
+              </div>
+            </div>
             <div style="height:8px"></div>
-            <button id="adminDeleteBtn" class="danger-btn">Delete Room (Admin)</button>
+            <a href="/telewatch/admin/" id="openAdminConsole">Open Admin Console</a>
           </div>
         </div>
       </section>
@@ -451,6 +539,10 @@
     const els = {
       displayName: document.getElementById('displayName'),
       roomInput: document.getElementById('roomInput'),
+      inviteInput: document.getElementById('inviteInput'),
+      quickHostBtn: document.getElementById('quickHostBtn'),
+      recentJoinBtn: document.getElementById('recentJoinBtn'),
+      recentRoomsSelect: document.getElementById('recentRoomsSelect'),
       adminKeyInput: document.getElementById('adminKeyInput'),
       adminUserInput: document.getElementById('adminUserInput'),
       adminPassInput: document.getElementById('adminPassInput'),
@@ -465,18 +557,27 @@
       removeAdminBtn: document.getElementById('removeAdminBtn'),
       adminLogoutBtn: document.getElementById('adminLogoutBtn'),
       adminListSelect: document.getElementById('adminListSelect'),
-      adminDeleteCodeInput: document.getElementById('adminDeleteCodeInput'),
       titleInput: document.getElementById('titleInput'),
       mediaInput: document.getElementById('mediaInput'),
+      advancedToggleBtn: document.getElementById('advancedToggleBtn'),
+      advancedWrap: document.getElementById('advancedWrap'),
+      joinVoiceBtn: document.getElementById('joinVoiceBtn'),
+      leaveVoiceBtn: document.getElementById('leaveVoiceBtn'),
+      voiceStatus: document.getElementById('voiceStatus'),
+      shareSourceInfo: document.getElementById('shareSourceInfo'),
+      shareAudioInfo: document.getElementById('shareAudioInfo'),
+      muteTargetSelect: document.getElementById('muteTargetSelect'),
+      muteTargetBtn: document.getElementById('muteTargetBtn'),
+      unmuteTargetBtn: document.getElementById('unmuteTargetBtn'),
       shareSurfaceSelect: document.getElementById('shareSurfaceSelect'),
       shareAudioSelect: document.getElementById('shareAudioSelect'),
       createBtn: document.getElementById('createBtn'),
       joinBtn: document.getElementById('joinBtn'),
-      adminDeleteBtn: document.getElementById('adminDeleteBtn'),
       setMediaBtn: document.getElementById('setMediaBtn'),
       copyLinkBtn: document.getElementById('copyLinkBtn'),
       startShareBtn: document.getElementById('startShareBtn'),
       stopShareBtn: document.getElementById('stopShareBtn'),
+      resetRoomBtn: document.getElementById('resetRoomBtn'),
       deleteRoomBtn: document.getElementById('deleteRoomBtn'),
       chatInput: document.getElementById('chatInput'),
       chatBtn: document.getElementById('chatBtn'),
@@ -487,11 +588,20 @@
       roleBadge: document.getElementById('roleBadge'),
       syncBadge: document.getElementById('syncBadge'),
       connState: document.getElementById('connState'),
+      liveChip: document.getElementById('liveChip'),
+      shareChip: document.getElementById('shareChip'),
+      fullChip: document.getElementById('fullChip'),
+      adminRoomsBlock: document.getElementById('adminRoomsBlock'),
+      adminRoomsSelect: document.getElementById('adminRoomsSelect'),
+      copyAdminRoomBtn: document.getElementById('copyAdminRoomBtn'),
       nowTitle: document.getElementById('nowTitle'),
       events: document.getElementById('events'),
       chatFeed: document.getElementById('chatFeed'),
       player: document.getElementById('player'),
       screenView: document.getElementById('screenView'),
+      stepSession: document.getElementById('stepSession'),
+      stepRoom: document.getElementById('stepRoom'),
+      stepShare: document.getElementById('stepShare'),
       tabButtons: Array.from(document.querySelectorAll('[data-tab-btn]')),
       tabPanes: Array.from(document.querySelectorAll('[data-tab-pane]'))
     };
@@ -508,16 +618,22 @@
       pollTimer: null,
       suppressOutbound: false,
       lastSeekSentAt: 0,
-      lastRoom: null
+      lastRoom: null,
+      hostMuted: {},
+      adminRooms: []
     };
     const SESSION_KEY = 'telewatch_session';
     const ADMIN_SESSION_KEY = 'telewatch_admin_session';
+    const RECENT_ROOMS_KEY = 'telewatch_recent_rooms';
 
     const rtc = {
       localScreenStream: null,
+      localVoiceStream: null,
       peers: new Map(),
       pendingCandidates: new Map(),
-      offeredTo: new Set()
+      offeredTo: new Set(),
+      audioEls: new Map(),
+      voiceOfferedTo: new Set()
     };
 
     function qp(name) {
@@ -532,6 +648,237 @@
 
     function setSyncLabel(text) {
       els.syncBadge.textContent = 'Sync: ' + text;
+    }
+
+    function setWizardStep(step) {
+      const idx = Math.max(1, Math.min(3, Number(step) || 1));
+      const steps = [els.stepSession, els.stepRoom, els.stepShare];
+      for (let i = 0; i < steps.length; i += 1) {
+        if (!steps[i]) continue;
+        steps[i].classList.toggle('active', i < idx);
+      }
+    }
+
+    function parseInviteRoom(raw) {
+      const txt = String(raw || '').trim();
+      if (!txt) return '';
+      const direct = normalizeRoomCode(txt);
+      if (direct && direct.length >= 3 && !txt.includes('http')) return direct;
+      try {
+        const u = new URL(txt);
+        return normalizeRoomCode(u.searchParams.get('room') || '');
+      } catch (_) {
+        return '';
+      }
+    }
+
+    function readRecentRooms() {
+      try {
+        const raw = localStorage.getItem(RECENT_ROOMS_KEY) || '[]';
+        const arr = JSON.parse(raw);
+        if (!Array.isArray(arr)) return [];
+        return arr.map((x) => normalizeRoomCode(x)).filter(Boolean).slice(0, 10);
+      } catch (_) {
+        return [];
+      }
+    }
+
+    function renderRecentRooms() {
+      if (!els.recentRoomsSelect) return;
+      const rooms = readRecentRooms();
+      els.recentRoomsSelect.innerHTML = '';
+      const first = document.createElement('option');
+      first.value = '';
+      first.textContent = rooms.length ? 'Select a recent room' : 'No recent rooms yet';
+      els.recentRoomsSelect.appendChild(first);
+      for (const code of rooms) {
+        const opt = document.createElement('option');
+        opt.value = code;
+        opt.textContent = code;
+        els.recentRoomsSelect.appendChild(opt);
+      }
+    }
+
+    function saveRecentRoom(code) {
+      const cleaned = normalizeRoomCode(code);
+      if (!cleaned) return;
+      const rooms = readRecentRooms().filter((x) => x !== cleaned);
+      rooms.unshift(cleaned);
+      try { localStorage.setItem(RECENT_ROOMS_KEY, JSON.stringify(rooms.slice(0, 10))); } catch (_) {}
+      renderRecentRooms();
+    }
+
+    function updateStatusChips(activeCount) {
+      if (els.liveChip) {
+        const live = Number(activeCount || 0) > 0;
+        els.liveChip.textContent = live ? 'Live' : 'Not Live';
+        els.liveChip.classList.toggle('ok', live);
+      }
+      if (els.shareChip) {
+        const sharing = !!rtc.localScreenStream;
+        els.shareChip.textContent = sharing ? 'Sharing On' : 'Not Sharing';
+        els.shareChip.classList.toggle('ok', sharing);
+      }
+      if (els.fullChip) {
+        const full = Number(activeCount || 0) >= 25;
+        els.fullChip.textContent = full ? 'Room Full' : 'Room Open';
+        els.fullChip.classList.toggle('ok', !full);
+      }
+    }
+
+    function voiceOn() {
+      return !!(rtc.localVoiceStream && rtc.localVoiceStream.getAudioTracks().length);
+    }
+
+    function updateVoiceUi() {
+      if (els.voiceStatus) {
+        const muted = !!state.hostMuted[state.participantId || ''];
+        els.voiceStatus.textContent = voiceOn()
+          ? (muted ? 'Voice: on (muted by host)' : 'Voice: on')
+          : 'Voice: off';
+      }
+      if (els.joinVoiceBtn) els.joinVoiceBtn.disabled = voiceOn();
+      if (els.leaveVoiceBtn) els.leaveVoiceBtn.disabled = !voiceOn();
+      const hostCanModerate = !!state.isHost;
+      if (els.muteTargetBtn) els.muteTargetBtn.disabled = !hostCanModerate;
+      if (els.unmuteTargetBtn) els.unmuteTargetBtn.disabled = !hostCanModerate;
+    }
+
+    function refreshMuteTargets() {
+      if (!els.muteTargetSelect) return;
+      els.muteTargetSelect.innerHTML = '';
+      const mine = String(state.participantId || '');
+      const targets = (state.participants || []).filter((p) => p && !p.isSelf).map((p) => ({
+        id: String(p.participantId || ''),
+        name: String(p.displayName || p.participantId || 'user')
+      })).filter((p) => p.id && p.id !== mine);
+      if (!targets.length) {
+        const o = document.createElement('option');
+        o.value = '';
+        o.textContent = 'No participants';
+        els.muteTargetSelect.appendChild(o);
+        return;
+      }
+      for (const t of targets) {
+        const o = document.createElement('option');
+        o.value = t.id;
+        o.textContent = t.name;
+        els.muteTargetSelect.appendChild(o);
+      }
+    }
+
+    function shouldInitiateVoiceOffer(targetParticipantId) {
+      const me = String(state.participantId || '');
+      const peer = String(targetParticipantId || '');
+      if (!me || !peer) return false;
+      return me < peer;
+    }
+
+    function addLocalVoiceTrackToPeer(pc) {
+      if (!rtc.localVoiceStream) return;
+      const track = rtc.localVoiceStream.getAudioTracks()[0];
+      if (!track) return;
+      const existing = pc.getSenders().find((s) => s.track && s.track.kind === 'audio');
+      if (existing) {
+        existing.replaceTrack(track).catch(() => {});
+      } else {
+        pc.addTrack(track, rtc.localVoiceStream);
+      }
+    }
+
+    async function createVoiceOfferFor(participantId) {
+      if (!voiceOn() || !participantId) return;
+      if (!shouldInitiateVoiceOffer(participantId)) return;
+      const pc = ensurePeer(participantId);
+      addLocalVoiceTrackToPeer(pc);
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      await sendControl('signal', {
+        toParticipantId: participantId,
+        signalType: 'offer',
+        sdp: String(offer.sdp || '')
+      });
+      rtc.voiceOfferedTo.add(participantId);
+    }
+
+    async function syncVoiceOffers() {
+      if (!voiceOn()) return;
+      const peers = (state.participants || [])
+        .filter((p) => p && !p.isSelf)
+        .map((p) => String(p.participantId || ''))
+        .filter(Boolean);
+      const keep = new Set(peers);
+      for (const pid of Array.from(rtc.voiceOfferedTo)) {
+        if (!keep.has(pid)) rtc.voiceOfferedTo.delete(pid);
+      }
+      for (const pid of peers) {
+        if (!rtc.voiceOfferedTo.has(pid)) {
+          try { await createVoiceOfferFor(pid); } catch (_) {}
+        }
+      }
+    }
+
+    async function startVoiceChat() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('Voice chat unavailable in this browser.');
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      rtc.localVoiceStream = stream;
+      const mutedByHost = !!state.hostMuted[state.participantId || ''];
+      for (const t of stream.getAudioTracks()) t.enabled = !mutedByHost;
+      updateVoiceUi();
+      await syncVoiceOffers();
+      addEventLine('Voice joined');
+    }
+
+    async function stopVoiceChat() {
+      if (rtc.localVoiceStream) {
+        for (const t of rtc.localVoiceStream.getTracks()) {
+          try { t.stop(); } catch (_) {}
+        }
+      }
+      rtc.localVoiceStream = null;
+      for (const row of rtc.peers.values()) {
+        const pc = row.pc;
+        for (const sender of pc.getSenders()) {
+          if (sender.track && sender.track.kind === 'audio') {
+            sender.replaceTrack(null).catch(() => {});
+          }
+        }
+      }
+      rtc.voiceOfferedTo.clear();
+      updateVoiceUi();
+      addEventLine('Voice left');
+    }
+
+    async function hostSetMuteTarget(muted) {
+      if (!state.isHost) return;
+      const toParticipantId = String((els.muteTargetSelect && els.muteTargetSelect.value) || '').trim().toLowerCase();
+      if (!toParticipantId) return;
+      await sendControl('mute_user', { toParticipantId, muted: !!muted });
+      setStatus(true, (muted ? 'Muted ' : 'Unmuted ') + toParticipantId);
+    }
+
+    async function refreshAdminRooms() {
+      if (!(state.adminToken && state.adminUsername)) return;
+      const data = await apiRequest('POST', '/api/watch/admin/rooms', { adminToken: state.adminToken });
+      const rooms = Array.isArray(data.rooms) ? data.rooms : [];
+      state.adminRooms = rooms;
+      if (!els.adminRoomsSelect || !els.adminRoomsBlock) return;
+      els.adminRoomsBlock.classList.remove('hidden');
+      els.adminRoomsSelect.innerHTML = '';
+      for (const r of rooms) {
+        const o = document.createElement('option');
+        o.value = r.roomCode;
+        o.textContent = `${r.roomCode} (${r.activeCount}) ${r.title ? '- ' + r.title : ''}`;
+        els.adminRoomsSelect.appendChild(o);
+      }
+      if (!rooms.length) {
+        const o = document.createElement('option');
+        o.value = '';
+        o.textContent = 'No rooms found';
+        els.adminRoomsSelect.appendChild(o);
+      }
     }
 
     function screenShareHelpMessage(err) {
@@ -670,6 +1017,12 @@
       rtc.peers.delete(participantId);
       rtc.pendingCandidates.delete(participantId);
       rtc.offeredTo.delete(participantId);
+      rtc.voiceOfferedTo.delete(participantId);
+      const audioEl = rtc.audioEls.get(participantId);
+      if (audioEl) {
+        try { audioEl.srcObject = null; audioEl.remove(); } catch (_) {}
+        rtc.audioEls.delete(participantId);
+      }
     }
 
     function ensurePeer(participantId) {
@@ -688,8 +1041,24 @@
         if (['failed', 'closed', 'disconnected'].includes(pc.connectionState)) closePeer(participantId);
       };
       pc.ontrack = (ev) => {
-        if (state.isHost) return;
-        if (ev.streams && ev.streams[0]) {
+        const track = ev.track;
+        if (track && track.kind === 'audio') {
+          let audioEl = rtc.audioEls.get(participantId);
+          if (!audioEl) {
+            audioEl = document.createElement('audio');
+            audioEl.autoplay = true;
+            audioEl.playsInline = true;
+            audioEl.style.display = 'none';
+            document.body.appendChild(audioEl);
+            rtc.audioEls.set(participantId, audioEl);
+          }
+          if (ev.streams && ev.streams[0]) {
+            audioEl.srcObject = ev.streams[0];
+            audioEl.play().catch(() => {});
+          }
+          return;
+        }
+        if (!state.isHost && ev.streams && ev.streams[0]) {
           els.screenView.srcObject = ev.streams[0];
           els.screenView.muted = false;
           els.screenView.play().catch(() => {});
@@ -776,12 +1145,22 @@
       }
       const stream = await navigator.mediaDevices.getDisplayMedia(constraints);
       rtc.localScreenStream = stream;
+      const vidTrack = stream.getVideoTracks()[0];
+      const audTrack = stream.getAudioTracks()[0];
+      if (els.shareSourceInfo) {
+        els.shareSourceInfo.textContent = 'Selected share source: ' + (vidTrack && vidTrack.label ? vidTrack.label : 'unknown');
+      }
+      if (els.shareAudioInfo) {
+        els.shareAudioInfo.textContent = 'Selected share audio: ' + (audTrack && audTrack.label ? audTrack.label : 'none');
+      }
       els.screenView.srcObject = stream;
       els.screenView.muted = true;
       try { await els.screenView.play(); } catch (_) {}
       els.startShareBtn.disabled = true;
       els.stopShareBtn.disabled = false;
+      setWizardStep(3);
       setSyncLabel('sharing monitor/tab');
+      updateStatusChips((state.participants || []).length);
       const track = stream.getVideoTracks()[0];
       if (track) {
         track.addEventListener('ended', () => {
@@ -811,6 +1190,9 @@
       }
       for (const pid of Array.from(rtc.peers.keys())) closePeer(pid);
       setSyncLabel('share stopped');
+      updateStatusChips((state.participants || []).length);
+      if (els.shareSourceInfo) els.shareSourceInfo.textContent = 'Selected share source: none';
+      if (els.shareAudioInfo) els.shareAudioInfo.textContent = 'Selected share audio: none';
     }
 
     async function processSignal(payload) {
@@ -822,9 +1204,9 @@
       const pc = ensurePeer(fromId);
       if (state.isHost) syncHostTrackSenders(fromId, pc);
       if (kind === 'offer') {
-        if (state.isHost) return;
         await pc.setRemoteDescription({ type: 'offer', sdp: String(payload.sdp || '') });
         await flushIceQueue(fromId, pc);
+        if (voiceOn()) addLocalVoiceTrackToPeer(pc);
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
         await sendControl('signal', {
@@ -848,7 +1230,8 @@
     }
 
     async function createRoom() {
-      const chosenCode = normalizeRoomCode(els.roomInput.value);
+      const inviteCode = parseInviteRoom(els.inviteInput && els.inviteInput.value);
+      const chosenCode = normalizeRoomCode(inviteCode || els.roomInput.value);
       const payload = {
         roomCode: chosenCode || undefined,
         displayName: els.displayName.value.trim() || 'Host',
@@ -862,13 +1245,15 @@
       state.isHost = true;
       state.sinceEventId = 0;
       els.roomInput.value = state.roomCode;
+      saveRecentRoom(state.roomCode);
       onSessionStart();
       addEventLine('Room created: ' + state.roomCode);
     }
 
     async function joinRoom() {
+      const inviteCode = parseInviteRoom(els.inviteInput && els.inviteInput.value);
       const payload = {
-        roomCode: normalizeRoomCode(els.roomInput.value),
+        roomCode: normalizeRoomCode(inviteCode || els.roomInput.value),
         displayName: els.displayName.value.trim() || ''
       };
       const data = await apiRequest('POST', '/api/watch/join', payload);
@@ -878,8 +1263,22 @@
       state.isHost = !!data.isHost;
       state.sinceEventId = 0;
       onSessionStart();
+      saveRecentRoom(state.roomCode);
       applyRoomState(data.room || null, true);
       addEventLine('Joined room: ' + state.roomCode);
+    }
+
+    async function quickHost() {
+      if (!els.titleInput.value.trim()) {
+        const titleGuess = document.title.replace(/\s*\|\s*Frenzy.*$/i, '').trim();
+        els.titleInput.value = titleGuess || 'Watch Party';
+      }
+      if (!state.roomCode || !state.participantToken) {
+        await createRoom();
+      }
+      await copyInviteLink();
+      switchTab('host');
+      setStatus(true, 'Quick Host ready. Invite copied.');
     }
 
     async function deleteRoomByCode(codeOverride) {
@@ -905,6 +1304,7 @@
       els.adminWhoami.textContent = signedIn ? ('Admin: ' + state.adminUsername) : 'Admin: not signed in';
       els.adminLoginPanel.classList.toggle('hidden', signedIn);
       els.adminToolsPanel.classList.toggle('hidden', !signedIn);
+      if (els.adminRoomsBlock) els.adminRoomsBlock.classList.toggle('hidden', !signedIn);
     }
 
     function saveAdminSession() {
@@ -938,6 +1338,7 @@
       state.adminUsername = String(data.username || username);
       saveAdminSession();
       renderAdminIdentity();
+      await refreshAdminRooms().catch(() => {});
       await refreshAdminList();
       setStatus(true, 'Admin signed in.');
     }
@@ -1002,6 +1403,7 @@
       } catch (_) {}
       clearAdminSession();
       setStatus(false, 'Admin signed out.');
+      if (els.adminRoomsSelect) els.adminRoomsSelect.innerHTML = '';
     }
 
     function updateBadges() {
@@ -1018,8 +1420,11 @@
       els.pauseBtn.disabled = !state.isHost;
       els.startShareBtn.disabled = !state.isHost;
       els.stopShareBtn.disabled = true;
+      els.resetRoomBtn.disabled = !state.isHost;
       els.deleteRoomBtn.disabled = !state.isHost;
       els.chatBtn.disabled = false;
+      setWizardStep(2);
+      switchTab(state.isHost ? 'host' : 'chat');
       if (state.pollTimer) clearInterval(state.pollTimer);
       state.pollTimer = setInterval(pollState, POLL_MS);
       saveSession();
@@ -1097,6 +1502,16 @@
       }
     }
 
+    async function resetRoom() {
+      if (!state.isHost) return;
+      await sendControl('reset_room', { title: els.titleInput.value.trim() });
+      els.mediaInput.value = '';
+      els.player.pause();
+      try { els.player.currentTime = 0; } catch (_) {}
+      setSyncLabel('room reset');
+      addEventLine('Room reset by host');
+    }
+
     async function pollState() {
       if (!state.roomCode || !state.participantToken) return;
       try {
@@ -1107,16 +1522,32 @@
         });
         state.participantId = data.selfParticipantId || state.participantId;
         state.participants = Array.isArray(data.participants) ? data.participants : [];
+        refreshMuteTargets();
+        updateVoiceUi();
         setStatus(true, 'Connected · active viewers: ' + (data.activeCount || 0));
+        updateStatusChips(data.activeCount || 0);
         applyRoomState(data.room || null, false);
         if (state.isHost && rtc.localScreenStream) {
           await broadcastOffersToViewers();
+        }
+        if (voiceOn()) {
+          await syncVoiceOffers();
         }
         for (const ev of (data.events || [])) {
           state.sinceEventId = Math.max(state.sinceEventId, Number(ev.id) || 0);
           const actor = ev.actor || 'user';
           if (ev.type === 'signal') {
             await processSignal(ev.payload || {});
+            continue;
+          }
+          if (ev.type === 'mute_user') {
+            const targetId = String(ev.payload?.toParticipantId || '').toLowerCase();
+            const muted = !!ev.payload?.muted;
+            if (targetId) state.hostMuted[targetId] = muted;
+            if (targetId && targetId === String(state.participantId || '').toLowerCase() && rtc.localVoiceStream) {
+              for (const t of rtc.localVoiceStream.getAudioTracks()) t.enabled = !muted;
+              updateVoiceUi();
+            }
             continue;
           }
           if (ev.type === 'chat') {
@@ -1128,6 +1559,7 @@
       } catch (err) {
         setStatus(false, 'Reconnect pending: ' + (err?.message || 'network_error'));
         setSyncLabel('retrying');
+        updateStatusChips(0);
       }
     }
 
@@ -1160,27 +1592,78 @@
         setStatus(false, msg);
       }
     });
-    els.adminDeleteBtn.addEventListener('click', async () => {
-      try {
-        await deleteRoomByCode();
-      } catch (err) {
-        const msg = String(err && err.message ? err.message : err);
-        if (msg.includes('admin_auth_required') || msg.includes('admin_auth_invalid')) {
-          setStatus(false, 'Admin sign-in required for delete.');
+    if (els.quickHostBtn) {
+      els.quickHostBtn.addEventListener('click', async () => {
+        try {
+          await quickHost();
+        } catch (err) {
+          setStatus(false, String(err && err.message ? err.message : err));
+        }
+      });
+    }
+    if (els.recentJoinBtn) {
+      els.recentJoinBtn.addEventListener('click', async () => {
+        const selected = normalizeRoomCode((els.recentRoomsSelect && els.recentRoomsSelect.value) || '');
+        if (!selected) {
+          setStatus(false, 'Select a recent room first.');
           return;
         }
-        if (msg.includes('admin_code_required')) {
-          setStatus(false, 'Admin code required.');
-          return;
+        els.roomInput.value = selected;
+        try {
+          await joinRoom();
+        } catch (err) {
+          setStatus(false, String(err && err.message ? err.message : err));
         }
-        if (msg.includes('admin_code_invalid')) {
-          setStatus(false, 'Admin code is invalid.');
-          return;
+      });
+    }
+    if (els.advancedToggleBtn) {
+      els.advancedToggleBtn.addEventListener('click', () => {
+        const hidden = els.advancedWrap.classList.toggle('hidden');
+        els.advancedToggleBtn.textContent = hidden ? 'Show Advanced' : 'Hide Advanced';
+      });
+    }
+    if (els.resetRoomBtn) {
+      els.resetRoomBtn.addEventListener('click', async () => {
+        try {
+          await resetRoom();
+        } catch (err) {
+          setStatus(false, String(err && err.message ? err.message : err));
         }
-        setStatus(false, msg);
-      }
-    });
-    els.adminLoginBtn.addEventListener('click', async () => {
+      });
+    }
+    if (els.joinVoiceBtn) {
+      els.joinVoiceBtn.addEventListener('click', async () => {
+        try { await startVoiceChat(); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
+      });
+    }
+    if (els.leaveVoiceBtn) {
+      els.leaveVoiceBtn.addEventListener('click', async () => {
+        try { await stopVoiceChat(); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
+      });
+    }
+    if (els.muteTargetBtn) {
+      els.muteTargetBtn.addEventListener('click', async () => {
+        try { await hostSetMuteTarget(true); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
+      });
+    }
+    if (els.unmuteTargetBtn) {
+      els.unmuteTargetBtn.addEventListener('click', async () => {
+        try { await hostSetMuteTarget(false); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
+      });
+    }
+    if (els.copyAdminRoomBtn) {
+      els.copyAdminRoomBtn.addEventListener('click', async () => {
+        const code = String((els.adminRoomsSelect && els.adminRoomsSelect.value) || '').trim();
+        if (!code) return;
+        try {
+          await navigator.clipboard.writeText(code);
+          setStatus(true, 'Copied room code: ' + code);
+        } catch (_) {
+          setStatus(true, 'Room code: ' + code);
+        }
+      });
+    }
+    if (els.adminLoginBtn) els.adminLoginBtn.addEventListener('click', async () => {
       try {
         await adminLogin();
       } catch (err) {
@@ -1192,7 +1675,7 @@
         setStatus(false, msg);
       }
     });
-    els.refreshAdminsBtn.addEventListener('click', async () => {
+    if (els.refreshAdminsBtn) els.refreshAdminsBtn.addEventListener('click', async () => {
       try {
         await refreshAdminList();
         setStatus(true, 'Admin list refreshed.');
@@ -1206,7 +1689,7 @@
         setStatus(false, msg);
       }
     });
-    els.addAdminBtn.addEventListener('click', async () => {
+    if (els.addAdminBtn) els.addAdminBtn.addEventListener('click', async () => {
       try {
         await addAdminUser();
       } catch (err) {
@@ -1222,7 +1705,7 @@
         setStatus(false, msg);
       }
     });
-    els.removeAdminBtn.addEventListener('click', async () => {
+    if (els.removeAdminBtn) els.removeAdminBtn.addEventListener('click', async () => {
       try {
         await removeSelectedAdmin();
       } catch (err) {
@@ -1247,7 +1730,7 @@
         setStatus(false, msg);
       }
     });
-    els.adminLogoutBtn.addEventListener('click', async () => {
+    if (els.adminLogoutBtn) els.adminLogoutBtn.addEventListener('click', async () => {
       await adminLogout();
     });
     for (const btn of els.tabButtons) {
@@ -1293,6 +1776,7 @@
         els.pauseBtn.disabled = true;
         els.startShareBtn.disabled = true;
         els.stopShareBtn.disabled = true;
+        els.resetRoomBtn.disabled = true;
         els.deleteRoomBtn.disabled = true;
         els.chatBtn.disabled = true;
         updateBadges();
@@ -1338,11 +1822,20 @@
 
     (function init() {
       switchTab('session');
+      setWizardStep(1);
+      updateStatusChips(0);
       const roomFromQuery = normalizeRoomCode(qp('room') || '');
       if (roomFromQuery) els.roomInput.value = roomFromQuery;
       els.roomInput.addEventListener('input', () => {
         els.roomInput.value = normalizeRoomCode(els.roomInput.value);
       });
+      if (els.inviteInput) {
+        els.inviteInput.addEventListener('change', () => {
+          const code = parseInviteRoom(els.inviteInput.value);
+          if (code) els.roomInput.value = code;
+        });
+      }
+      renderRecentRooms();
       try {
         const savedAdminKey = localStorage.getItem('telewatch_admin_key') || '';
         if (savedAdminKey) els.adminKeyInput.value = savedAdminKey;
@@ -1352,6 +1845,12 @@
       });
       if (!els.adminUserInput.value.trim()) {
         els.adminUserInput.value = 'Trimbledustn@gmail.com';
+      }
+      if (els.shareSurfaceSelect && !els.shareSurfaceSelect.value) {
+        els.shareSurfaceSelect.value = 'browser';
+      }
+      if (els.shareAudioSelect && !els.shareAudioSelect.value) {
+        els.shareAudioSelect.value = 'tab';
       }
       try {
         const rawAdmin = localStorage.getItem(ADMIN_SESSION_KEY) || '';
@@ -1363,10 +1862,12 @@
         }
       } catch (_) {}
       renderAdminIdentity();
+      updateVoiceUi();
       if (state.adminToken) {
         refreshAdminList().catch(() => {
           clearAdminSession();
         });
+        refreshAdminRooms().catch(() => {});
       }
       try {
         const savedName = localStorage.getItem('telewatch_name') || '';

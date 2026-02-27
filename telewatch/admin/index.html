@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Telewatch Admin | FrenzyNets</title>
+  <style>
+    :root {
+      --bg: #f4f6fa;
+      --panel: #fff;
+      --line: #dbe2ea;
+      --text: #18212c;
+      --muted: #6a7787;
+      --accent: #ff5f1f;
+      --accent2: #e04d11;
+      --danger: #c23138;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font-family: Inter, "Segoe UI", Arial, sans-serif; }
+    .wrap { width: min(900px, calc(100% - 20px)); margin: 18px auto; display: grid; gap: 12px; }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .row > * { flex: 1; min-width: 150px; }
+    label { display: block; margin: 0 0 4px; font-size: 11px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+    input, select, button { width: 100%; border-radius: 9px; border: 1px solid #d1dae5; padding: 10px; font: inherit; }
+    button { background: linear-gradient(180deg, var(--accent), var(--accent2)); color: #fff; border: 0; font-weight: 800; cursor: pointer; }
+    button.secondary { background: #fff; border: 1px solid #d1dae5; color: #2f3f52; }
+    button.danger { background: linear-gradient(180deg, #e5484d, var(--danger)); }
+    .muted { color: var(--muted); font-size: 13px; }
+    .status { font-weight: 700; }
+    .hidden { display: none; }
+    a { color: #2263d1; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1 style="margin:0 0 8px">Telewatch Admin Console</h1>
+      <div class="muted">Dedicated admin route. Sign in first, then manage admins and rooms.</div>
+      <div id="status" class="status" style="margin-top:8px">Not signed in</div>
+      <div class="muted"><a href="/telewatch/">Back to Telewatch</a></div>
+    </div>
+
+    <div class="card" id="loginCard">
+      <h2 style="margin:0 0 8px">Sign In</h2>
+      <div class="row">
+        <div>
+          <label for="username">Username</label>
+          <input id="username" type="email" placeholder="Trimbledustn@gmail.com" />
+        </div>
+        <div>
+          <label for="password">Password</label>
+          <input id="password" type="password" placeholder="Password" />
+        </div>
+      </div>
+      <div style="margin-top:8px"><button id="loginBtn">Sign In</button></div>
+    </div>
+
+    <div class="card hidden" id="toolsCard">
+      <h2 style="margin:0 0 8px">Admin Tools</h2>
+      <div class="row">
+        <div>
+          <label for="adminCode">Admin Code</label>
+          <input id="adminCode" type="password" placeholder="1978Luke$$" />
+        </div>
+        <div style="align-self:end"><button id="logoutBtn" class="secondary">Sign Out</button></div>
+      </div>
+
+      <h3 style="margin:12px 0 8px">Room Management</h3>
+      <div class="row">
+        <div>
+          <label for="roomCodeDelete">Room Code</label>
+          <input id="roomCodeDelete" placeholder="DADDYR" />
+        </div>
+        <div style="align-self:end"><button id="deleteRoomBtn" class="danger">Delete Room</button></div>
+      </div>
+
+      <h3 style="margin:12px 0 8px">Admin Accounts</h3>
+      <div class="row">
+        <div>
+          <label for="newAdminUser">Add/Update Username</label>
+          <input id="newAdminUser" type="email" placeholder="newadmin@email.com" />
+        </div>
+        <div>
+          <label for="newAdminPass">Add/Update Password</label>
+          <input id="newAdminPass" type="password" placeholder="At least 8 characters" />
+        </div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="addAdminBtn" class="secondary">Add / Update Admin</button>
+        <button id="refreshBtn" class="secondary">Refresh List</button>
+      </div>
+      <div style="margin-top:8px">
+        <label for="adminList">Admins</label>
+        <select id="adminList"></select>
+      </div>
+      <div style="margin-top:8px"><button id="removeAdminBtn" class="danger">Remove Selected Admin</button></div>
+    </div>
+  </div>
+
+  <script>
+    const API = 'https://api.frenzynets.com/api/telewatch';
+    const KEY = 'telewatch_admin_session';
+    const els = {
+      status: document.getElementById('status'),
+      loginCard: document.getElementById('loginCard'),
+      toolsCard: document.getElementById('toolsCard'),
+      username: document.getElementById('username'),
+      password: document.getElementById('password'),
+      adminCode: document.getElementById('adminCode'),
+      roomCodeDelete: document.getElementById('roomCodeDelete'),
+      newAdminUser: document.getElementById('newAdminUser'),
+      newAdminPass: document.getElementById('newAdminPass'),
+      adminList: document.getElementById('adminList'),
+      loginBtn: document.getElementById('loginBtn'),
+      logoutBtn: document.getElementById('logoutBtn'),
+      deleteRoomBtn: document.getElementById('deleteRoomBtn'),
+      addAdminBtn: document.getElementById('addAdminBtn'),
+      refreshBtn: document.getElementById('refreshBtn'),
+      removeAdminBtn: document.getElementById('removeAdminBtn'),
+    };
+    const state = { token: '', username: '' };
+
+    async function api(path, body) {
+      const res = await fetch(API + path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body || {}),
+        cache: 'no-store'
+      });
+      const txt = await res.text();
+      let data = {};
+      try { data = txt ? JSON.parse(txt) : {}; } catch (_) {}
+      if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
+      return data;
+    }
+
+    function setStatus(msg) { els.status.textContent = msg; }
+    function render() {
+      const signed = !!(state.token && state.username);
+      els.loginCard.classList.toggle('hidden', signed);
+      els.toolsCard.classList.toggle('hidden', !signed);
+      setStatus(signed ? ('Signed in as ' + state.username) : 'Not signed in');
+    }
+    function save() {
+      try {
+        if (!state.token) return localStorage.removeItem(KEY);
+        localStorage.setItem(KEY, JSON.stringify({ adminToken: state.token, adminUsername: state.username }));
+      } catch (_) {}
+    }
+    function load() {
+      try {
+        const raw = localStorage.getItem(KEY) || '';
+        if (!raw) return;
+        const s = JSON.parse(raw);
+        state.token = String(s.adminToken || '').trim();
+        state.username = String(s.adminUsername || '').trim().toLowerCase();
+      } catch (_) {}
+    }
+
+    async function refreshAdmins() {
+      const data = await api('/api/watch/admin/list', { adminToken: state.token });
+      const rows = Array.isArray(data.admins) ? data.admins : [];
+      els.adminList.innerHTML = '';
+      for (const r of rows) {
+        const o = document.createElement('option');
+        o.value = r.username;
+        o.textContent = r.isOwner ? `${r.username} (owner)` : r.username;
+        els.adminList.appendChild(o);
+      }
+      if (!rows.length) {
+        const o = document.createElement('option');
+        o.value = '';
+        o.textContent = 'No admins found';
+        els.adminList.appendChild(o);
+      }
+    }
+
+    els.loginBtn.addEventListener('click', async () => {
+      try {
+        const data = await api('/api/watch/admin/login', {
+          username: String(els.username.value || '').trim().toLowerCase(),
+          password: String(els.password.value || '').trim()
+        });
+        state.token = String(data.adminToken || '');
+        state.username = String(data.username || '').toLowerCase();
+        save();
+        render();
+        await refreshAdmins();
+      } catch (e) {
+        setStatus('Login failed: ' + (e.message || e));
+      }
+    });
+
+    els.logoutBtn.addEventListener('click', async () => {
+      try { await api('/api/watch/admin/logout', { adminToken: state.token }); } catch (_) {}
+      state.token = '';
+      state.username = '';
+      save();
+      render();
+    });
+
+    els.deleteRoomBtn.addEventListener('click', async () => {
+      try {
+        await api('/api/watch/delete', {
+          roomCode: String(els.roomCodeDelete.value || '').trim().toUpperCase(),
+          adminToken: state.token,
+          adminCode: String(els.adminCode.value || '').trim()
+        });
+        setStatus('Room deleted.');
+      } catch (e) {
+        setStatus('Delete failed: ' + (e.message || e));
+      }
+    });
+
+    els.addAdminBtn.addEventListener('click', async () => {
+      try {
+        await api('/api/watch/admin/add', {
+          adminToken: state.token,
+          adminCode: String(els.adminCode.value || '').trim(),
+          newUsername: String(els.newAdminUser.value || '').trim().toLowerCase(),
+          newPassword: String(els.newAdminPass.value || '').trim()
+        });
+        els.newAdminPass.value = '';
+        await refreshAdmins();
+        setStatus('Admin saved.');
+      } catch (e) {
+        setStatus('Add/update failed: ' + (e.message || e));
+      }
+    });
+
+    els.refreshBtn.addEventListener('click', async () => {
+      try { await refreshAdmins(); setStatus('Admin list refreshed.'); } catch (e) { setStatus('Refresh failed: ' + (e.message || e)); }
+    });
+
+    els.removeAdminBtn.addEventListener('click', async () => {
+      try {
+        const username = String(els.adminList.value || '').trim().toLowerCase();
+        await api('/api/watch/admin/remove', {
+          adminToken: state.token,
+          adminCode: String(els.adminCode.value || '').trim(),
+          username
+        });
+        await refreshAdmins();
+        setStatus('Admin removed: ' + username);
+      } catch (e) {
+        setStatus('Remove failed: ' + (e.message || e));
+      }
+    });
+
+    load();
+    els.username.value = state.username || 'Trimbledustn@gmail.com';
+    render();
+    if (state.token) refreshAdmins().catch(() => {});
+  </script>
+</body>
+</html>
