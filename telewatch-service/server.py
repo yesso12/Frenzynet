@@ -5,6 +5,7 @@ import secrets
 import sqlite3
 import hashlib
 import hmac
+import base64
 import datetime as dt
 import time
 from http import HTTPStatus
@@ -28,6 +29,10 @@ TELEWATCH_OWNER_PASSWORD = os.getenv('TELEWATCH_OWNER_PASSWORD', '1978Luke$$').s
 TELEWATCH_AUTH_SALT = os.getenv('TELEWATCH_AUTH_SALT', 'frenzy-telewatch-salt-v1').strip()
 ADMIN_SESSION_TTL_HOURS = max(1, min(168, int(os.getenv('TELEWATCH_ADMIN_SESSION_TTL_HOURS', '24'))))
 USER_SESSION_TTL_HOURS = max(1, min(720, int(os.getenv('TELEWATCH_USER_SESSION_TTL_HOURS', '168'))))
+TELEWATCH_SFU_URL = os.getenv('TELEWATCH_SFU_URL', '').strip()
+TELEWATCH_SFU_API_KEY = os.getenv('TELEWATCH_SFU_API_KEY', '').strip()
+TELEWATCH_SFU_API_SECRET = os.getenv('TELEWATCH_SFU_API_SECRET', '').strip()
+TELEWATCH_SFU_DEFAULT_MODE = str(os.getenv('TELEWATCH_SFU_DEFAULT_MODE', 'webrtc')).strip().lower()
 
 
 def utc_iso() -> str:
@@ -36,6 +41,54 @@ def utc_iso() -> str:
 
 def stable_json(value) -> str:
     return json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=True)
+
+
+def clean_media_mode(raw: str, fallback: str = 'webrtc') -> str:
+    val = str(raw or '').strip().lower()
+    if val not in {'webrtc', 'sfu'}:
+        val = str(fallback or 'webrtc').strip().lower()
+    if val not in {'webrtc', 'sfu'}:
+        return 'webrtc'
+    if val == 'sfu' and not sfu_enabled():
+        return 'webrtc'
+    return val
+
+
+def sfu_enabled() -> bool:
+    return bool(TELEWATCH_SFU_URL and TELEWATCH_SFU_API_KEY and TELEWATCH_SFU_API_SECRET)
+
+
+def b64url_encode(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).decode('ascii').rstrip('=')
+
+
+def build_livekit_token(identity: str, room_code: str, display_name: str, is_host: bool) -> str:
+    now = int(time.time())
+    header = {'alg': 'HS256', 'typ': 'JWT'}
+    grants = {
+        'video': {
+            'roomJoin': True,
+            'room': room_code,
+            'canPublish': True,
+            'canSubscribe': True,
+            'canPublishData': True,
+        }
+    }
+    if is_host:
+        grants['video']['roomAdmin'] = True
+    payload = {
+        'iss': TELEWATCH_SFU_API_KEY,
+        'sub': identity,
+        'name': display_name or 'Guest',
+        'nbf': now - 10,
+        'exp': now + (60 * 60 * 8),
+    }
+    payload.update(grants)
+    encoded_header = b64url_encode(stable_json(header).encode('utf-8'))
+    encoded_payload = b64url_encode(stable_json(payload).encode('utf-8'))
+    signing_input = f'{encoded_header}.{encoded_payload}'.encode('ascii')
+    signature = hmac.new(TELEWATCH_SFU_API_SECRET.encode('utf-8'), signing_input, hashlib.sha256).digest()
+    return f'{encoded_header}.{encoded_payload}.{b64url_encode(signature)}'
 
 
 def clean_name(raw: str, fallback: str = 'Guest') -> str:
@@ -106,6 +159,7 @@ def ensure_schema() -> None:
               cohost_can_mute INTEGER NOT NULL DEFAULT 1,
               cohost_can_access INTEGER NOT NULL DEFAULT 1,
               cohost_can_pin INTEGER NOT NULL DEFAULT 1,
+              media_mode TEXT NOT NULL DEFAULT 'webrtc',
               access_mode TEXT NOT NULL DEFAULT 'public',
               is_private INTEGER NOT NULL DEFAULT 0,
               delete_on_host_leave INTEGER NOT NULL DEFAULT 1,
@@ -275,6 +329,10 @@ def ensure_schema() -> None:
             conn.execute("ALTER TABLE watch_rooms ADD COLUMN cohost_can_pin INTEGER NOT NULL DEFAULT 1")
         except sqlite3.OperationalError:
             pass
+        try:
+            conn.execute("ALTER TABLE watch_rooms ADD COLUMN media_mode TEXT NOT NULL DEFAULT 'webrtc'")
+        except sqlite3.OperationalError:
+            pass
         conn.execute(
             '''
             UPDATE watch_rooms
@@ -288,6 +346,14 @@ def ensure_schema() -> None:
             SET access_mode=CASE WHEN is_private=1 THEN 'invite' ELSE 'public' END
             WHERE access_mode IS NULL OR trim(access_mode)=''
             '''
+        )
+        conn.execute(
+            '''
+            UPDATE watch_rooms
+            SET media_mode=?
+            WHERE media_mode IS NULL OR trim(media_mode)='' OR lower(media_mode) NOT IN ('webrtc','sfu')
+            ''',
+            (clean_media_mode(TELEWATCH_SFU_DEFAULT_MODE, 'webrtc'),),
         )
         conn.execute(
             '''
@@ -374,6 +440,7 @@ def room_payload(room_row: sqlite3.Row) -> dict:
         'title': room_row['title'] or '',
         'mediaUrl': room_row['media_url'] or '',
         'themeKey': clean_theme_key(room_row['theme_key'] if 'theme_key' in room_row.keys() else 'clean'),
+        'mediaMode': clean_media_mode(room_row['media_mode'] if 'media_mode' in room_row.keys() else TELEWATCH_SFU_DEFAULT_MODE, 'webrtc'),
         'allowWebcam': bool(room_row['allow_webcam']) if 'allow_webcam' in room_row.keys() else True,
         'cohostPerms': {
             'kick': bool(room_row['cohost_can_kick']) if 'cohost_can_kick' in room_row.keys() else True,
@@ -397,10 +464,10 @@ def ensure_public_rooms(conn: sqlite3.Connection) -> None:
             continue
         conn.execute(
             '''
-            INSERT INTO watch_rooms(room_code, host_token, title, media_url, theme_key, access_mode, is_private, delete_on_host_leave, playback_sec, is_playing, created_at, updated_at)
-            VALUES(?,?,?,?,?,'public',0,1,0,0,datetime('now'),datetime('now'))
+            INSERT INTO watch_rooms(room_code, host_token, title, media_url, theme_key, media_mode, access_mode, is_private, delete_on_host_leave, playback_sec, is_playing, created_at, updated_at)
+            VALUES(?,?,?,?,?,?,'public',0,1,0,0,datetime('now'),datetime('now'))
             ''',
-            (code, secrets.token_urlsafe(32), f'Public Room {code[-2:]}', '', 'clean'),
+            (code, secrets.token_urlsafe(32), f'Public Room {code[-2:]}', '', 'clean', clean_media_mode(TELEWATCH_SFU_DEFAULT_MODE, 'webrtc')),
         )
         conn.execute(
             '''
@@ -521,6 +588,12 @@ class TelewatchHandler(BaseHTTPRequestHandler):
         path = parsed.path.rstrip('/') or '/'
         q = parse_qs(parsed.query)
 
+        sfu_config_paths = {
+            '/watch/sfu/config',
+            '/api/watch/sfu/config',
+            '/api/telewatch/watch/sfu/config',
+            '/api/telewatch/api/watch/sfu/config',
+        }
         public_rooms_paths = {
             '/public-rooms',
             '/api/public-rooms',
@@ -528,6 +601,17 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             '/api/telewatch/api/public-rooms',
         }
         state_paths = {'/watch/state', '/api/watch/state', '/api/telewatch/watch/state', '/api/telewatch/api/watch/state'}
+        if path in sfu_config_paths:
+            self._json(
+                HTTPStatus.OK,
+                {
+                    'ok': True,
+                    'enabled': bool(sfu_enabled()),
+                    'url': TELEWATCH_SFU_URL if sfu_enabled() else '',
+                    'defaultMode': clean_media_mode(TELEWATCH_SFU_DEFAULT_MODE, 'webrtc'),
+                },
+            )
+            return
         if path in public_rooms_paths:
             with get_db() as conn:
                 ensure_public_rooms(conn)
@@ -535,7 +619,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                 rooms = []
                 for code in public_room_codes():
                     room = conn.execute(
-                        'SELECT room_code, title, media_url, theme_key, allow_webcam, cohost_can_kick, cohost_can_mute, cohost_can_access, cohost_can_pin, access_mode, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
+                        'SELECT room_code, title, media_url, theme_key, allow_webcam, cohost_can_kick, cohost_can_mute, cohost_can_access, cohost_can_pin, media_mode, access_mode, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
                         (code,),
                     ).fetchone()
                     if room is None:
@@ -553,6 +637,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                             'roomCode': code,
                             'title': room['title'] or f'Public Room {code[-2:]}',
                             'themeKey': clean_theme_key(room['theme_key']),
+                            'mediaMode': clean_media_mode(room['media_mode'] if 'media_mode' in room.keys() else TELEWATCH_SFU_DEFAULT_MODE, 'webrtc'),
                             'accessMode': 'public',
                             'activeCount': int(active_count),
                             'isLive': bool(active_count > 0),
@@ -597,7 +682,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             conn.execute("UPDATE watch_participants SET last_seen_at=datetime('now') WHERE participant_token=?", (participant_token,))
 
             room = conn.execute(
-                'SELECT room_code, title, media_url, theme_key, allow_webcam, cohost_can_kick, cohost_can_mute, cohost_can_access, cohost_can_pin, access_mode, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
+                'SELECT room_code, title, media_url, theme_key, allow_webcam, cohost_can_kick, cohost_can_mute, cohost_can_access, cohost_can_pin, media_mode, access_mode, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
                 (room_code_val,),
             ).fetchone()
             if room is None:
@@ -707,7 +792,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     return
                 if str(room_tick['updated_at'] or '') != baseline_room_updated:
                     room = conn.execute(
-                        'SELECT room_code, title, media_url, theme_key, allow_webcam, cohost_can_kick, cohost_can_mute, cohost_can_access, cohost_can_pin, access_mode, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
+                        'SELECT room_code, title, media_url, theme_key, allow_webcam, cohost_can_kick, cohost_can_mute, cohost_can_access, cohost_can_pin, media_mode, access_mode, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
                         (room_code_val,),
                     ).fetchone()
                     break
@@ -786,7 +871,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                 ).fetchone()[0]
             )
             room = conn.execute(
-                'SELECT room_code, title, media_url, theme_key, allow_webcam, cohost_can_kick, cohost_can_mute, cohost_can_access, cohost_can_pin, access_mode, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
+                'SELECT room_code, title, media_url, theme_key, allow_webcam, cohost_can_kick, cohost_can_mute, cohost_can_access, cohost_can_pin, media_mode, access_mode, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
                 (room_code_val,),
             ).fetchone()
             if room is None:
@@ -931,6 +1016,12 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             '/api/telewatch/watch/user/logout',
             '/api/telewatch/api/watch/user/logout',
         }
+        sfu_token_paths = {
+            '/watch/sfu/token',
+            '/api/watch/sfu/token',
+            '/api/telewatch/watch/sfu/token',
+            '/api/telewatch/api/watch/sfu/token',
+        }
         admin_ip_block_add_paths = {
             '/watch/admin/ip-block/add',
             '/api/watch/admin/ip-block/add',
@@ -989,6 +1080,60 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                 (clean,),
             ).fetchone()
             return row is not None
+
+        if path in sfu_token_paths:
+            if not sfu_enabled():
+                self._json(HTTPStatus.BAD_REQUEST, {'error': 'sfu_not_configured'})
+                return
+            room_code_val = normalize_room_code(payload.get('roomCode', ''), '')
+            participant_token = str(payload.get('participantToken', '')).strip()[:128]
+            requested_name = clean_name(payload.get('displayName', ''), 'Viewer')
+            if not room_code_val or not participant_token:
+                self._json(HTTPStatus.BAD_REQUEST, {'error': 'roomCode_and_participantToken_required'})
+                return
+            with get_db() as conn:
+                ensure_public_rooms(conn)
+                cleanup_rooms(conn)
+                room = conn.execute(
+                    'SELECT room_code, media_mode FROM watch_rooms WHERE room_code=?',
+                    (room_code_val,),
+                ).fetchone()
+                if room is None:
+                    self._json(HTTPStatus.NOT_FOUND, {'error': 'room_not_found'})
+                    return
+                mode = clean_media_mode(room['media_mode'] if 'media_mode' in room.keys() else TELEWATCH_SFU_DEFAULT_MODE, 'webrtc')
+                if mode != 'sfu':
+                    self._json(HTTPStatus.BAD_REQUEST, {'error': 'room_not_sfu'})
+                    return
+                part = conn.execute(
+                    '''
+                    SELECT participant_id, display_name, is_host
+                    FROM watch_participants
+                    WHERE participant_token=? AND room_code=? AND last_seen_at >= datetime('now', '-30 minutes')
+                    LIMIT 1
+                    ''',
+                    (participant_token, room_code_val),
+                ).fetchone()
+                if part is None:
+                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'invalid_participant'})
+                    return
+                identity = str(part['participant_id'] or '').strip() or secrets.token_hex(6)
+                display_name = clean_name(part['display_name'] or requested_name, requested_name)
+                token = build_livekit_token(identity, room_code_val, display_name, bool(part['is_host']))
+                conn.execute("UPDATE watch_participants SET last_seen_at=datetime('now') WHERE participant_token=?", (participant_token,))
+                conn.commit()
+            self._json(
+                HTTPStatus.OK,
+                {
+                    'ok': True,
+                    'token': token,
+                    'url': TELEWATCH_SFU_URL,
+                    'roomCode': room_code_val,
+                    'identity': identity,
+                    'displayName': display_name,
+                },
+            )
+            return
 
         if path in user_register_paths:
             username = clean_username(payload.get('username', ''))
@@ -1508,6 +1653,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     SELECT
                       r.room_code,
                       r.title,
+                      r.media_mode,
                       r.access_mode,
                       r.updated_at,
                       (
@@ -1538,6 +1684,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                         {
                             'roomCode': r['room_code'],
                             'title': r['title'] or '',
+                            'mediaMode': clean_media_mode(r['media_mode'] or TELEWATCH_SFU_DEFAULT_MODE, 'webrtc'),
                             'accessMode': str(r['access_mode'] or 'public').strip().lower(),
                             'updatedAt': r['updated_at'],
                             'activeCount': int(r['active_count'] or 0),
@@ -1633,10 +1780,10 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     conn.execute(
                         '''
                         UPDATE watch_rooms
-                        SET title=?, media_url='', theme_key='clean', allow_webcam=1, cohost_can_kick=1, cohost_can_mute=1, cohost_can_access=1, cohost_can_pin=1, access_mode='public', is_private=0, delete_on_host_leave=1, playback_sec=0, is_playing=0, updated_at=datetime('now')
+                        SET title=?, media_url='', theme_key='clean', media_mode=?, allow_webcam=1, cohost_can_kick=1, cohost_can_mute=1, cohost_can_access=1, cohost_can_pin=1, access_mode='public', is_private=0, delete_on_host_leave=1, playback_sec=0, is_playing=0, updated_at=datetime('now')
                         WHERE room_code=?
                         ''',
-                        (f'Public Room {room_code_val[-2:]}', room_code_val),
+                        (f'Public Room {room_code_val[-2:]}', clean_media_mode(TELEWATCH_SFU_DEFAULT_MODE, 'webrtc'), room_code_val),
                     )
                     conn.execute('DELETE FROM watch_participants WHERE room_code=?', (room_code_val,))
                     conn.execute('DELETE FROM watch_events WHERE room_code=?', (room_code_val,))
@@ -1663,6 +1810,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             title = str(payload.get('title', '')).strip()[:160]
             media_url = str(payload.get('mediaUrl', '')).strip()[:600]
             theme_key = clean_theme_key(payload.get('themeKey', 'clean'), 'clean')
+            media_mode = clean_media_mode(payload.get('mediaMode', TELEWATCH_SFU_DEFAULT_MODE), 'webrtc')
             requested_access_mode = str(payload.get('accessMode', 'public')).strip().lower()
             access_mode = requested_access_mode if requested_access_mode in {'public', 'invite', 'closed'} else 'public'
             requested_code = normalize_room_code(payload.get('roomCode', ''), '')
@@ -1700,10 +1848,10 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                 participant_id = secrets.token_hex(6)
                 conn.execute(
                     '''
-                    INSERT INTO watch_rooms(room_code, host_token, title, media_url, theme_key, access_mode, is_private, delete_on_host_leave, playback_sec, is_playing, created_at, updated_at)
-                    VALUES(?,?,?,?,?,?,?,1,0,0,datetime('now'),datetime('now'))
+                    INSERT INTO watch_rooms(room_code, host_token, title, media_url, theme_key, media_mode, access_mode, is_private, delete_on_host_leave, playback_sec, is_playing, created_at, updated_at)
+                    VALUES(?,?,?,?,?,?,?,?,1,0,0,datetime('now'),datetime('now'))
                     ''',
-                    (code, host_token, title, media_url, theme_key, access_mode, 1 if access_mode == 'invite' else 0),
+                    (code, host_token, title, media_url, theme_key, media_mode, access_mode, 1 if access_mode == 'invite' else 0),
                 )
                 conn.execute(
                     '''
@@ -1717,7 +1865,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     INSERT INTO watch_events(room_code, actor_name, event_type, payload_json, created_at)
                     VALUES(?,?,?,?,datetime('now'))
                     ''',
-                    (code, display_name, 'room_created', stable_json({'title': title, 'mediaUrl': media_url, 'themeKey': theme_key, 'accessMode': access_mode})),
+                    (code, display_name, 'room_created', stable_json({'title': title, 'mediaUrl': media_url, 'themeKey': theme_key, 'mediaMode': media_mode, 'accessMode': access_mode})),
                 )
                 conn.commit()
             self._json(
@@ -1725,6 +1873,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                 {
                     'ok': True,
                     'roomCode': code,
+                    'mediaMode': media_mode,
                     'participantToken': host_token,
                     'participantId': participant_id,
                     'isHost': True,
@@ -1749,7 +1898,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     self._json(HTTPStatus.FORBIDDEN, {'error': 'ip_blocked'})
                     return
                 room = conn.execute(
-                    'SELECT room_code, title, media_url, theme_key, allow_webcam, cohost_can_kick, cohost_can_mute, cohost_can_access, cohost_can_pin, access_mode, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
+                    'SELECT room_code, title, media_url, theme_key, allow_webcam, cohost_can_kick, cohost_can_mute, cohost_can_access, cohost_can_pin, media_mode, access_mode, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
                     (room_code_val,),
                 ).fetchone()
                 if room is None:
@@ -1949,7 +2098,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
 
                 conn.execute("UPDATE watch_participants SET last_seen_at=datetime('now') WHERE participant_token=?", (participant_token,))
                 room = conn.execute(
-                    'SELECT room_code, title, media_url, theme_key, allow_webcam, cohost_can_kick, cohost_can_mute, cohost_can_access, cohost_can_pin, access_mode, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
+                    'SELECT room_code, title, media_url, theme_key, allow_webcam, cohost_can_kick, cohost_can_mute, cohost_can_access, cohost_can_pin, media_mode, access_mode, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
                     (room_code_val,),
                 ).fetchone()
                 if room is None:
@@ -2295,10 +2444,10 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                         conn.execute(
                             '''
                             UPDATE watch_rooms
-                            SET title=?, media_url='', theme_key='clean', allow_webcam=1, cohost_can_kick=1, cohost_can_mute=1, cohost_can_access=1, cohost_can_pin=1, access_mode='public', is_private=0, delete_on_host_leave=1, playback_sec=0, is_playing=0, updated_at=datetime('now')
+                            SET title=?, media_url='', theme_key='clean', media_mode=?, allow_webcam=1, cohost_can_kick=1, cohost_can_mute=1, cohost_can_access=1, cohost_can_pin=1, access_mode='public', is_private=0, delete_on_host_leave=1, playback_sec=0, is_playing=0, updated_at=datetime('now')
                             WHERE room_code=?
                             ''',
-                            (f'Public Room {room_code_val[-2:]}', room_code_val),
+                            (f'Public Room {room_code_val[-2:]}', clean_media_mode(TELEWATCH_SFU_DEFAULT_MODE, 'webrtc'), room_code_val),
                         )
                         conn.execute('DELETE FROM watch_participants WHERE room_code=?', (room_code_val,))
                         conn.execute('DELETE FROM watch_events WHERE room_code=?', (room_code_val,))
@@ -2334,7 +2483,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     event_id = int(cur.lastrowid or 0)
 
                 room_after = conn.execute(
-                    'SELECT room_code, title, media_url, theme_key, allow_webcam, cohost_can_kick, cohost_can_mute, cohost_can_access, cohost_can_pin, access_mode, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
+                    'SELECT room_code, title, media_url, theme_key, allow_webcam, cohost_can_kick, cohost_can_mute, cohost_can_access, cohost_can_pin, media_mode, access_mode, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
                     (room_code_val,),
                 ).fetchone()
                 conn.commit()
