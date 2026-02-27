@@ -261,6 +261,27 @@
       els.syncBadge.textContent = 'Sync: ' + text;
     }
 
+    function screenShareHelpMessage(err) {
+      const name = String(err && err.name ? err.name : '');
+      const msg = String(err && err.message ? err.message : '');
+      if (!window.isSecureContext) {
+        return 'Screen share requires HTTPS. Open this page from https://frenzynets.com/telewatch/.';
+      }
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+        return 'This browser does not support screen capture. Use latest Chrome/Edge/Firefox.';
+      }
+      if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+        return 'Screen-share permission denied. Click Share Monitor / Tab again and allow monitor/tab/window access.';
+      }
+      if (name === 'NotFoundError') {
+        return 'No display source found. Connect a monitor or choose a visible window/tab.';
+      }
+      if (name === 'NotReadableError' || msg.toLowerCase().includes('system')) {
+        return 'OS blocked capture. Check system privacy settings and allow screen recording for your browser.';
+      }
+      return msg || 'Unable to start screen share. Reopen the page and try again.';
+    }
+
     function normalizeRoomCode(raw) {
       return String(raw || '').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 24);
     }
@@ -412,6 +433,12 @@
 
     async function startScreenShare() {
       if (!state.isHost) return;
+      if (!window.isSecureContext) {
+        throw new Error('Open Telewatch over HTTPS to share your screen.');
+      }
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+        throw new Error('Browser screen-share API unavailable. Use latest Chrome/Edge/Firefox.');
+      }
       const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
       rtc.localScreenStream = stream;
       els.screenView.srcObject = stream;
@@ -678,7 +705,11 @@
     els.copyLinkBtn.addEventListener('click', copyInviteLink);
     els.startShareBtn.addEventListener('click', async () => {
       if (!state.isHost) return;
-      try { await startScreenShare(); } catch (err) { setStatus(false, String(err.message || err)); }
+      try {
+        await startScreenShare();
+      } catch (err) {
+        setStatus(false, screenShareHelpMessage(err));
+      }
     });
     els.stopShareBtn.addEventListener('click', async () => {
       try { await stopScreenShare(); } catch (err) { setStatus(false, String(err.message || err)); }
