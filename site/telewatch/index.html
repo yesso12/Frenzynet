@@ -126,7 +126,7 @@
       100% { transform: translate3d(-3%, 2%, 0); }
     }
     .wrap {
-      width: min(1240px, calc(100% - 28px));
+      width: min(2200px, calc(100% - 28px));
       margin: 18px auto 30px;
       position: relative;
       z-index: 2;
@@ -202,7 +202,7 @@
     .workspace {
       margin-top: 14px;
       display: grid;
-      grid-template-columns: 280px 360px 1fr;
+      grid-template-columns: minmax(260px, 340px) minmax(420px, 560px) minmax(780px, 1fr);
       gap: 14px;
     }
     .sidebar {
