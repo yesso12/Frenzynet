@@ -112,6 +112,7 @@ def ensure_schema() -> None:
               room_code TEXT NOT NULL,
               display_name TEXT NOT NULL,
               is_host INTEGER NOT NULL DEFAULT 0,
+              is_cohost INTEGER NOT NULL DEFAULT 0,
               created_at TEXT NOT NULL DEFAULT (datetime('now')),
               last_seen_at TEXT NOT NULL DEFAULT (datetime('now')),
               FOREIGN KEY (room_code) REFERENCES watch_rooms(room_code) ON DELETE CASCADE
@@ -138,6 +139,24 @@ def ensure_schema() -> None:
               responded_at TEXT,
               FOREIGN KEY (room_code) REFERENCES watch_rooms(room_code) ON DELETE CASCADE
             );
+            CREATE TABLE IF NOT EXISTS watch_room_invites (
+              invite_token TEXT PRIMARY KEY,
+              room_code TEXT NOT NULL,
+              created_by TEXT NOT NULL,
+              max_uses INTEGER NOT NULL DEFAULT 0,
+              used_count INTEGER NOT NULL DEFAULT 0,
+              created_at TEXT NOT NULL DEFAULT (datetime('now')),
+              expires_at TEXT NOT NULL,
+              FOREIGN KEY (room_code) REFERENCES watch_rooms(room_code) ON DELETE CASCADE
+            );
+            CREATE TABLE IF NOT EXISTS watch_room_bans (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              room_code TEXT NOT NULL,
+              display_name_norm TEXT NOT NULL,
+              created_at TEXT NOT NULL DEFAULT (datetime('now')),
+              expires_at TEXT NOT NULL,
+              FOREIGN KEY (room_code) REFERENCES watch_rooms(room_code) ON DELETE CASCADE
+            );
             CREATE TABLE IF NOT EXISTS watch_admins (
               username TEXT PRIMARY KEY,
               password_hash TEXT NOT NULL,
@@ -155,11 +174,17 @@ def ensure_schema() -> None:
             CREATE INDEX IF NOT EXISTS idx_watch_participants_room ON watch_participants(room_code, last_seen_at);
             CREATE INDEX IF NOT EXISTS idx_watch_events_room ON watch_events(room_code, id);
             CREATE INDEX IF NOT EXISTS idx_watch_join_requests_room_status ON watch_join_requests(room_code, status, created_at);
+            CREATE INDEX IF NOT EXISTS idx_watch_room_invites_room_expires ON watch_room_invites(room_code, expires_at);
+            CREATE INDEX IF NOT EXISTS idx_watch_room_bans_room_name ON watch_room_bans(room_code, display_name_norm, expires_at);
             CREATE INDEX IF NOT EXISTS idx_watch_admin_sessions_last_seen ON watch_admin_sessions(last_seen_at);
             '''
         )
         try:
             conn.execute("ALTER TABLE watch_participants ADD COLUMN participant_id TEXT")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            conn.execute("ALTER TABLE watch_participants ADD COLUMN is_cohost INTEGER NOT NULL DEFAULT 0")
         except sqlite3.OperationalError:
             pass
         try:
@@ -217,6 +242,8 @@ def ensure_schema() -> None:
             "DELETE FROM watch_admin_sessions WHERE last_seen_at < datetime('now', ?)",
             (f'-{ADMIN_SESSION_TTL_HOURS} hours',),
         )
+        conn.execute("DELETE FROM watch_room_bans WHERE expires_at <= datetime('now')")
+        conn.execute("DELETE FROM watch_room_invites WHERE expires_at <= datetime('now') OR (max_uses > 0 AND used_count >= max_uses)")
         ensure_public_rooms(conn)
         conn.commit()
 
@@ -227,6 +254,8 @@ def cleanup_rooms(conn: sqlite3.Connection) -> None:
         f"DELETE FROM watch_rooms WHERE room_code NOT IN ({placeholders}) AND updated_at < datetime('now', ?)",
         tuple(public_room_codes()) + (f'-{max(1, ROOM_TTL_HOURS)} hours',),
     )
+    conn.execute("DELETE FROM watch_room_bans WHERE expires_at <= datetime('now')")
+    conn.execute("DELETE FROM watch_room_invites WHERE expires_at <= datetime('now') OR (max_uses > 0 AND used_count >= max_uses)")
 
 
 def room_payload(room_row: sqlite3.Row) -> dict:
@@ -398,7 +427,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             ensure_public_rooms(conn)
             cleanup_rooms(conn)
             part = conn.execute(
-                'SELECT participant_id, display_name, is_host FROM watch_participants WHERE participant_token=? AND room_code=?',
+                'SELECT participant_id, display_name, is_host, is_cohost FROM watch_participants WHERE participant_token=? AND room_code=?',
                 (participant_token, room_code_val),
             ).fetchone()
             if part is None:
@@ -417,7 +446,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
 
             participants_rows = conn.execute(
                 '''
-                SELECT participant_id, display_name, is_host
+                SELECT participant_id, display_name, is_host, is_cohost
                 FROM watch_participants
                 WHERE room_code=? AND last_seen_at >= datetime('now', '-30 minutes')
                 ORDER BY is_host DESC, created_at ASC
@@ -461,7 +490,8 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                 (room_code_val,),
             ).fetchone()[0]
             pending_join_requests = []
-            if bool(part['is_host']):
+            can_manage_joins = bool(part['is_host']) or bool(part['is_cohost'])
+            if can_manage_joins:
                 req_rows = conn.execute(
                     '''
                     SELECT request_token, display_name, created_at
@@ -487,13 +517,14 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             {
                 'ok': True,
                 'room': room_payload(room),
-                'participant': {'displayName': part['display_name'], 'isHost': bool(part['is_host'])},
+                'participant': {'displayName': part['display_name'], 'isHost': bool(part['is_host']), 'isCohost': bool(part['is_cohost'])},
                 'selfParticipantId': part['participant_id'],
                 'participants': [
                     {
                         'participantId': r['participant_id'],
                         'displayName': r['display_name'],
                         'isHost': bool(r['is_host']),
+                        'isCohost': bool(r['is_cohost']),
                         'isSelf': bool(r['participant_id'] == part['participant_id']),
                     }
                     for r in participants_rows
@@ -782,6 +813,8 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     conn.execute('DELETE FROM watch_participants WHERE room_code=?', (room_code_val,))
                     conn.execute('DELETE FROM watch_events WHERE room_code=?', (room_code_val,))
                     conn.execute('DELETE FROM watch_join_requests WHERE room_code=?', (room_code_val,))
+                    conn.execute('DELETE FROM watch_room_invites WHERE room_code=?', (room_code_val,))
+                    conn.execute('DELETE FROM watch_room_bans WHERE room_code=?', (room_code_val,))
                     conn.execute(
                         '''
                         INSERT INTO watch_events(room_code, actor_name, event_type, payload_json, created_at)
@@ -873,6 +906,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             room_code_val = normalize_room_code(payload.get('roomCode', ''), '')
             display_name = clean_name(payload.get('displayName', ''), f"Guest-{secrets.randbelow(900) + 100}")
             request_token_in = str(payload.get('requestToken', '')).strip()[:96]
+            invite_token_in = str(payload.get('inviteToken', '')).strip()[:96]
             if not room_code_val:
                 self._json(HTTPStatus.BAD_REQUEST, {'error': 'roomCode_required'})
                 return
@@ -910,6 +944,25 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     (room_code_val,),
                 ).fetchone()
                 join_is_host = bool(is_public_room(room_code_val) and host_exists is None)
+                invite_row = None
+                if invite_token_in:
+                    invite_row = conn.execute(
+                        '''
+                        SELECT invite_token, max_uses, used_count
+                        FROM watch_room_invites
+                        WHERE room_code=? AND invite_token=? AND expires_at > datetime('now')
+                        LIMIT 1
+                        ''',
+                        (room_code_val, invite_token_in),
+                    ).fetchone()
+                    if invite_row is not None:
+                        max_uses = int(invite_row['max_uses'] or 0)
+                        used_count = int(invite_row['used_count'] or 0)
+                        if max_uses > 0 and used_count >= max_uses:
+                            invite_row = None
+                    if invite_row is None:
+                        self._json(HTTPStatus.FORBIDDEN, {'error': 'invite_invalid'})
+                        return
 
                 if request_token_in:
                     req = conn.execute(
@@ -950,10 +1003,10 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                         self._json(HTTPStatus.OK, {'ok': True, 'pendingApproval': True, 'requestToken': request_token_in})
                         return
 
-                if not join_is_host and access_mode == 'closed':
+                if not join_is_host and access_mode == 'closed' and invite_row is None:
                     self._json(HTTPStatus.FORBIDDEN, {'error': 'room_closed'})
                     return
-                if not join_is_host and access_mode == 'invite':
+                if not join_is_host and access_mode == 'invite' and invite_row is None:
                     existing_req = conn.execute(
                         '''
                         SELECT request_token, status
@@ -993,6 +1046,15 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     ''',
                     (participant_token, participant_id, room_code_val, display_name),
                 )
+                if invite_row is not None:
+                    conn.execute(
+                        '''
+                        UPDATE watch_room_invites
+                        SET used_count=used_count+1
+                        WHERE invite_token=?
+                        ''',
+                        (invite_token_in,),
+                    )
                 if join_is_host:
                     conn.execute(
                         'UPDATE watch_participants SET is_host=1 WHERE participant_token=?',
@@ -1055,7 +1117,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     self._json(HTTPStatus.NOT_FOUND, {'error': 'room_not_found'})
                     return
 
-                if action in {'play', 'pause', 'seek', 'set_media', 'set_title', 'set_theme', 'delete_room', 'reset_room', 'mute_user', 'resolve_request'} and not bool(part['is_host']):
+                if action in {'play', 'pause', 'seek', 'set_media', 'set_title', 'set_theme', 'delete_room', 'reset_room', 'mute_user', 'resolve_request', 'create_invite'} and not bool(part['is_host']):
                     self._json(HTTPStatus.FORBIDDEN, {'error': 'host_required'})
                     return
                 if action in {'set_access_mode', 'kick_user', 'resolve_join_request'} and not bool(part['is_host']):
@@ -1115,6 +1177,30 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                         (theme_key, room_code_val),
                     )
                     event_payload['themeKey'] = theme_key
+                elif action == 'create_invite':
+                    ttl_minutes_raw = payload.get('ttlMinutes')
+                    max_uses_raw = payload.get('maxUses')
+                    try:
+                        ttl_minutes = int(str(ttl_minutes_raw).strip()) if ttl_minutes_raw is not None else 720
+                    except Exception:
+                        ttl_minutes = 720
+                    try:
+                        max_uses = int(str(max_uses_raw).strip()) if max_uses_raw is not None else 0
+                    except Exception:
+                        max_uses = 0
+                    ttl_minutes = max(5, min(10080, ttl_minutes))
+                    max_uses = max(0, min(500, max_uses))
+                    invite_token = secrets.token_urlsafe(24)
+                    conn.execute(
+                        '''
+                        INSERT INTO watch_room_invites(invite_token, room_code, created_by, max_uses, used_count, created_at, expires_at)
+                        VALUES(?,?,?,?,0,datetime('now'),datetime('now', ?))
+                        ''',
+                        (invite_token, room_code_val, str(part['display_name'] or 'Host'), max_uses, f'+{ttl_minutes} minutes'),
+                    )
+                    event_payload['inviteToken'] = invite_token
+                    event_payload['ttlMinutes'] = ttl_minutes
+                    event_payload['maxUses'] = max_uses
                 elif action == 'set_access_mode':
                     access_mode = str(payload.get('accessMode', '')).strip().lower()
                     if access_mode not in {'public', 'invite', 'closed'}:
@@ -1293,6 +1379,8 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                         conn.execute('DELETE FROM watch_participants WHERE room_code=?', (room_code_val,))
                         conn.execute('DELETE FROM watch_events WHERE room_code=?', (room_code_val,))
                         conn.execute('DELETE FROM watch_join_requests WHERE room_code=?', (room_code_val,))
+                        conn.execute('DELETE FROM watch_room_invites WHERE room_code=?', (room_code_val,))
+                        conn.execute('DELETE FROM watch_room_bans WHERE room_code=?', (room_code_val,))
                         conn.execute(
                             '''
                             INSERT INTO watch_events(room_code, actor_name, event_type, payload_json, created_at)
@@ -1327,7 +1415,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                 ).fetchone()
                 conn.commit()
 
-            self._json(HTTPStatus.OK, {'ok': True, 'eventId': event_id, 'room': room_payload(room_after)})
+            self._json(HTTPStatus.OK, {'ok': True, 'eventId': event_id, 'room': room_payload(room_after), 'actionPayload': event_payload})
             return
 
         self._json(HTTPStatus.NOT_FOUND, {'error': 'not_found'})
