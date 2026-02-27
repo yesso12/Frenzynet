@@ -6,30 +6,25 @@
   <title>Frenzy Telewatch | Synced Watch Rooms</title>
   <style>
     :root {
-      --bg-deep: #07101a;
-      --bg-soft: #0f1e30;
-      --panel: rgba(14, 27, 43, 0.9);
-      --panel-solid: #122237;
-      --line: #274463;
-      --line-soft: #1a324a;
-      --accent: #36d0ff;
-      --accent-strong: #05a7dd;
-      --text: #e9f2ff;
-      --muted: #9bb8d4;
-      --good: #7df0c4;
-      --warn: #ffca68;
-      --danger: #ff7474;
-      --shadow: 0 18px 40px rgba(2, 8, 16, 0.35);
+      --bg: #f4f6fa;
+      --panel: #ffffff;
+      --line: #dbe2ea;
+      --line-soft: #e9eef4;
+      --text: #18212c;
+      --muted: #6a7787;
+      --accent: #ff5f1f;
+      --accent-strong: #e04d11;
+      --good: #168252;
+      --warn: #9e5d00;
+      --danger: #b42318;
+      --shadow: 0 10px 28px rgba(16, 24, 40, 0.08);
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
       color: var(--text);
-      font-family: "Sora", "Trebuchet MS", "Segoe UI", sans-serif;
-      background:
-        radial-gradient(circle at 5% -10%, rgba(54, 208, 255, 0.22), transparent 34%),
-        radial-gradient(circle at 92% 0%, rgba(120, 241, 195, 0.18), transparent 28%),
-        linear-gradient(150deg, var(--bg-deep), #091626 38%, #050d16 100%);
+      font-family: "Inter", "Segoe UI", Arial, sans-serif;
+      background: linear-gradient(180deg, #f8f9fc, #f3f6fa);
       min-height: 100vh;
     }
     .wrap {
@@ -43,8 +38,8 @@
       gap: 12px;
       flex-wrap: wrap;
       border: 1px solid var(--line);
-      border-radius: 16px;
-      background: linear-gradient(130deg, rgba(10, 20, 34, 0.95), rgba(11, 23, 38, 0.87));
+      border-radius: 14px;
+      background: var(--panel);
       box-shadow: var(--shadow);
       padding: 14px 16px;
     }
@@ -60,7 +55,7 @@
     .hero p {
       margin: 0;
       color: var(--muted);
-      font-size: 14px;
+      font-size: 13px;
     }
     .badge {
       display: inline-flex;
@@ -68,9 +63,9 @@
       gap: 7px;
       padding: 7px 11px;
       border-radius: 999px;
-      background: #0d2237;
-      border: 1px solid #2c5277;
-      color: #cae4ff;
+      background: #f8fafc;
+      border: 1px solid var(--line);
+      color: #314155;
       font-weight: 700;
       font-size: 12px;
     }
@@ -83,7 +78,7 @@
     .card {
       border: 1px solid var(--line);
       border-radius: 15px;
-      background: linear-gradient(180deg, var(--panel), rgba(10, 20, 33, 0.95));
+      background: var(--panel);
       box-shadow: var(--shadow);
       padding: 14px;
     }
@@ -93,7 +88,7 @@
       margin-top: 2px;
       margin-bottom: 8px;
       font-size: 13px;
-      color: #b9d1ea;
+      color: #516072;
       letter-spacing: 0.05em;
       text-transform: uppercase;
     }
@@ -102,14 +97,14 @@
     .block {
       border: 1px solid var(--line-soft);
       border-radius: 12px;
-      background: rgba(9, 19, 32, 0.65);
+      background: #fbfcfe;
       padding: 11px;
     }
     .row { display: flex; gap: 8px; flex-wrap: wrap; }
     .row > * { flex: 1; min-width: 120px; }
     label {
       font-size: 11px;
-      color: #a5c5e3;
+      color: #5f6e7f;
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.07em;
@@ -119,23 +114,23 @@
     input, button, textarea {
       width: 100%;
       border-radius: 10px;
-      border: 1px solid #2b4c6f;
-      background: #091729;
+      border: 1px solid #d1dae5;
+      background: #fff;
       color: var(--text);
       padding: 10px 11px;
       font: inherit;
     }
     input:focus, textarea:focus {
       outline: none;
-      border-color: #4cbcf2;
-      box-shadow: 0 0 0 2px rgba(54, 208, 255, 0.2);
+      border-color: #ff925f;
+      box-shadow: 0 0 0 3px rgba(255, 95, 31, 0.15);
     }
     textarea { min-height: 70px; resize: vertical; }
     button {
       width: auto;
       background: linear-gradient(180deg, var(--accent), var(--accent-strong));
       border: 0;
-      color: #00131f;
+      color: #fff;
       font-weight: 800;
       cursor: pointer;
       padding: 10px 13px;
@@ -143,22 +138,21 @@
     }
     button:hover { transform: translateY(-1px); filter: brightness(1.04); }
     button.secondary {
-      background: #10263c;
-      border: 1px solid #355a81;
-      color: #c7e5ff;
+      background: #fff;
+      border: 1px solid #d1dae5;
+      color: #2f3f52;
     }
     button:disabled { opacity: 0.45; cursor: not-allowed; }
     button.danger-btn {
-      background: linear-gradient(180deg, #ff8b8b, #da4d4d);
-      color: #2d0303;
-      border: 0;
+      background: linear-gradient(180deg, #e5484d, #c23138);
+      color: #fff;
     }
     video {
       width: 100%;
       max-height: 410px;
       border-radius: 12px;
-      border: 1px solid #2e5172;
-      background: #050b13;
+      border: 1px solid #d2dbe6;
+      background: #0f1720;
     }
     .status-online { color: var(--good); }
     .status-warn { color: var(--warn); }
@@ -175,37 +169,37 @@
     .events {
       max-height: 240px;
       overflow: auto;
-      background: #081423;
-      border: 1px solid #284766;
+      background: #f8fafc;
+      border: 1px solid #dde5ef;
       border-radius: 9px;
       padding: 8px;
       font-size: 13px;
       line-height: 1.45;
     }
-    .events div { padding: 3px 0; border-bottom: 1px dashed rgba(70, 108, 140, 0.4); }
+    .events div { padding: 3px 0; border-bottom: 1px dashed #d6dfe9; }
     .events div:last-child { border-bottom: 0; }
     .chat-feed {
       max-height: 200px;
       overflow: auto;
-      background: #07101d;
-      border: 1px solid #264364;
+      background: #f8fafc;
+      border: 1px solid #dde5ef;
       border-radius: 9px;
       padding: 8px;
       font-size: 13px;
       line-height: 1.45;
     }
-    .chat-feed div { padding: 4px 0; border-bottom: 1px dashed rgba(70, 108, 140, 0.35); }
+    .chat-feed div { padding: 4px 0; border-bottom: 1px dashed #d6dfe9; }
     .chat-feed div:last-child { border-bottom: 0; }
     .footer {
       margin-top: 12px;
-      color: #88a8c8;
+      color: #718196;
       font-size: 13px;
       text-align: center;
     }
     a { color: #70d8ff; }
     .admin-delete {
-      border: 1px solid #37597b;
-      background: #0a1a2c;
+      border: 1px solid #d8e1ec;
+      background: #fbfcfe;
       border-radius: 10px;
       padding: 8px;
     }
@@ -214,12 +208,12 @@
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      border: 1px solid #315472;
-      background: #0b1d31;
+      border: 1px solid #d4dee9;
+      background: #fff;
       border-radius: 999px;
       padding: 4px 10px;
       font-size: 12px;
-      color: #b9d7f3;
+      color: #33475f;
     }
     @media (max-width: 1080px) {
       .workspace { grid-template-columns: 1fr; }
@@ -264,14 +258,37 @@
             <input id="roomInput" placeholder="e.g. DADDYR" />
           </div>
           <div>
-            <label for="adminKeyInput">Admin Key</label>
-            <input id="adminKeyInput" type="password" placeholder="Admin key for room deletes" />
+            <label for="adminKeyInput">Admin Code</label>
+            <input id="adminKeyInput" type="password" placeholder="Admin code for protected options" />
           </div>
           <div class="row">
             <button id="createBtn">Create Room</button>
             <button id="joinBtn" class="secondary">Join Room</button>
           </div>
           <div class="muted" id="joinHint">Share your room code in Discord voice chat. Everyone runs their own stream account.</div>
+        </div>
+
+        <div class="block stack">
+          <h3>Admin Panel</h3>
+          <div class="muted" id="adminWhoami">Admin: not signed in</div>
+          <div>
+            <label for="adminUserInput">Admin Username</label>
+            <input id="adminUserInput" type="email" placeholder="Trimbledustn@gmail.com" />
+          </div>
+          <div>
+            <label for="adminPassInput">Admin Password</label>
+            <input id="adminPassInput" type="password" placeholder="Admin password" />
+          </div>
+          <button id="adminLoginBtn" class="secondary">Sign In Admin</button>
+          <div>
+            <label for="newAdminUserInput">Add Admin Username</label>
+            <input id="newAdminUserInput" type="email" placeholder="newadmin@email.com" />
+          </div>
+          <div>
+            <label for="newAdminPassInput">Add Admin Password</label>
+            <input id="newAdminPassInput" type="password" placeholder="At least 8 characters" />
+          </div>
+          <button id="addAdminBtn" class="secondary">Add / Update Admin</button>
         </div>
 
         <div class="block stack">
@@ -354,6 +371,13 @@
       displayName: document.getElementById('displayName'),
       roomInput: document.getElementById('roomInput'),
       adminKeyInput: document.getElementById('adminKeyInput'),
+      adminUserInput: document.getElementById('adminUserInput'),
+      adminPassInput: document.getElementById('adminPassInput'),
+      adminLoginBtn: document.getElementById('adminLoginBtn'),
+      adminWhoami: document.getElementById('adminWhoami'),
+      newAdminUserInput: document.getElementById('newAdminUserInput'),
+      newAdminPassInput: document.getElementById('newAdminPassInput'),
+      addAdminBtn: document.getElementById('addAdminBtn'),
       adminDeleteCodeInput: document.getElementById('adminDeleteCodeInput'),
       titleInput: document.getElementById('titleInput'),
       mediaInput: document.getElementById('mediaInput'),
@@ -386,6 +410,8 @@
       participantToken: '',
       participantId: '',
       participants: [],
+      adminToken: '',
+      adminUsername: '',
       isHost: false,
       sinceEventId: 0,
       pollTimer: null,
@@ -394,6 +420,7 @@
       lastRoom: null
     };
     const SESSION_KEY = 'telewatch_session';
+    const ADMIN_SESSION_KEY = 'telewatch_admin_session';
 
     const rtc = {
       localScreenStream: null,
@@ -733,16 +760,73 @@
 
     async function deleteRoomByCode(codeOverride) {
       const code = normalizeRoomCode(codeOverride || els.adminDeleteCodeInput.value || els.roomInput.value || state.roomCode);
-      const adminKey = String(els.adminKeyInput.value || '').trim();
+      const adminCode = String(els.adminKeyInput.value || '').trim();
       if (!code) {
         setStatus(false, 'Enter a room code first.');
         return;
       }
       const ok = window.confirm(`Delete room code ${code}?`);
       if (!ok) return;
-      const data = await apiRequest('POST', '/api/watch/delete', { roomCode: code, adminKey });
+      const data = await apiRequest('POST', '/api/watch/delete', {
+        roomCode: code,
+        adminCode,
+        adminToken: state.adminToken,
+      });
       setStatus(false, `Room ${data.roomCode || code} deleted.`);
       addEventLine(`Room ${data.roomCode || code} deleted.`);
+    }
+
+    function renderAdminIdentity() {
+      if (state.adminUsername) {
+        els.adminWhoami.textContent = 'Admin: ' + state.adminUsername;
+      } else {
+        els.adminWhoami.textContent = 'Admin: not signed in';
+      }
+    }
+
+    function saveAdminSession() {
+      try {
+        if (!state.adminToken || !state.adminUsername) {
+          localStorage.removeItem(ADMIN_SESSION_KEY);
+          return;
+        }
+        localStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify({
+          adminToken: state.adminToken,
+          adminUsername: state.adminUsername
+        }));
+      } catch (_) {}
+    }
+
+    async function adminLogin() {
+      const username = String(els.adminUserInput.value || '').trim().toLowerCase();
+      const password = String(els.adminPassInput.value || '').trim();
+      if (!username || !password) {
+        throw new Error('Enter admin username and password.');
+      }
+      const data = await apiRequest('POST', '/api/watch/admin/login', { username, password });
+      state.adminToken = String(data.adminToken || '');
+      state.adminUsername = String(data.username || username);
+      saveAdminSession();
+      renderAdminIdentity();
+      setStatus(true, 'Admin signed in.');
+    }
+
+    async function addAdminUser() {
+      const newUsername = String(els.newAdminUserInput.value || '').trim().toLowerCase();
+      const newPassword = String(els.newAdminPassInput.value || '').trim();
+      const adminCode = String(els.adminKeyInput.value || '').trim();
+      if (!state.adminToken) throw new Error('Sign in as admin first.');
+      if (!adminCode) throw new Error('Admin code required.');
+      if (!newUsername || !newPassword) throw new Error('Enter new admin username and password.');
+      await apiRequest('POST', '/api/watch/admin/add', {
+        adminToken: state.adminToken,
+        adminCode,
+        newUsername,
+        newPassword
+      });
+      els.newAdminPassInput.value = '';
+      setStatus(true, 'Admin user added: ' + newUsername);
+      addEventLine('Admin added: ' + newUsername);
     }
 
     function updateBadges() {
@@ -906,12 +990,44 @@
         await deleteRoomByCode();
       } catch (err) {
         const msg = String(err && err.message ? err.message : err);
-        if (msg.includes('admin_key_required')) {
-          setStatus(false, 'Admin key required to delete by room code.');
+        if (msg.includes('admin_auth_required') || msg.includes('admin_auth_invalid')) {
+          setStatus(false, 'Admin sign-in required for delete.');
           return;
         }
-        if (msg.includes('admin_key_invalid')) {
-          setStatus(false, 'Admin key is invalid.');
+        if (msg.includes('admin_code_required')) {
+          setStatus(false, 'Admin code required.');
+          return;
+        }
+        if (msg.includes('admin_code_invalid')) {
+          setStatus(false, 'Admin code is invalid.');
+          return;
+        }
+        setStatus(false, msg);
+      }
+    });
+    els.adminLoginBtn.addEventListener('click', async () => {
+      try {
+        await adminLogin();
+      } catch (err) {
+        const msg = String(err && err.message ? err.message : err);
+        if (msg.includes('admin_login_invalid')) {
+          setStatus(false, 'Admin login failed. Check username/password.');
+          return;
+        }
+        setStatus(false, msg);
+      }
+    });
+    els.addAdminBtn.addEventListener('click', async () => {
+      try {
+        await addAdminUser();
+      } catch (err) {
+        const msg = String(err && err.message ? err.message : err);
+        if (msg.includes('admin_code_invalid')) {
+          setStatus(false, 'Admin code is invalid.');
+          return;
+        }
+        if (msg.includes('admin_auth_required') || msg.includes('admin_auth_invalid')) {
+          setStatus(false, 'Sign in as admin before adding admins.');
           return;
         }
         setStatus(false, msg);
@@ -1013,6 +1129,19 @@
       els.adminKeyInput.addEventListener('input', () => {
         try { localStorage.setItem('telewatch_admin_key', els.adminKeyInput.value); } catch (_) {}
       });
+      if (!els.adminUserInput.value.trim()) {
+        els.adminUserInput.value = 'Trimbledustn@gmail.com';
+      }
+      try {
+        const rawAdmin = localStorage.getItem(ADMIN_SESSION_KEY) || '';
+        if (rawAdmin) {
+          const a = JSON.parse(rawAdmin);
+          state.adminToken = String(a.adminToken || '').trim();
+          state.adminUsername = String(a.adminUsername || '').trim().toLowerCase();
+          if (state.adminUsername) els.adminUserInput.value = state.adminUsername;
+        }
+      } catch (_) {}
+      renderAdminIdentity();
       try {
         const savedName = localStorage.getItem('telewatch_name') || '';
         if (savedName) els.displayName.value = savedName;
