@@ -731,7 +731,7 @@
               <button id="userLoginBtn" class="secondary">Sign In</button>
               <button id="userRegisterBtn" class="secondary">Create</button>
             </div>
-            <div class="muted">Optional: account unlocks premium tools.</div>
+            <div class="muted">Optional: account unlocks premium tools. Donation tiers unlock more features.</div>
           </div>
           <div id="accountUserWrap" class="side-controls hidden">
             <div id="userBadge" class="side-item">Signed in</div>
@@ -1099,6 +1099,23 @@
               </div>
               <button id="refreshBlocksBtn" class="secondary">Refresh Blocks</button>
             </div>
+            <div class="block stack">
+              <h3>Donation Tier</h3>
+              <div class="muted">Grant premium options by donation tier (manual until payment setup).</div>
+              <div class="row">
+                <input id="tierUserInput" type="email" placeholder="user@email.com" />
+                <select id="tierLevelSelect">
+                  <option value="free">Free</option>
+                  <option value="supporter">Supporter</option>
+                  <option value="pro">Pro</option>
+                </select>
+              </div>
+              <div class="row">
+                <button id="setTierBtn" class="secondary">Set Tier</button>
+                <button id="getTierBtn" class="secondary">Get Tier</button>
+              </div>
+              <div id="tierResult" class="muted">Tier status: n/a</div>
+            </div>
           </div>
         </div>
       </section>
@@ -1259,6 +1276,11 @@
       blockedUsersSelect: document.getElementById('blockedUsersSelect'),
       blockedIpsSelect: document.getElementById('blockedIpsSelect'),
       refreshBlocksBtn: document.getElementById('refreshBlocksBtn'),
+      tierUserInput: document.getElementById('tierUserInput'),
+      tierLevelSelect: document.getElementById('tierLevelSelect'),
+      setTierBtn: document.getElementById('setTierBtn'),
+      getTierBtn: document.getElementById('getTierBtn'),
+      tierResult: document.getElementById('tierResult'),
       titleInput: document.getElementById('titleInput'),
       mediaInput: document.getElementById('mediaInput'),
       advancedToggleBtn: document.getElementById('advancedToggleBtn'),
@@ -1398,6 +1420,7 @@
       userToken: '',
       userEmail: '',
       userDisplayName: '',
+      donationTier: 'free',
       savedRooms: []
     };
     const SESSION_KEY = 'telewatch_session';
@@ -3646,13 +3669,54 @@
       return !!(state.userToken && state.userEmail);
     }
 
+    function normalizedDonationTier() {
+      const t = String(state.donationTier || 'free').trim().toLowerCase();
+      if (t === 'pro' || t === 'supporter') return t;
+      return 'free';
+    }
+
+    function hasTier(required) {
+      const want = String(required || 'free').toLowerCase();
+      const rank = { free: 0, supporter: 1, pro: 2 };
+      return (rank[normalizedDonationTier()] || 0) >= (rank[want] || 0);
+    }
+
+    function enforceDonationGates() {
+      const tier = normalizedDonationTier();
+      if (els.mediaModeSelect && els.mediaModeSelect.value === 'sfu' && !hasTier('pro')) {
+        els.mediaModeSelect.value = 'webrtc';
+        applyMediaModeState('webrtc', false);
+      }
+      if (els.shareQualitySelect && els.shareQualitySelect.value === 'ultra' && !hasTier('supporter')) {
+        els.shareQualitySelect.value = 'high';
+      }
+      if (els.movieQualitySelect && els.movieQualitySelect.value === 'ultra' && !hasTier('supporter')) {
+        els.movieQualitySelect.value = 'high';
+      }
+      if (els.webcamQualitySelect && els.webcamQualitySelect.value === 'ultra' && !hasTier('supporter')) {
+        els.webcamQualitySelect.value = 'high';
+      }
+      if (els.mediaModeSelect) {
+        const sfuOpt = Array.from(els.mediaModeSelect.options || []).find((o) => String(o.value) === 'sfu');
+        if (sfuOpt) {
+          sfuOpt.disabled = !state.sfuEnabled || !hasTier('pro');
+          sfuOpt.textContent = hasTier('pro')
+            ? 'SFU Relay (Best for 40-50+)'
+            : 'SFU Relay (Pro donation tier)';
+        }
+      }
+      if (els.userBadge && isPremiumUser()) {
+        els.userBadge.textContent = `Premium: ${state.userDisplayName || state.userEmail} · Tier: ${tier}`;
+      }
+    }
+
     function renderPremiumState() {
       const premium = isPremiumUser();
       if (els.accountGuestWrap) els.accountGuestWrap.classList.toggle('hidden', premium);
       if (els.accountUserWrap) els.accountUserWrap.classList.toggle('hidden', !premium);
       if (els.userBadge) {
         els.userBadge.textContent = premium
-          ? `Premium: ${state.userDisplayName || state.userEmail}`
+          ? `Premium: ${state.userDisplayName || state.userEmail} · Tier: ${normalizedDonationTier()}`
           : 'Not signed in';
       }
       if (els.macroStartBtn) els.macroStartBtn.disabled = !premium;
@@ -3663,6 +3727,7 @@
       if (els.saveRoomBtn) els.saveRoomBtn.disabled = !premium;
       if (els.joinSavedRoomBtn) els.joinSavedRoomBtn.disabled = !premium;
       if (els.removeSavedRoomBtn) els.removeSavedRoomBtn.disabled = !premium;
+      enforceDonationGates();
     }
 
     function saveUserSession() {
@@ -3675,6 +3740,7 @@
           userToken: state.userToken,
           userEmail: state.userEmail,
           userDisplayName: state.userDisplayName,
+          donationTier: normalizedDonationTier(),
         }));
       } catch (_) {}
     }
@@ -3683,6 +3749,7 @@
       state.userToken = '';
       state.userEmail = '';
       state.userDisplayName = '';
+      state.donationTier = 'free';
       state.savedRooms = [];
       try { localStorage.removeItem(USER_SESSION_KEY); } catch (_) {}
       renderSavedRooms();
@@ -3728,6 +3795,7 @@
       state.userToken = String(data.userToken || '');
       state.userEmail = String(data.username || username);
       state.userDisplayName = String(data.displayName || '');
+      state.donationTier = String(data.donationTier || 'free').toLowerCase();
       saveUserSession();
       renderPremiumState();
       await refreshSavedRooms();
@@ -3743,6 +3811,7 @@
       state.userToken = String(data.userToken || '');
       state.userEmail = String(data.username || username);
       state.userDisplayName = String(data.displayName || displayName);
+      state.donationTier = String(data.donationTier || 'free').toLowerCase();
       saveUserSession();
       renderPremiumState();
       await refreshSavedRooms();
@@ -4429,6 +4498,41 @@
       }
       await refreshBlocks();
       setStatus(true, shouldBlock ? `IP blocked: ${ipAddress}` : `IP unblocked: ${ipAddress}`);
+    }
+
+    async function setDonationTierForUser() {
+      if (!state.adminToken) throw new Error('Sign in as admin first.');
+      const adminCode = String(els.adminKeyInput.value || '').trim();
+      const username = cleanUsername((els.tierUserInput && els.tierUserInput.value) || '');
+      const donationTier = String((els.tierLevelSelect && els.tierLevelSelect.value) || 'free').trim().toLowerCase();
+      if (!username) throw new Error('Enter user email.');
+      const data = await apiRequest('POST', '/api/watch/admin/user-tier/set', {
+        adminToken: state.adminToken,
+        adminCode,
+        username,
+        donationTier,
+      });
+      if (els.tierResult) {
+        els.tierResult.textContent = `Tier status: ${String(data.username || username)} -> ${String(data.donationTier || donationTier)}`;
+      }
+      setStatus(true, 'Donation tier updated.');
+    }
+
+    async function getDonationTierForUser() {
+      if (!state.adminToken) throw new Error('Sign in as admin first.');
+      const username = cleanUsername((els.tierUserInput && els.tierUserInput.value) || '');
+      if (!username) throw new Error('Enter user email.');
+      const data = await apiRequest('POST', '/api/watch/admin/user-tier/get', {
+        adminToken: state.adminToken,
+        username,
+      });
+      if (els.tierLevelSelect && data.donationTier) {
+        els.tierLevelSelect.value = String(data.donationTier).toLowerCase();
+      }
+      if (els.tierResult) {
+        els.tierResult.textContent = `Tier status: ${String(data.username || username)} -> ${String(data.donationTier || 'free')}`;
+      }
+      setStatus(true, 'Donation tier loaded.');
     }
 
     function cleanUsername(raw) {
@@ -5126,6 +5230,16 @@
         try { await blockIp(false); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
       });
     }
+    if (els.setTierBtn) {
+      els.setTierBtn.addEventListener('click', async () => {
+        try { await setDonationTierForUser(); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
+      });
+    }
+    if (els.getTierBtn) {
+      els.getTierBtn.addEventListener('click', async () => {
+        try { await getDonationTierForUser(); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
+      });
+    }
     if (els.layoutModeSelect) {
       els.layoutModeSelect.addEventListener('change', () => applyLayoutMode(els.layoutModeSelect.value, true));
     }
@@ -5139,8 +5253,12 @@
           return;
         }
         applyMediaModeState(els.mediaModeSelect.value, false);
+        enforceDonationGates();
       });
     }
+    if (els.shareQualitySelect) els.shareQualitySelect.addEventListener('change', enforceDonationGates);
+    if (els.movieQualitySelect) els.movieQualitySelect.addEventListener('change', enforceDonationGates);
+    if (els.webcamQualitySelect) els.webcamQualitySelect.addEventListener('change', enforceDonationGates);
     if (els.uiModeSelect) {
       els.uiModeSelect.addEventListener('change', () => applyUIMode(els.uiModeSelect.value, true));
     }
@@ -5402,6 +5520,7 @@
         if (!state.sfuEnabled && currentMediaMode() === 'sfu') {
           applyMediaModeState('webrtc', false);
         }
+        enforceDonationGates();
       }).catch(() => {});
       if (els.webcamPolicySelect && !els.webcamPolicySelect.value) {
         els.webcamPolicySelect.value = 'allow';
@@ -5426,6 +5545,7 @@
           state.userToken = String(u.userToken || '').trim();
           state.userEmail = String(u.userEmail || '').trim().toLowerCase();
           state.userDisplayName = String(u.userDisplayName || '').trim();
+          state.donationTier = String(u.donationTier || 'free').trim().toLowerCase();
           if (els.userEmailInput && state.userEmail) els.userEmailInput.value = state.userEmail;
         }
       } catch (_) {}
@@ -5435,6 +5555,7 @@
           .then((data) => {
             state.userEmail = String(data.username || state.userEmail);
             state.userDisplayName = String(data.displayName || state.userDisplayName);
+            state.donationTier = String(data.donationTier || state.donationTier || 'free').toLowerCase();
             saveUserSession();
             renderPremiumState();
             refreshSavedRooms().catch(() => {});
