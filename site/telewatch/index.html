@@ -38,10 +38,80 @@
       font-family: "Inter", "Segoe UI", Arial, sans-serif;
       background: var(--bg-gradient);
       min-height: 100vh;
+      position: relative;
+      overflow-x: hidden;
+    }
+    .bg-scene {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      overflow: hidden;
+    }
+    .bg-grid {
+      position: absolute;
+      inset: 0;
+      opacity: 0.2;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px);
+      background-size: 34px 34px;
+      mask-image: radial-gradient(circle at 50% 30%, black 30%, transparent 85%);
+    }
+    .bg-noise {
+      position: absolute;
+      inset: -20%;
+      opacity: 0.08;
+      background-image:
+        radial-gradient(circle at 20% 20%, rgba(255,255,255,0.8) 0.7px, transparent 1px),
+        radial-gradient(circle at 80% 40%, rgba(255,255,255,0.65) 0.7px, transparent 1px),
+        radial-gradient(circle at 50% 70%, rgba(255,255,255,0.55) 0.7px, transparent 1px);
+      background-size: 4px 4px, 5px 5px, 6px 6px;
+      animation: driftNoise 22s linear infinite;
+    }
+    .bg-orb {
+      position: absolute;
+      width: 42vw;
+      height: 42vw;
+      min-width: 260px;
+      min-height: 260px;
+      border-radius: 50%;
+      filter: blur(42px);
+      opacity: 0.34;
+      animation: driftOrb 18s ease-in-out infinite alternate;
+    }
+    .bg-orb.a {
+      background: radial-gradient(circle, rgba(255, 112, 71, 0.8), rgba(255, 112, 71, 0));
+      top: -14vw;
+      left: -10vw;
+    }
+    .bg-orb.b {
+      background: radial-gradient(circle, rgba(94, 173, 255, 0.72), rgba(94, 173, 255, 0));
+      bottom: -16vw;
+      right: -9vw;
+      animation-delay: -6s;
+    }
+    .bg-orb.c {
+      background: radial-gradient(circle, rgba(189, 113, 255, 0.62), rgba(189, 113, 255, 0));
+      top: 30%;
+      left: 35%;
+      width: 30vw;
+      height: 30vw;
+      animation-delay: -10s;
+    }
+    @keyframes driftOrb {
+      0% { transform: translate3d(0, 0, 0) scale(1); }
+      100% { transform: translate3d(18px, -18px, 0) scale(1.08); }
+    }
+    @keyframes driftNoise {
+      0% { transform: translate3d(0, 0, 0); }
+      100% { transform: translate3d(-3%, 2%, 0); }
     }
     .wrap {
       width: min(1240px, calc(100% - 28px));
       margin: 18px auto 30px;
+      position: relative;
+      z-index: 2;
     }
     .top {
       display: flex;
@@ -395,6 +465,13 @@
   </style>
 </head>
 <body>
+  <div class="bg-scene" aria-hidden="true">
+    <div class="bg-grid"></div>
+    <div class="bg-noise"></div>
+    <div class="bg-orb a"></div>
+    <div class="bg-orb b"></div>
+    <div class="bg-orb c"></div>
+  </div>
   <div class="wrap">
     <div class="top">
       <div class="hero">
