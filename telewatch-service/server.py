@@ -978,11 +978,15 @@ class TelewatchHandler(BaseHTTPRequestHandler):
 
     def _json(self, code: int, data: dict):
         body = json.dumps(data, ensure_ascii=True).encode('utf-8')
-        self.send_response(code)
-        self.send_header('Content-Type', 'application/json; charset=utf-8')
-        self.send_header('Content-Length', str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.send_response(code)
+            self.send_header('Content-Type', 'application/json; charset=utf-8')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            # Client disconnected before response write completed.
+            return
 
     def _read_json(self):
         try:
