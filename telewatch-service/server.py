@@ -1385,7 +1385,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                 if action in {'play', 'pause', 'seek', 'set_media', 'set_title', 'set_theme', 'set_webcam_policy', 'delete_room', 'reset_room', 'resolve_request', 'create_invite', 'set_cohost'} and not is_host:
                     self._json(HTTPStatus.FORBIDDEN, {'error': 'host_required'})
                     return
-                if action in {'set_access_mode', 'kick_user', 'resolve_join_request', 'mute_user', 'list_invites', 'revoke_invite'} and not (is_host or is_cohost):
+                if action in {'set_access_mode', 'kick_user', 'resolve_join_request', 'mute_user', 'list_invites', 'revoke_invite', 'pin_chat'} and not (is_host or is_cohost):
                     self._json(HTTPStatus.FORBIDDEN, {'error': 'moderator_required'})
                     return
 
@@ -1515,6 +1515,28 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                         return
                     event_payload['toParticipantId'] = to_participant_id
                     event_payload['muted'] = bool(muted)
+                elif action == 'set_cohost':
+                    to_participant_id = str(payload.get('toParticipantId', '')).strip().lower()[:24]
+                    enabled = bool(payload.get('enabled', True))
+                    if not to_participant_id:
+                        self._json(HTTPStatus.BAD_REQUEST, {'error': 'toParticipantId_required'})
+                        return
+                    target = conn.execute(
+                        'SELECT participant_id, is_host FROM watch_participants WHERE room_code=? AND participant_id=? LIMIT 1',
+                        (room_code_val, to_participant_id),
+                    ).fetchone()
+                    if target is None:
+                        self._json(HTTPStatus.NOT_FOUND, {'error': 'target_participant_not_found'})
+                        return
+                    if bool(target['is_host']):
+                        self._json(HTTPStatus.BAD_REQUEST, {'error': 'cannot_change_host_cohost'})
+                        return
+                    conn.execute(
+                        'UPDATE watch_participants SET is_cohost=? WHERE room_code=? AND participant_id=?',
+                        (1 if enabled else 0, room_code_val, to_participant_id),
+                    )
+                    event_payload['toParticipantId'] = to_participant_id
+                    event_payload['enabled'] = bool(enabled)
                 elif action == 'kick_user':
                     to_participant_id = str(payload.get('toParticipantId', '')).strip().lower()[:24]
                     if not to_participant_id:
@@ -1618,6 +1640,25 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                         self._json(HTTPStatus.BAD_REQUEST, {'error': 'message_required'})
                         return
                     event_payload['message'] = msg[:280]
+                elif action == 'react_chat':
+                    message_id = int(payload.get('messageId', 0) or 0)
+                    emoji = str(payload.get('emoji', '')).strip()[:8]
+                    if message_id <= 0:
+                        self._json(HTTPStatus.BAD_REQUEST, {'error': 'messageId_required'})
+                        return
+                    if not emoji:
+                        self._json(HTTPStatus.BAD_REQUEST, {'error': 'emoji_required'})
+                        return
+                    event_payload['messageId'] = message_id
+                    event_payload['emoji'] = emoji
+                elif action == 'pin_chat':
+                    message_id = int(payload.get('messageId', 0) or 0)
+                    pinned = bool(payload.get('pinned', True))
+                    if message_id <= 0:
+                        self._json(HTTPStatus.BAD_REQUEST, {'error': 'messageId_required'})
+                        return
+                    event_payload['messageId'] = message_id
+                    event_payload['pinned'] = pinned
                 elif action == 'signal':
                     to_participant_id = str(payload.get('toParticipantId', '')).strip().lower()[:24]
                     signal_type = str(payload.get('signalType', '')).strip().lower()[:16]
