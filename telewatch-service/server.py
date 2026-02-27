@@ -6,6 +6,7 @@ import sqlite3
 import hashlib
 import hmac
 import datetime as dt
+import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -15,6 +16,7 @@ HOST = os.getenv('TELEWATCH_HOST', '127.0.0.1')
 PORT = int(os.getenv('TELEWATCH_PORT', '9191'))
 DB_PATH = Path(os.getenv('TELEWATCH_DB_PATH', '/root/Frenzynet/telewatch-service/data/telewatch.db'))
 ROOM_TTL_HOURS = int(os.getenv('TELEWATCH_ROOM_TTL_HOURS', '24'))
+EMPTY_ROOM_TTL_MINUTES = max(10, min(1440, int(os.getenv('TELEWATCH_EMPTY_ROOM_TTL_MINUTES', '60'))))
 PUBLIC_ROOM_PREFIX = os.getenv('TELEWATCH_PUBLIC_ROOM_PREFIX', 'WATCH').strip().upper()[:6] or 'WATCH'
 PUBLIC_ROOM_COUNT = max(1, min(35, int(os.getenv('TELEWATCH_PUBLIC_ROOM_COUNT', '35'))))
 MAX_ROOMS = max(1, min(35, int(os.getenv('TELEWATCH_MAX_ROOMS', '35'))))
@@ -250,9 +252,20 @@ def ensure_schema() -> None:
 
 def cleanup_rooms(conn: sqlite3.Connection) -> None:
     placeholders = ','.join(['?'] * len(public_room_codes()))
+    ttl_window = f'-{EMPTY_ROOM_TTL_MINUTES} minutes'
     conn.execute(
-        f"DELETE FROM watch_rooms WHERE room_code NOT IN ({placeholders}) AND updated_at < datetime('now', ?)",
-        tuple(public_room_codes()) + (f'-{max(1, ROOM_TTL_HOURS)} hours',),
+        f"""
+        DELETE FROM watch_rooms
+        WHERE room_code NOT IN ({placeholders})
+          AND updated_at < datetime('now', ?)
+          AND NOT EXISTS (
+            SELECT 1
+            FROM watch_participants p
+            WHERE p.room_code=watch_rooms.room_code
+              AND p.last_seen_at >= datetime('now', ?)
+          )
+        """,
+        tuple(public_room_codes()) + (ttl_window, ttl_window),
     )
     conn.execute("DELETE FROM watch_room_bans WHERE expires_at <= datetime('now')")
     conn.execute("DELETE FROM watch_room_invites WHERE expires_at <= datetime('now') OR (max_uses > 0 AND used_count >= max_uses)")
@@ -418,6 +431,11 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             since_event_id = int(str((q.get('sinceEventId') or ['0'])[0]).strip() or '0')
         except Exception:
             since_event_id = 0
+        try:
+            wait_ms = int(str((q.get('waitMs') or ['0'])[0]).strip() or '0')
+        except Exception:
+            wait_ms = 0
+        wait_ms = max(0, min(25000, wait_ms))
 
         if not room_code_val or not participant_token:
             self._json(HTTPStatus.BAD_REQUEST, {'error': 'roomCode_and_participantToken_required'})
@@ -454,6 +472,42 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                 (room_code_val,),
             ).fetchall()
 
+            active_count = int(
+                conn.execute(
+                    '''
+                    SELECT COUNT(*)
+                    FROM watch_participants
+                    WHERE room_code=? AND last_seen_at >= datetime('now', '-20 minutes')
+                    ''',
+                    (room_code_val,),
+                ).fetchone()[0]
+            )
+            baseline_active_count = int(active_count)
+            baseline_room_updated = str(room['updated_at'] or '')
+            pending_join_requests = []
+            can_manage_joins = bool(part['is_host']) or bool(part['is_cohost'])
+            baseline_pending_count = 0
+            if can_manage_joins:
+                req_rows = conn.execute(
+                    '''
+                    SELECT request_token, display_name, created_at
+                    FROM watch_join_requests
+                    WHERE room_code=? AND status='pending'
+                    ORDER BY created_at ASC
+                    LIMIT 60
+                    ''',
+                    (room_code_val,),
+                ).fetchall()
+                pending_join_requests = [
+                    {
+                        'requestToken': r['request_token'],
+                        'displayName': r['display_name'],
+                        'createdAt': r['created_at'],
+                    }
+                    for r in req_rows
+                ]
+                baseline_pending_count = len(pending_join_requests)
+
             rows = conn.execute(
                 '''
                 SELECT id, actor_name, event_type, payload_json, created_at
@@ -464,6 +518,60 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                 ''',
                 (room_code_val, max(0, since_event_id)),
             ).fetchall()
+
+            deadline = time.monotonic() + (wait_ms / 1000.0)
+            while wait_ms > 0 and not rows and time.monotonic() < deadline:
+                room_tick = conn.execute(
+                    'SELECT updated_at FROM watch_rooms WHERE room_code=?',
+                    (room_code_val,),
+                ).fetchone()
+                if room_tick is None:
+                    self._json(HTTPStatus.NOT_FOUND, {'error': 'room_not_found'})
+                    return
+                if str(room_tick['updated_at'] or '') != baseline_room_updated:
+                    room = conn.execute(
+                        'SELECT room_code, title, media_url, theme_key, access_mode, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
+                        (room_code_val,),
+                    ).fetchone()
+                    break
+                active_tick = int(
+                    conn.execute(
+                        '''
+                        SELECT COUNT(*)
+                        FROM watch_participants
+                        WHERE room_code=? AND last_seen_at >= datetime('now', '-20 minutes')
+                        ''',
+                        (room_code_val,),
+                    ).fetchone()[0]
+                )
+                if active_tick != baseline_active_count:
+                    active_count = active_tick
+                    break
+                if can_manage_joins:
+                    pending_tick = int(
+                        conn.execute(
+                            '''
+                            SELECT COUNT(*)
+                            FROM watch_join_requests
+                            WHERE room_code=? AND status='pending'
+                            ''',
+                            (room_code_val,),
+                        ).fetchone()[0]
+                    )
+                    if pending_tick != baseline_pending_count:
+                        break
+                time.sleep(0.45)
+                rows = conn.execute(
+                    '''
+                    SELECT id, actor_name, event_type, payload_json, created_at
+                    FROM watch_events
+                    WHERE room_code=? AND id>?
+                    ORDER BY id ASC
+                    LIMIT 120
+                    ''',
+                    (room_code_val, max(0, since_event_id)),
+                ).fetchall()
+
             events = []
             for row in rows:
                 payload = {}
@@ -481,16 +589,32 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     }
                 )
 
-            active_count = conn.execute(
+            participants_rows = conn.execute(
                 '''
-                SELECT COUNT(*)
+                SELECT participant_id, display_name, is_host, is_cohost
                 FROM watch_participants
-                WHERE room_code=? AND last_seen_at >= datetime('now', '-20 minutes')
+                WHERE room_code=? AND last_seen_at >= datetime('now', '-30 minutes')
+                ORDER BY is_host DESC, created_at ASC
                 ''',
                 (room_code_val,),
-            ).fetchone()[0]
-            pending_join_requests = []
-            can_manage_joins = bool(part['is_host']) or bool(part['is_cohost'])
+            ).fetchall()
+            active_count = int(
+                conn.execute(
+                    '''
+                    SELECT COUNT(*)
+                    FROM watch_participants
+                    WHERE room_code=? AND last_seen_at >= datetime('now', '-20 minutes')
+                    ''',
+                    (room_code_val,),
+                ).fetchone()[0]
+            )
+            room = conn.execute(
+                'SELECT room_code, title, media_url, theme_key, access_mode, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
+                (room_code_val,),
+            ).fetchone()
+            if room is None:
+                self._json(HTTPStatus.NOT_FOUND, {'error': 'room_not_found'})
+                return
             if can_manage_joins:
                 req_rows = conn.execute(
                     '''

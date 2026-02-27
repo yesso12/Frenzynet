@@ -794,7 +794,8 @@
 
   <script>
     const API_PREFIXES = ['https://api.frenzynets.com/api/telewatch'];
-    const POLL_MS = 1300;
+    const POLL_RETRY_MS = 1200;
+    const LONG_POLL_WAIT_MS = 20000;
     const RTC_CFG = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
     const els = {
@@ -899,7 +900,7 @@
       adminUsername: '',
       isHost: false,
       sinceEventId: 0,
-      pollTimer: null,
+      pollLoopActive: false,
       suppressOutbound: false,
       lastSeekSentAt: 0,
       lastRoom: null,
@@ -2131,6 +2132,24 @@
       return await apiRequest('POST', '/api/watch/control', body);
     }
 
+    function delayMs(ms) {
+      return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
+    }
+
+    function stopPollingLoop() {
+      state.pollLoopActive = false;
+    }
+
+    async function startPollingLoop() {
+      if (state.pollLoopActive) return;
+      state.pollLoopActive = true;
+      while (state.pollLoopActive && state.roomCode && state.participantToken) {
+        const ok = await pollState();
+        if (!state.pollLoopActive) break;
+        if (!ok) await delayMs(POLL_RETRY_MS);
+      }
+    }
+
     function saveSession() {
       try {
         if (!state.roomCode || !state.participantToken) return;
@@ -2609,11 +2628,10 @@
       els.chatBtn.disabled = false;
       setWizardStep(2);
       switchTab(state.isHost ? 'host' : 'chat');
-      if (state.pollTimer) clearInterval(state.pollTimer);
-      state.pollTimer = setInterval(pollState, POLL_MS);
+      stopPollingLoop();
       saveSession();
       updateMediaVisibility();
-      pollState();
+      startPollingLoop();
     }
 
     function applyRoomState(room, force) {
@@ -2722,12 +2740,14 @@
     }
 
     async function pollState() {
-      if (!state.roomCode || !state.participantToken) return;
+      if (!state.roomCode || !state.participantToken) return false;
       try {
+        const waitMs = state.sinceEventId > 0 ? LONG_POLL_WAIT_MS : 0;
         const data = await apiRequest('GET', '/api/watch/state', null, {
           roomCode: state.roomCode,
           participantToken: state.participantToken,
-          sinceEventId: state.sinceEventId
+          sinceEventId: state.sinceEventId,
+          waitMs
         });
         state.participantId = data.selfParticipantId || state.participantId;
         state.participants = Array.isArray(data.participants) ? data.participants : [];
@@ -2783,7 +2803,7 @@
           if (ev.type === 'kick_user') {
             const targetId = String(ev.payload?.toParticipantId || '').toLowerCase();
             if (targetId && targetId === String(state.participantId || '').toLowerCase()) {
-              if (state.pollTimer) clearInterval(state.pollTimer);
+              stopPollingLoop();
               state.roomCode = '';
               state.participantToken = '';
               state.participantId = '';
@@ -2792,7 +2812,7 @@
               setSyncLabel('removed');
               updateBadges();
               setThemeControlState();
-              return;
+              return false;
             }
             continue;
           }
@@ -2805,7 +2825,7 @@
       } catch (err) {
         const msg = String(err && err.message ? err.message : 'network_error');
         if (msg.includes('invalid_participant')) {
-          if (state.pollTimer) clearInterval(state.pollTimer);
+          stopPollingLoop();
           clearSession();
           state.roomCode = '';
           state.participantToken = '';
@@ -2814,13 +2834,15 @@
           updateBadges();
           setStatus(false, 'You are no longer in this room.');
           setSyncLabel('disconnected');
-          return;
+          return false;
         }
         setStatus(false, 'Reconnect pending: ' + msg);
         setSyncLabel('retrying');
         updateStatusChips(0);
         updateMediaVisibility();
+        return false;
       }
+      return true;
     }
 
     els.createBtn.addEventListener('click', async () => {
@@ -3077,7 +3099,7 @@
       if (!ok) return;
       try {
         await sendControl('delete_room', {});
-        if (state.pollTimer) clearInterval(state.pollTimer);
+        stopPollingLoop();
         await stopScreenShare();
         state.roomCode = '';
         state.participantToken = '';
