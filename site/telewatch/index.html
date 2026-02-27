@@ -344,6 +344,14 @@
     .msg-line { display: grid; gap: 1px; }
     .msg-head { font-size: 11px; color: #6f7d8f; }
     .msg-body { font-size: 13px; color: #1d2a39; word-break: break-word; }
+    .chat-compose {
+      display: grid;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .chat-compose textarea {
+      min-height: 64px;
+    }
     .participants-grid {
       display: grid;
       gap: 8px;
@@ -742,9 +750,6 @@
 
         <div class="tab-pane" data-tab-pane="chat">
           <div class="block stack">
-            <h3>Room Messages</h3>
-            <textarea id="chatInput" placeholder="Send timestamp notes, e.g. pause at 12:34"></textarea>
-            <button id="chatBtn" class="secondary">Send Message</button>
             <h3>Make Request</h3>
             <div class="row">
               <select id="requestTypeSelect">
@@ -848,6 +853,10 @@
             <h3>Room Messages</h3>
             <div class="muted">Live room chat appears here. Newest messages show first.</div>
             <div id="chatFeed" class="chat-feed"></div>
+            <div class="chat-compose">
+              <textarea id="chatInput" placeholder="Send a message or timestamp note, e.g. pause at 12:34"></textarea>
+              <button id="chatBtn" class="secondary">Send Message</button>
+            </div>
             <div id="eventsBlock">
               <h3>Events</h3>
               <div class="muted">Playback and system events for this room.</div>
