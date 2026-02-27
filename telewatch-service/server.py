@@ -342,7 +342,49 @@ class TelewatchHandler(BaseHTTPRequestHandler):
 
         create_paths = {'/watch/create', '/api/watch/create', '/api/telewatch/watch/create', '/api/telewatch/api/watch/create'}
         join_paths = {'/watch/join', '/api/watch/join', '/api/telewatch/watch/join', '/api/telewatch/api/watch/join'}
+        delete_paths = {'/watch/delete', '/api/watch/delete', '/api/telewatch/watch/delete', '/api/telewatch/api/watch/delete'}
         control_paths = {'/watch/control', '/api/watch/control', '/api/telewatch/watch/control', '/api/telewatch/api/watch/control'}
+
+        if path in delete_paths:
+            room_code_val = normalize_room_code(payload.get('roomCode', ''), '')
+            if not room_code_val:
+                self._json(HTTPStatus.BAD_REQUEST, {'error': 'roomCode_required'})
+                return
+            with get_db() as conn:
+                ensure_public_rooms(conn)
+                cleanup_rooms(conn)
+                room = conn.execute(
+                    'SELECT room_code FROM watch_rooms WHERE room_code=?',
+                    (room_code_val,),
+                ).fetchone()
+                if room is None:
+                    self._json(HTTPStatus.NOT_FOUND, {'error': 'room_not_found'})
+                    return
+                if is_public_room(room_code_val):
+                    conn.execute(
+                        '''
+                        UPDATE watch_rooms
+                        SET title=?, media_url='', playback_sec=0, is_playing=0, updated_at=datetime('now')
+                        WHERE room_code=?
+                        ''',
+                        (f'Public Room {room_code_val[-2:]}', room_code_val),
+                    )
+                    conn.execute('DELETE FROM watch_participants WHERE room_code=?', (room_code_val,))
+                    conn.execute('DELETE FROM watch_events WHERE room_code=?', (room_code_val,))
+                    conn.execute(
+                        '''
+                        INSERT INTO watch_events(room_code, actor_name, event_type, payload_json, created_at)
+                        VALUES(?,?,?,?,datetime('now'))
+                        ''',
+                        (room_code_val, 'Admin', 'room_reset', stable_json({'publicRoom': True})),
+                    )
+                    conn.commit()
+                    self._json(HTTPStatus.OK, {'ok': True, 'deleted': True, 'publicReset': True, 'roomCode': room_code_val})
+                    return
+                conn.execute('DELETE FROM watch_rooms WHERE room_code=?', (room_code_val,))
+                conn.commit()
+                self._json(HTTPStatus.OK, {'ok': True, 'deleted': True, 'roomCode': room_code_val})
+                return
 
         if path in create_paths:
             display_name = clean_name(payload.get('displayName', ''), 'Host')
@@ -500,7 +542,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     self._json(HTTPStatus.NOT_FOUND, {'error': 'room_not_found'})
                     return
 
-                if action in {'play', 'pause', 'seek', 'set_media', 'set_title'} and not bool(part['is_host']):
+                if action in {'play', 'pause', 'seek', 'set_media', 'set_title', 'delete_room'} and not bool(part['is_host']):
                     self._json(HTTPStatus.FORBIDDEN, {'error': 'host_required'})
                     return
 
@@ -576,6 +618,32 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                         event_payload['sdp'] = str(payload.get('sdp', ''))[:20000]
                     if signal_type == 'ice':
                         event_payload['candidate'] = str(payload.get('candidate', ''))[:4000]
+                elif action == 'delete_room':
+                    if is_public_room(room_code_val):
+                        conn.execute(
+                            '''
+                            UPDATE watch_rooms
+                            SET title=?, media_url='', playback_sec=0, is_playing=0, updated_at=datetime('now')
+                            WHERE room_code=?
+                            ''',
+                            (f'Public Room {room_code_val[-2:]}', room_code_val),
+                        )
+                        conn.execute('DELETE FROM watch_participants WHERE room_code=?', (room_code_val,))
+                        conn.execute('DELETE FROM watch_events WHERE room_code=?', (room_code_val,))
+                        conn.execute(
+                            '''
+                            INSERT INTO watch_events(room_code, actor_name, event_type, payload_json, created_at)
+                            VALUES(?,?,?,?,datetime('now'))
+                            ''',
+                            (room_code_val, part['display_name'], 'room_reset', stable_json({'publicRoom': True})),
+                        )
+                        conn.commit()
+                        self._json(HTTPStatus.OK, {'ok': True, 'deleted': True, 'publicReset': True, 'roomCode': room_code_val})
+                        return
+                    conn.execute('DELETE FROM watch_rooms WHERE room_code=?', (room_code_val,))
+                    conn.commit()
+                    self._json(HTTPStatus.OK, {'ok': True, 'deleted': True, 'roomCode': room_code_val})
+                    return
                 elif action == 'ping':
                     event_payload = {}
                 else:

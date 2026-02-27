@@ -145,6 +145,7 @@
         <div class="row">
           <button id="createBtn">Create Room</button>
           <button id="joinBtn" class="secondary">Join Room</button>
+          <button id="deleteCodeBtn" class="secondary">Delete Room Code</button>
         </div>
         <div class="muted" id="joinHint">Share your room code in Discord voice chat. Everyone runs their own stream account.</div>
 
@@ -164,6 +165,7 @@
         <div class="row">
           <button id="startShareBtn" class="secondary">Share Monitor / Tab</button>
           <button id="stopShareBtn" class="secondary" disabled>Stop Share</button>
+          <button id="deleteRoomBtn" class="secondary">Delete Room</button>
         </div>
 
         <h3>Room Chat</h3>
@@ -204,10 +206,12 @@
       mediaInput: document.getElementById('mediaInput'),
       createBtn: document.getElementById('createBtn'),
       joinBtn: document.getElementById('joinBtn'),
+      deleteCodeBtn: document.getElementById('deleteCodeBtn'),
       setMediaBtn: document.getElementById('setMediaBtn'),
       copyLinkBtn: document.getElementById('copyLinkBtn'),
       startShareBtn: document.getElementById('startShareBtn'),
       stopShareBtn: document.getElementById('stopShareBtn'),
+      deleteRoomBtn: document.getElementById('deleteRoomBtn'),
       chatInput: document.getElementById('chatInput'),
       chatBtn: document.getElementById('chatBtn'),
       playBtn: document.getElementById('playBtn'),
@@ -353,6 +357,7 @@
         if (ev.streams && ev.streams[0]) {
           els.screenView.srcObject = ev.streams[0];
           els.screenView.muted = false;
+          els.screenView.play().catch(() => {});
           setSyncLabel('screen live');
         }
       };
@@ -411,6 +416,7 @@
       rtc.localScreenStream = stream;
       els.screenView.srcObject = stream;
       els.screenView.muted = true;
+      try { await els.screenView.play(); } catch (_) {}
       els.startShareBtn.disabled = true;
       els.stopShareBtn.disabled = false;
       setSyncLabel('sharing monitor/tab');
@@ -508,6 +514,19 @@
       addEventLine('Joined room: ' + state.roomCode);
     }
 
+    async function deleteRoomByCode() {
+      const code = normalizeRoomCode(els.roomInput.value);
+      if (!code) {
+        setStatus(false, 'Enter a room code first.');
+        return;
+      }
+      const ok = window.confirm(`Delete room code ${code}?`);
+      if (!ok) return;
+      const data = await apiRequest('POST', '/api/watch/delete', { roomCode: code });
+      setStatus(false, `Room ${data.roomCode || code} deleted.`);
+      addEventLine(`Room ${data.roomCode || code} deleted.`);
+    }
+
     function updateBadges() {
       els.roomBadge.textContent = 'Room: ' + (state.roomCode || 'none');
       els.roleBadge.textContent = 'Role: ' + (state.isHost ? 'host' : 'viewer');
@@ -522,6 +541,7 @@
       els.pauseBtn.disabled = !state.isHost;
       els.startShareBtn.disabled = !state.isHost;
       els.stopShareBtn.disabled = true;
+      els.deleteRoomBtn.disabled = !state.isHost;
       els.chatBtn.disabled = false;
       if (state.pollTimer) clearInterval(state.pollTimer);
       state.pollTimer = setInterval(pollState, POLL_MS);
@@ -646,6 +666,9 @@
     els.joinBtn.addEventListener('click', async () => {
       try { await joinRoom(); } catch (err) { setStatus(false, String(err.message || err)); }
     });
+    els.deleteCodeBtn.addEventListener('click', async () => {
+      try { await deleteRoomByCode(); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
+    });
     els.setMediaBtn.addEventListener('click', async () => {
       try { await setupMedia(); } catch (err) { setStatus(false, String(err.message || err)); }
     });
@@ -659,6 +682,38 @@
     });
     els.stopShareBtn.addEventListener('click', async () => {
       try { await stopScreenShare(); } catch (err) { setStatus(false, String(err.message || err)); }
+    });
+    els.deleteRoomBtn.addEventListener('click', async () => {
+      if (!state.isHost) return;
+      const ok = window.confirm(`Delete room ${state.roomCode}? This removes the active watch session.`);
+      if (!ok) return;
+      try {
+        await sendControl('delete_room', {});
+        if (state.pollTimer) clearInterval(state.pollTimer);
+        await stopScreenShare();
+        state.roomCode = '';
+        state.participantToken = '';
+        state.participantId = '';
+        state.participants = [];
+        state.isHost = false;
+        state.sinceEventId = 0;
+        els.roomInput.value = '';
+        els.createBtn.disabled = false;
+        els.joinBtn.disabled = false;
+        els.setMediaBtn.disabled = true;
+        els.playBtn.disabled = true;
+        els.pauseBtn.disabled = true;
+        els.startShareBtn.disabled = true;
+        els.stopShareBtn.disabled = true;
+        els.deleteRoomBtn.disabled = true;
+        els.chatBtn.disabled = true;
+        updateBadges();
+        setSyncLabel('room deleted');
+        setStatus(false, 'Room deleted.');
+        addEventLine('Room deleted by host.');
+      } catch (err) {
+        setStatus(false, String(err && err.message ? err.message : err));
+      }
     });
     els.playBtn.addEventListener('click', async () => {
       if (!state.isHost) return;
