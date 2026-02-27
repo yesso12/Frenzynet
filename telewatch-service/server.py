@@ -173,6 +173,11 @@ def ensure_schema() -> None:
               last_seen_at TEXT NOT NULL DEFAULT (datetime('now')),
               FOREIGN KEY (username) REFERENCES watch_admins(username) ON DELETE CASCADE
             );
+            CREATE TABLE IF NOT EXISTS watch_settings (
+              setting_key TEXT PRIMARY KEY,
+              setting_value TEXT NOT NULL,
+              updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
             CREATE INDEX IF NOT EXISTS idx_watch_participants_room ON watch_participants(room_code, last_seen_at);
             CREATE INDEX IF NOT EXISTS idx_watch_events_room ON watch_events(room_code, id);
             CREATE INDEX IF NOT EXISTS idx_watch_join_requests_room_status ON watch_join_requests(room_code, status, created_at);
@@ -244,15 +249,35 @@ def ensure_schema() -> None:
             "DELETE FROM watch_admin_sessions WHERE last_seen_at < datetime('now', ?)",
             (f'-{ADMIN_SESSION_TTL_HOURS} hours',),
         )
+        conn.execute(
+            '''
+            INSERT INTO watch_settings(setting_key, setting_value, updated_at)
+            VALUES('empty_room_ttl_minutes', ?, datetime('now'))
+            ON CONFLICT(setting_key) DO NOTHING
+            ''',
+            (str(EMPTY_ROOM_TTL_MINUTES),),
+        )
         conn.execute("DELETE FROM watch_room_bans WHERE expires_at <= datetime('now')")
         conn.execute("DELETE FROM watch_room_invites WHERE expires_at <= datetime('now') OR (max_uses > 0 AND used_count >= max_uses)")
         ensure_public_rooms(conn)
         conn.commit()
 
 
+def get_empty_room_ttl_minutes(conn: sqlite3.Connection) -> int:
+    row = conn.execute(
+        "SELECT setting_value FROM watch_settings WHERE setting_key='empty_room_ttl_minutes' LIMIT 1"
+    ).fetchone()
+    raw = str(row['setting_value']).strip() if row is not None else str(EMPTY_ROOM_TTL_MINUTES)
+    try:
+        val = int(raw)
+    except Exception:
+        val = EMPTY_ROOM_TTL_MINUTES
+    return max(10, min(1440, val))
+
+
 def cleanup_rooms(conn: sqlite3.Connection) -> None:
     placeholders = ','.join(['?'] * len(public_room_codes()))
-    ttl_window = f'-{EMPTY_ROOM_TTL_MINUTES} minutes'
+    ttl_window = f'-{get_empty_room_ttl_minutes(conn)} minutes'
     conn.execute(
         f"""
         DELETE FROM watch_rooms
@@ -464,13 +489,48 @@ class TelewatchHandler(BaseHTTPRequestHandler):
 
             participants_rows = conn.execute(
                 '''
-                SELECT participant_id, display_name, is_host, is_cohost
+                SELECT participant_id, display_name, is_host, is_cohost, created_at
                 FROM watch_participants
                 WHERE room_code=? AND last_seen_at >= datetime('now', '-30 minutes')
                 ORDER BY is_host DESC, created_at ASC
                 ''',
                 (room_code_val,),
             ).fetchall()
+            if participants_rows and not any(bool(r['is_host']) for r in participants_rows):
+                cohost_candidates = [r for r in participants_rows if bool(r['is_cohost'])]
+                promote = cohost_candidates[0] if cohost_candidates else participants_rows[0]
+                conn.execute('UPDATE watch_participants SET is_host=0 WHERE room_code=?', (room_code_val,))
+                conn.execute(
+                    'UPDATE watch_participants SET is_host=1 WHERE room_code=? AND participant_id=?',
+                    (room_code_val, promote['participant_id']),
+                )
+                conn.execute(
+                    '''
+                    INSERT INTO watch_events(room_code, actor_name, event_type, payload_json, created_at)
+                    VALUES(?,?,?,?,datetime('now'))
+                    ''',
+                    (
+                        room_code_val,
+                        str(promote['display_name'] or 'Host'),
+                        'host_handoff',
+                        stable_json(
+                            {
+                                'toParticipantId': str(promote['participant_id'] or ''),
+                                'toDisplayName': str(promote['display_name'] or ''),
+                                'reason': 'previous_host_inactive',
+                            }
+                        ),
+                    ),
+                )
+                participants_rows = conn.execute(
+                    '''
+                    SELECT participant_id, display_name, is_host, is_cohost, created_at
+                    FROM watch_participants
+                    WHERE room_code=? AND last_seen_at >= datetime('now', '-30 minutes')
+                    ORDER BY is_host DESC, created_at ASC
+                    ''',
+                    (room_code_val,),
+                ).fetchall()
 
             active_count = int(
                 conn.execute(
@@ -591,7 +651,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
 
             participants_rows = conn.execute(
                 '''
-                SELECT participant_id, display_name, is_host, is_cohost
+                SELECT participant_id, display_name, is_host, is_cohost, created_at
                 FROM watch_participants
                 WHERE room_code=? AND last_seen_at >= datetime('now', '-30 minutes')
                 ORDER BY is_host DESC, created_at ASC
@@ -705,6 +765,12 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             '/api/watch/admin/rooms',
             '/api/telewatch/watch/admin/rooms',
             '/api/telewatch/api/watch/admin/rooms',
+        }
+        admin_settings_paths = {
+            '/watch/admin/settings',
+            '/api/watch/admin/settings',
+            '/api/telewatch/watch/admin/settings',
+            '/api/telewatch/api/watch/admin/settings',
         }
         delete_paths = {'/watch/delete', '/api/watch/delete', '/api/telewatch/watch/delete', '/api/telewatch/api/watch/delete'}
         control_paths = {'/watch/control', '/api/watch/control', '/api/telewatch/watch/control', '/api/telewatch/api/watch/control'}
@@ -895,6 +961,55 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             )
             return
 
+        if path in admin_settings_paths:
+            admin_token = str(payload.get('adminToken', '')).strip()
+            action = str(payload.get('action', 'get')).strip().lower()
+            admin_code = str(payload.get('adminCode', '')).strip()
+            with get_db() as conn:
+                ensure_public_rooms(conn)
+                cleanup_rooms(conn)
+                actor = validate_admin_session(conn, admin_token)
+                if actor is None:
+                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'admin_auth_invalid'})
+                    return
+                if action == 'set':
+                    if not bool(actor['is_owner']):
+                        self._json(HTTPStatus.FORBIDDEN, {'error': 'owner_required'})
+                        return
+                    if TELEWATCH_ADMIN_CODE and admin_code != TELEWATCH_ADMIN_CODE:
+                        self._json(HTTPStatus.FORBIDDEN, {'error': 'admin_code_invalid'})
+                        return
+                    raw_minutes = payload.get('emptyRoomTtlMinutes')
+                    try:
+                        minutes = int(str(raw_minutes).strip())
+                    except Exception:
+                        self._json(HTTPStatus.BAD_REQUEST, {'error': 'emptyRoomTtlMinutes_invalid'})
+                        return
+                    minutes = max(10, min(1440, minutes))
+                    conn.execute(
+                        '''
+                        INSERT INTO watch_settings(setting_key, setting_value, updated_at)
+                        VALUES('empty_room_ttl_minutes', ?, datetime('now'))
+                        ON CONFLICT(setting_key) DO UPDATE SET
+                          setting_value=excluded.setting_value,
+                          updated_at=datetime('now')
+                        ''',
+                        (str(minutes),),
+                    )
+                    conn.commit()
+                ttl_minutes = get_empty_room_ttl_minutes(conn)
+                conn.commit()
+            self._json(
+                HTTPStatus.OK,
+                {
+                    'ok': True,
+                    'settings': {
+                        'emptyRoomTtlMinutes': int(ttl_minutes),
+                    },
+                },
+            )
+            return
+
         if path in delete_paths:
             room_code_val = normalize_room_code(payload.get('roomCode', ''), '')
             provided_admin_key = str(payload.get('adminKey', '')).strip()
@@ -1064,7 +1179,12 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     return
 
                 host_exists = conn.execute(
-                    'SELECT 1 FROM watch_participants WHERE room_code=? AND is_host=1 LIMIT 1',
+                    '''
+                    SELECT 1
+                    FROM watch_participants
+                    WHERE room_code=? AND is_host=1 AND last_seen_at >= datetime('now', '-30 minutes')
+                    LIMIT 1
+                    ''',
                     (room_code_val,),
                 ).fetchone()
                 join_is_host = bool(is_public_room(room_code_val) and host_exists is None)
@@ -1225,7 +1345,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                 ensure_public_rooms(conn)
                 cleanup_rooms(conn)
                 part = conn.execute(
-                    'SELECT participant_id, display_name, is_host FROM watch_participants WHERE participant_token=? AND room_code=?',
+                    'SELECT participant_id, display_name, is_host, is_cohost FROM watch_participants WHERE participant_token=? AND room_code=?',
                     (participant_token, room_code_val),
                 ).fetchone()
                 if part is None:
@@ -1234,18 +1354,20 @@ class TelewatchHandler(BaseHTTPRequestHandler):
 
                 conn.execute("UPDATE watch_participants SET last_seen_at=datetime('now') WHERE participant_token=?", (participant_token,))
                 room = conn.execute(
-                    'SELECT room_code, title, media_url, theme_key, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
+                    'SELECT room_code, title, media_url, theme_key, access_mode, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
                     (room_code_val,),
                 ).fetchone()
                 if room is None:
                     self._json(HTTPStatus.NOT_FOUND, {'error': 'room_not_found'})
                     return
 
-                if action in {'play', 'pause', 'seek', 'set_media', 'set_title', 'set_theme', 'delete_room', 'reset_room', 'mute_user', 'resolve_request', 'create_invite'} and not bool(part['is_host']):
+                is_host = bool(part['is_host'])
+                is_cohost = bool(part['is_cohost'])
+                if action in {'play', 'pause', 'seek', 'set_media', 'set_title', 'set_theme', 'delete_room', 'reset_room', 'resolve_request', 'create_invite', 'set_cohost'} and not is_host:
                     self._json(HTTPStatus.FORBIDDEN, {'error': 'host_required'})
                     return
-                if action in {'set_access_mode', 'kick_user', 'resolve_join_request'} and not bool(part['is_host']):
-                    self._json(HTTPStatus.FORBIDDEN, {'error': 'host_required'})
+                if action in {'set_access_mode', 'kick_user', 'resolve_join_request', 'mute_user', 'list_invites', 'revoke_invite'} and not (is_host or is_cohost):
+                    self._json(HTTPStatus.FORBIDDEN, {'error': 'moderator_required'})
                     return
 
                 event_payload = {}

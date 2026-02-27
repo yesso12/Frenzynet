@@ -912,7 +912,8 @@
       accessMode: 'public',
       pendingJoinRequests: [],
       pendingJoinToken: '',
-      inviteToken: ''
+      inviteToken: '',
+      autoRejoinTried: false
     };
     const SESSION_KEY = 'telewatch_session';
     const ADMIN_SESSION_KEY = 'telewatch_admin_session';
@@ -2752,6 +2753,7 @@
         state.participantId = data.selfParticipantId || state.participantId;
         state.participants = Array.isArray(data.participants) ? data.participants : [];
         state.pendingJoinRequests = Array.isArray(data.pendingJoinRequests) ? data.pendingJoinRequests : [];
+        state.autoRejoinTried = false;
         refreshMuteTargets();
         updateVoiceUi();
         renderParticipants();
@@ -2825,6 +2827,7 @@
       } catch (err) {
         const msg = String(err && err.message ? err.message : 'network_error');
         if (msg.includes('invalid_participant')) {
+          const prevRoom = String(state.roomCode || '');
           stopPollingLoop();
           clearSession();
           state.roomCode = '';
@@ -2832,7 +2835,17 @@
           state.participantId = '';
           state.participants = [];
           updateBadges();
-          setStatus(false, 'You are no longer in this room.');
+          const canAttemptAutoJoin = !state.autoRejoinTried && prevRoom && String(els.displayName && els.displayName.value || '').trim();
+          if (canAttemptAutoJoin) {
+            state.autoRejoinTried = true;
+            els.roomInput.value = prevRoom;
+            try {
+              await joinRoom();
+              setStatus(true, 'Session recovered after reconnect.');
+              return true;
+            } catch (_) {}
+          }
+          setStatus(false, 'Session expired. Rejoin the room.');
           setSyncLabel('disconnected');
           return false;
         }
