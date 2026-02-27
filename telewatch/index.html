@@ -240,6 +240,9 @@
       display: grid;
       gap: 6px;
     }
+    .ui-easy [data-advanced-ui="true"] {
+      display: none !important;
+    }
     .compact-mode .card,
     .compact-mode .sidebar { padding: 10px; }
     .compact-mode .block { padding: 8px; }
@@ -261,10 +264,10 @@
     }
     .card {
       border: 1px solid var(--line);
-      border-radius: 15px;
+      border-radius: 12px;
       background: var(--panel);
-      box-shadow: var(--shadow);
-      padding: 14px;
+      box-shadow: 0 6px 18px rgba(16, 24, 40, 0.06);
+      padding: 12px;
     }
     h2, h3 { margin: 0; }
     h2 { font-size: 18px; }
@@ -304,9 +307,9 @@
     .tab-pane.active { display: grid; gap: 10px; }
     .block {
       border: 1px solid var(--line-soft);
-      border-radius: 12px;
-      background: var(--panel-2);
-      padding: 11px;
+      border-radius: 10px;
+      background: color-mix(in srgb, var(--panel-2) 90%, #ffffff 10%);
+      padding: 9px;
     }
     .row { display: flex; gap: 8px; flex-wrap: wrap; }
     .row > * { flex: 1; min-width: 120px; }
@@ -380,9 +383,9 @@
     }
     .scene-card {
       border: 1px solid var(--line-soft);
-      border-radius: 12px;
+      border-radius: 10px;
       background: var(--panel-2);
-      padding: 10px;
+      padding: 9px;
       display: grid;
       gap: 8px;
     }
@@ -722,6 +725,10 @@
         <div class="side-block">
           <h3>Layout</h3>
           <div class="side-controls">
+            <select id="uiModeSelect">
+              <option value="easy">Easy View</option>
+              <option value="pro">Pro View</option>
+            </select>
             <select id="layoutModeSelect">
               <option value="standard">Standard Layout</option>
               <option value="focus">Focus Mode</option>
@@ -732,7 +739,7 @@
             </select>
           </div>
         </div>
-        <div class="side-block">
+        <div class="side-block" data-advanced-ui="true">
           <h3>Host Macros</h3>
           <div class="side-controls">
             <button id="macroStartBtn" class="secondary">Start Party</button>
@@ -740,7 +747,7 @@
             <button id="macroWrapBtn" class="secondary">Wrap Up</button>
           </div>
         </div>
-        <div class="side-block">
+        <div class="side-block" data-advanced-ui="true">
           <h3>Room Templates</h3>
           <div class="side-controls">
             <select id="templateSelect"></select>
@@ -768,7 +775,7 @@
           <button class="tab-btn active" data-tab-btn="session">Session</button>
           <button class="tab-btn" data-tab-btn="host">Host Setup</button>
           <button class="tab-btn" data-tab-btn="chat">Messages</button>
-          <button class="tab-btn" data-tab-btn="admin">Admin</button>
+          <button class="tab-btn" data-tab-btn="admin" data-advanced-ui="true">Admin</button>
         </div>
 
         <div class="tab-pane active" data-tab-pane="session">
@@ -886,7 +893,7 @@
                   <label>&nbsp;</label>
                   <button id="setAccessModeBtn" class="secondary">Set Access Mode</button>
                 </div>
-                <div class="full">
+                <div class="full" data-advanced-ui="true">
                   <label>Cohost Permission Matrix</label>
                   <div class="row">
                     <label><input id="cohostKickPerm" type="checkbox" checked /> Kick</label>
@@ -969,7 +976,7 @@
                 <button id="denyJoinBtn" class="secondary">Deny Join</button>
               </div>
             </div>
-            <div class="block stack full">
+            <div class="block stack full" data-advanced-ui="true">
               <h3>Request Queue (Host)</h3>
               <select id="requestQueueSelect"></select>
               <div class="row">
@@ -998,7 +1005,7 @@
           </div>
         </div>
 
-        <div class="tab-pane" data-tab-pane="admin">
+        <div class="tab-pane" data-tab-pane="admin" data-advanced-ui="true">
           <div class="block stack admin-login" id="adminLoginPanel">
             <h3>Admin Sign In</h3>
             <div class="muted">Sign in first to unlock admin actions.</div>
@@ -1073,9 +1080,9 @@
             <span class="status-chip" id="liveChip">Not Live</span>
             <span class="status-chip" id="shareChip">Not Sharing</span>
             <span class="status-chip" id="fullChip">Room Open</span>
-            <span class="status-chip" id="latencyChip">Latency --</span>
-            <span class="status-chip" id="driftChip">Drift --</span>
-            <span class="status-chip" id="reconnectChip">Reconnects 0</span>
+            <span class="status-chip" id="latencyChip" data-advanced-ui="true">Latency --</span>
+            <span class="status-chip" id="driftChip" data-advanced-ui="true">Drift --</span>
+            <span class="status-chip" id="reconnectChip" data-advanced-ui="true">Reconnects 0</span>
           </div>
         </div>
         <div id="sceneBoard" class="scene-board">
@@ -1123,7 +1130,7 @@
                   <textarea id="chatInput" placeholder="Send a message or timestamp note, e.g. pause at 12:34"></textarea>
                   <button id="chatBtn" class="secondary">Send Message</button>
                 </div>
-                <div id="eventsBlock">
+                <div id="eventsBlock" data-advanced-ui="true">
                   <h3>Events</h3>
                   <div class="muted">Playback and system events for this room.</div>
                   <div id="events" class="events"></div>
@@ -1132,7 +1139,7 @@
               <div class="block admin-delete">
                 <h3>Admin Console</h3>
                 <div class="muted">Open the dedicated admin dashboard for room deletes and account management.</div>
-                <div id="adminRoomsBlock" class="hidden" style="margin-top:8px">
+                <div id="adminRoomsBlock" class="hidden" style="margin-top:8px" data-advanced-ui="true">
                   <label for="adminRoomsSelect">Active Rooms (Auto-detected)</label>
                   <select id="adminRoomsSelect"></select>
                   <div id="adminRoomsMeta" class="admin-room-meta"></div>
@@ -1167,6 +1174,7 @@
       inviteInput: document.getElementById('inviteInput'),
       clientModeSelect: document.getElementById('clientModeSelect'),
       openDesktopBtn: document.getElementById('openDesktopBtn'),
+      uiModeSelect: document.getElementById('uiModeSelect'),
       layoutModeSelect: document.getElementById('layoutModeSelect'),
       densitySelect: document.getElementById('densitySelect'),
       macroStartBtn: document.getElementById('macroStartBtn'),
@@ -1347,7 +1355,8 @@
       lastPollLatencyMs: 0,
       cohostPerms: { kick: true, mute: true, access: true, pin: true },
       layoutMode: 'standard',
-      densityMode: 'comfortable'
+      densityMode: 'comfortable',
+      uiMode: 'easy'
       ,
       userToken: '',
       userEmail: '',
@@ -1366,6 +1375,7 @@
     const DENSITY_MODE_KEY = 'telewatch_density_mode';
     const ROOM_TEMPLATE_KEY = 'telewatch_room_templates_v1';
     const USER_SESSION_KEY = 'telewatch_user_session_v1';
+    const UI_MODE_KEY = 'telewatch_ui_mode';
 
     const THEMES = {
       clean: {
@@ -3183,6 +3193,22 @@
       }
     }
 
+    function applyUIMode(mode, persist) {
+      const clean = String(mode || 'easy').toLowerCase() === 'pro' ? 'pro' : 'easy';
+      state.uiMode = clean;
+      document.body.classList.toggle('ui-easy', clean === 'easy');
+      if (els.uiModeSelect) els.uiModeSelect.value = clean;
+      if (clean === 'easy') {
+        const activePane = document.querySelector('.tab-pane.active');
+        if (activePane && activePane.getAttribute('data-tab-pane') === 'admin') {
+          switchTab('session');
+        }
+      }
+      if (persist) {
+        try { localStorage.setItem(UI_MODE_KEY, clean); } catch (_) {}
+      }
+    }
+
     function readRoomTemplates() {
       try {
         const raw = localStorage.getItem(ROOM_TEMPLATE_KEY) || '[]';
@@ -4700,6 +4726,9 @@
     if (els.densitySelect) {
       els.densitySelect.addEventListener('change', () => applyDensityMode(els.densitySelect.value, true));
     }
+    if (els.uiModeSelect) {
+      els.uiModeSelect.addEventListener('change', () => applyUIMode(els.uiModeSelect.value, true));
+    }
     if (els.macroStartBtn) {
       els.macroStartBtn.addEventListener('click', async () => { try { await runHostMacro('start'); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); } });
     }
@@ -4954,8 +4983,12 @@
       const savedDensity = (() => {
         try { return localStorage.getItem(DENSITY_MODE_KEY) || 'comfortable'; } catch (_) { return 'comfortable'; }
       })();
+      const savedUIMode = (() => {
+        try { return localStorage.getItem(UI_MODE_KEY) || 'easy'; } catch (_) { return 'easy'; }
+      })();
       applyLayoutMode(savedLayout, false);
       applyDensityMode(savedDensity, false);
+      applyUIMode(savedUIMode, false);
       renderTemplateOptions();
       try {
         const rawUser = localStorage.getItem(USER_SESSION_KEY) || '';
