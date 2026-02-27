@@ -127,8 +127,27 @@
     .chat-feed div:last-child { border-bottom: 0; }
     .footer { margin-top: 12px; color: #88a8c8; font-size: 13px; }
     a { color: #70d8ff; }
+    .admin-delete {
+      border: 1px solid #355879;
+      background: #0a1829;
+      border-radius: 10px;
+      padding: 8px;
+    }
+    .admin-delete h3 { margin: 0 0 8px; }
+    .danger-btn {
+      background: linear-gradient(180deg, #ff8a8a, #db4a4a);
+      color: #2a0000;
+      border: 0;
+    }
     @media (max-width: 980px) {
       .grid { grid-template-columns: 1fr; }
+      .wrap { width: min(100%, calc(100% - 12px)); margin: 10px auto 16px; }
+      .card { padding: 10px; }
+      button { width: 100%; }
+      .row > button { flex: 1 1 100%; }
+      input, button, textarea { font-size: 16px; }
+      .badge { font-size: 12px; }
+      video { max-height: 250px; }
     }
   </style>
 </head>
@@ -161,7 +180,6 @@
         <div class="row">
           <button id="createBtn">Create Room</button>
           <button id="joinBtn" class="secondary">Join Room</button>
-          <button id="deleteCodeBtn" class="secondary">Delete Room Code</button>
         </div>
         <div class="muted" id="joinHint">Share your room code in Discord voice chat. Everyone runs their own stream account.</div>
 
@@ -199,6 +217,13 @@
           <button id="pauseBtn" class="secondary">Pause</button>
           <button id="resyncBtn" class="secondary">Force Re-sync</button>
         </div>
+        <div class="admin-delete">
+          <h3>Admin Delete Room</h3>
+          <div class="row">
+            <input id="adminDeleteCodeInput" placeholder="Room code to delete (blank = current room)" />
+            <button id="adminDeleteBtn" class="danger-btn">Delete Room (Admin)</button>
+          </div>
+        </div>
         <h3>Room Messages</h3>
         <div id="chatFeed" class="chat-feed"></div>
         <h3>Events</h3>
@@ -221,11 +246,12 @@
       displayName: document.getElementById('displayName'),
       roomInput: document.getElementById('roomInput'),
       adminKeyInput: document.getElementById('adminKeyInput'),
+      adminDeleteCodeInput: document.getElementById('adminDeleteCodeInput'),
       titleInput: document.getElementById('titleInput'),
       mediaInput: document.getElementById('mediaInput'),
       createBtn: document.getElementById('createBtn'),
       joinBtn: document.getElementById('joinBtn'),
-      deleteCodeBtn: document.getElementById('deleteCodeBtn'),
+      adminDeleteBtn: document.getElementById('adminDeleteBtn'),
       setMediaBtn: document.getElementById('setMediaBtn'),
       copyLinkBtn: document.getElementById('copyLinkBtn'),
       startShareBtn: document.getElementById('startShareBtn'),
@@ -597,8 +623,8 @@
       addEventLine('Joined room: ' + state.roomCode);
     }
 
-    async function deleteRoomByCode() {
-      const code = normalizeRoomCode(els.roomInput.value);
+    async function deleteRoomByCode(codeOverride) {
+      const code = normalizeRoomCode(codeOverride || els.adminDeleteCodeInput.value || els.roomInput.value || state.roomCode);
       const adminKey = String(els.adminKeyInput.value || '').trim();
       if (!code) {
         setStatus(false, 'Enter a room code first.');
@@ -754,7 +780,7 @@
     els.joinBtn.addEventListener('click', async () => {
       try { await joinRoom(); } catch (err) { setStatus(false, String(err.message || err)); }
     });
-    els.deleteCodeBtn.addEventListener('click', async () => {
+    els.adminDeleteBtn.addEventListener('click', async () => {
       try {
         await deleteRoomByCode();
       } catch (err) {
