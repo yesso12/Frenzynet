@@ -1,0 +1,28 @@
+<svg width="980" height="260" viewBox="0 0 980 260" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="g1" x1="0" y1="0" x2="980" y2="0" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6FF7FF"/>
+      <stop offset="0.5" stop-color="#2DD7FF"/>
+      <stop offset="1" stop-color="#00B8EA"/>
+    </linearGradient>
+    <linearGradient id="g2" x1="0" y1="0" x2="0" y2="260" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#BFE8FF" stop-opacity="0.95"/>
+      <stop offset="1" stop-color="#5FB6FF" stop-opacity="0.8"/>
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="160%" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="6" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect x="10" y="22" width="176" height="176" rx="28" fill="#081124" stroke="#244878" stroke-width="3"/>
+  <path d="M42 162L84 58H116L75 162H42Z" fill="url(#g1)" filter="url(#glow)"/>
+  <path d="M86 162L128 58H154L112 162H86Z" fill="url(#g2)"/>
+  <circle cx="147" cy="53" r="12" fill="#6CFFAF"/>
+
+  <text x="218" y="122" fill="url(#g1)" font-size="92" font-family="Orbitron, Rajdhani, Segoe UI, Arial, sans-serif" font-weight="800" letter-spacing="4">FRENZYNET</text>
+  <text x="222" y="176" fill="#A6C7F1" font-size="36" font-family="Rajdhani, Segoe UI, Arial, sans-serif" font-weight="600" letter-spacing="3">PERFORMANCE VPN CONTROL</text>
+</svg>

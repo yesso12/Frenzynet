@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Telewatch Admin | FrenzyNets</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/frenzynet-logo.svg" />
   <style>
     :root {
       --bg: #f3f6fb;
@@ -391,6 +392,7 @@
   <script>
     const API = 'https://api.frenzynets.com/api/telewatch';
     const KEY = 'telewatch_admin_session';
+    const ADMIN_CODE_KEY = 'telewatch_admin_code';
     const els = {
       status: document.getElementById('status'),
       loginCard: document.getElementById('loginCard'),
@@ -474,6 +476,42 @@
     }
 
     function setStatus(msg) { els.status.textContent = msg; }
+    function readAdminCode() {
+      return String(els.adminCode.value || '').trim();
+    }
+    function persistAdminCode() {
+      try {
+        const code = readAdminCode();
+        if (!code) {
+          localStorage.removeItem(ADMIN_CODE_KEY);
+          return;
+        }
+        localStorage.setItem(ADMIN_CODE_KEY, code);
+      } catch (_) {}
+    }
+    function loadAdminCode() {
+      try {
+        const code = String(localStorage.getItem(ADMIN_CODE_KEY) || '').trim();
+        if (code && !els.adminCode.value) els.adminCode.value = code;
+      } catch (_) {}
+    }
+    function ensureAdminCode() {
+      const code = readAdminCode();
+      if (code) return code;
+      setStatus('Admin code is required for this action.');
+      els.adminCode.focus();
+      throw new Error('admin_code_required');
+    }
+    function describeApiError(err) {
+      const msg = String(err && err.message ? err.message : err);
+      if (msg === 'admin_auth_invalid' || msg === 'admin_auth_required') return 'Session expired. Sign in again.';
+      if (msg === 'admin_code_required' || msg === 'admin_code_invalid') return 'Enter the correct admin code.';
+      if (msg === 'room_code_taken') return 'That room code already exists. Choose another room code.';
+      if (msg === 'host_router_limit') return 'This network already has an active hosted room. End it first.';
+      if (msg === 'room_capacity_reached') return 'Max room capacity reached on server.';
+      if (msg === 'main_event_room_locked') return 'Main Event room is locked to another code.';
+      return msg;
+    }
     function cleanCode(v) {
       return String(v || '').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 24);
     }
@@ -537,6 +575,7 @@
           mainHostToken: state.mainHostToken,
           mainHostRoomCode: state.mainHostRoomCode
         }));
+        persistAdminCode();
       } catch (_) {}
     }
     function load() {
@@ -635,7 +674,7 @@
         await refreshAdminRooms();
         await loadMainEventSettings();
       } catch (e) {
-        setStatus('Login failed: ' + (e.message || e));
+        setStatus('Login failed: ' + describeApiError(e));
       }
     });
 
@@ -649,14 +688,15 @@
 
     els.deleteRoomBtn.addEventListener('click', async () => {
       try {
+        const adminCode = ensureAdminCode();
         await api('/api/watch/delete', {
           roomCode: String(els.roomCodeDelete.value || '').trim().toUpperCase(),
           adminToken: state.token,
-          adminCode: String(els.adminCode.value || '').trim()
+          adminCode
         });
         setStatus('Room deleted.');
       } catch (e) {
-        setStatus('Delete failed: ' + (e.message || e));
+        setStatus('Delete failed: ' + describeApiError(e));
       }
     });
 
@@ -677,9 +717,10 @@
 
     els.saveMainEventBtn.addEventListener('click', async () => {
       try {
+        const adminCode = ensureAdminCode();
         const payload = {
           adminToken: state.token,
-          adminCode: String(els.adminCode.value || '').trim(),
+          adminCode,
           action: 'set',
           mainEventRoomCode: String(els.mainEventRoomCode.value || '').trim().toUpperCase(),
           mainEventLockdown: els.mainEventLockdown.value === '1',
@@ -690,7 +731,7 @@
         await refreshAdminRooms();
         setStatus('Main event settings saved.');
       } catch (e) {
-        setStatus('Save failed: ' + (e.message || e));
+        setStatus('Save failed: ' + describeApiError(e));
       }
     });
 
@@ -737,6 +778,7 @@
 
     els.quickStartMainEventBtn.addEventListener('click', async () => {
       try {
+        const adminCode = ensureAdminCode();
         setQuickState('Starting: preparing console defaults...');
         if (!els.mainEventCountdown.value) {
           els.mainEventCountdown.value = nextSaturdayLocalInput();
@@ -766,7 +808,7 @@
         setQuickState('Applying lockdown + countdown settings...');
         await api('/api/watch/admin/settings', {
           adminToken: state.token,
-          adminCode: String(els.adminCode.value || '').trim(),
+          adminCode,
           action: 'set',
           mainEventRoomCode: code,
           mainEventLockdown: true,
@@ -808,22 +850,23 @@
         setStatus(`Main Event quick setup complete for ${code}.`);
       } catch (e) {
         setQuickState('Quick Start failed. Check admin code / room state.');
-        setStatus('Quick Start failed: ' + (e.message || e));
+        setStatus('Quick Start failed: ' + describeApiError(e));
       }
     });
 
     els.quickStopMainEventBtn.addEventListener('click', async () => {
       try {
+        const adminCode = ensureAdminCode();
         const code = cleanCode(els.mainEventRoomCode.value || els.mainEventRooms.value || state.mainHostRoomCode);
         if (!code) throw new Error('main_event_room_required');
         await api('/api/watch/delete', {
           roomCode: code,
           adminToken: state.token,
-          adminCode: String(els.adminCode.value || '').trim()
+          adminCode
         });
         await api('/api/watch/admin/settings', {
           adminToken: state.token,
-          adminCode: String(els.adminCode.value || '').trim(),
+          adminCode,
           action: 'set',
           mainEventLockdown: false,
           mainEventRoomCode: ''
@@ -843,12 +886,13 @@
         setStatus(`Main Event stopped and room ${code} deleted.`);
       } catch (e) {
         setQuickState('Quick Stop failed.');
-        setStatus('Quick Stop failed: ' + (e.message || e));
+        setStatus('Quick Stop failed: ' + describeApiError(e));
       }
     });
 
     els.createMainEventBtn.addEventListener('click', async () => {
       try {
+        const adminCode = ensureAdminCode();
         const roomCode = cleanCode(els.mainEventRoomCode.value);
         const created = await api('/api/watch/create', {
           adminToken: state.token,
@@ -864,7 +908,7 @@
         els.mainEventRoomCode.value = code;
         await api('/api/watch/admin/settings', {
           adminToken: state.token,
-          adminCode: String(els.adminCode.value || '').trim(),
+          adminCode,
           action: 'set',
           mainEventRoomCode: code,
           mainEventLockdown: true,
@@ -877,7 +921,7 @@
         render();
         setStatus(`Main Event started in room ${code}.`);
       } catch (e) {
-        setStatus('Create Main Event failed: ' + (e.message || e));
+        setStatus('Create Main Event failed: ' + describeApiError(e));
       }
     });
 
@@ -894,11 +938,12 @@
 
     els.enableMainEventBtn.addEventListener('click', async () => {
       try {
+        const adminCode = ensureAdminCode();
         const code = cleanCode(els.mainEventRoomCode.value || els.mainEventRooms.value);
         if (!code) throw new Error('main_event_room_required');
         await api('/api/watch/admin/settings', {
           adminToken: state.token,
-          adminCode: String(els.adminCode.value || '').trim(),
+          adminCode,
           action: 'set',
           mainEventRoomCode: code,
           mainEventLockdown: true,
@@ -908,15 +953,16 @@
         await loadMainEventSettings();
         setStatus(`Main Event lockdown enabled for ${code}.`);
       } catch (e) {
-        setStatus('Enable failed: ' + (e.message || e));
+        setStatus('Enable failed: ' + describeApiError(e));
       }
     });
 
     els.disableMainEventBtn.addEventListener('click', async () => {
       try {
+        const adminCode = ensureAdminCode();
         await api('/api/watch/admin/settings', {
           adminToken: state.token,
-          adminCode: String(els.adminCode.value || '').trim(),
+          adminCode,
           action: 'set',
           mainEventLockdown: false
         });
@@ -924,7 +970,7 @@
         await loadMainEventSettings();
         setStatus('Main Event lockdown disabled.');
       } catch (e) {
-        setStatus('Disable failed: ' + (e.message || e));
+        setStatus('Disable failed: ' + describeApiError(e));
       }
     });
 
@@ -1029,16 +1075,17 @@
 
     els.stopMainEventBtn.addEventListener('click', async () => {
       try {
+        const adminCode = ensureAdminCode();
         const code = cleanCode(els.mainEventRoomCode.value || els.mainEventRooms.value);
         if (!code) throw new Error('main_event_room_required');
         await api('/api/watch/delete', {
           roomCode: code,
           adminToken: state.token,
-          adminCode: String(els.adminCode.value || '').trim()
+          adminCode
         });
         await api('/api/watch/admin/settings', {
           adminToken: state.token,
-          adminCode: String(els.adminCode.value || '').trim(),
+          adminCode,
           action: 'set',
           mainEventLockdown: false,
           mainEventRoomCode: ''
@@ -1053,7 +1100,7 @@
         render();
         setStatus(`Main Event stopped and room ${code} removed.`);
       } catch (e) {
-        setStatus('Stop failed: ' + (e.message || e));
+        setStatus('Stop failed: ' + describeApiError(e));
       }
     });
 
@@ -1105,9 +1152,10 @@
 
     els.addAdminBtn.addEventListener('click', async () => {
       try {
+        const adminCode = ensureAdminCode();
         await api('/api/watch/admin/add', {
           adminToken: state.token,
-          adminCode: String(els.adminCode.value || '').trim(),
+          adminCode,
           newUsername: String(els.newAdminUser.value || '').trim().toLowerCase(),
           newPassword: String(els.newAdminPass.value || '').trim()
         });
@@ -1115,7 +1163,7 @@
         await refreshAdmins();
         setStatus('Admin saved.');
       } catch (e) {
-        setStatus('Add/update failed: ' + (e.message || e));
+        setStatus('Add/update failed: ' + describeApiError(e));
       }
     });
 
@@ -1131,20 +1179,23 @@
 
     els.removeAdminBtn.addEventListener('click', async () => {
       try {
+        const adminCode = ensureAdminCode();
         const username = String(els.adminList.value || '').trim().toLowerCase();
         await api('/api/watch/admin/remove', {
           adminToken: state.token,
-          adminCode: String(els.adminCode.value || '').trim(),
+          adminCode,
           username
         });
         await refreshAdmins();
         setStatus('Admin removed: ' + username);
       } catch (e) {
-        setStatus('Remove failed: ' + (e.message || e));
+        setStatus('Remove failed: ' + describeApiError(e));
       }
     });
 
     load();
+    loadAdminCode();
+    els.adminCode.addEventListener('input', persistAdminCode);
     els.username.value = state.username || 'Trimbledustn@gmail.com';
     els.mainEventHostName.value = 'DFrenzy';
     els.mainEventCountdown.value = nextSaturdayLocalInput();
