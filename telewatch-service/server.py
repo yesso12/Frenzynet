@@ -9,10 +9,12 @@ import base64
 import datetime as dt
 import time
 import smtplib
+import threading
+import traceback
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlparse, parse_qsl, urlunparse
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
@@ -23,6 +25,8 @@ PORT = int(os.getenv('TELEWATCH_PORT', '9191'))
 DB_PATH = Path(os.getenv('TELEWATCH_DB_PATH', '/root/Frenzynet/telewatch-service/data/telewatch.db'))
 ROOM_TTL_HOURS = int(os.getenv('TELEWATCH_ROOM_TTL_HOURS', '24'))
 EMPTY_ROOM_TTL_MINUTES = max(10, min(1440, int(os.getenv('TELEWATCH_EMPTY_ROOM_TTL_MINUTES', '60'))))
+HOST_ROUTER_LOCK_MINUTES = max(1, min(60, int(os.getenv('TELEWATCH_HOST_ROUTER_LOCK_MINUTES', '8'))))
+ENFORCE_HOST_ROUTER_LIMIT = str(os.getenv('TELEWATCH_ENFORCE_HOST_ROUTER_LIMIT', '0')).strip().lower() in {'1', 'true', 'yes', 'on'}
 PUBLIC_ROOM_PREFIX = os.getenv('TELEWATCH_PUBLIC_ROOM_PREFIX', 'WATCH').strip().upper()[:6] or 'WATCH'
 PUBLIC_ROOM_COUNT = max(1, min(35, int(os.getenv('TELEWATCH_PUBLIC_ROOM_COUNT', '35'))))
 MAX_ROOMS = max(1, min(35, int(os.getenv('TELEWATCH_MAX_ROOMS', '35'))))
@@ -34,13 +38,44 @@ TELEWATCH_OWNER_PASSWORD = os.getenv('TELEWATCH_OWNER_PASSWORD', '1978Luke$$').s
 TELEWATCH_AUTH_SALT = os.getenv('TELEWATCH_AUTH_SALT', 'frenzy-telewatch-salt-v1').strip()
 ADMIN_SESSION_TTL_HOURS = max(1, min(168, int(os.getenv('TELEWATCH_ADMIN_SESSION_TTL_HOURS', '24'))))
 USER_SESSION_TTL_HOURS = max(1, min(720, int(os.getenv('TELEWATCH_USER_SESSION_TTL_HOURS', '168'))))
+USER_SESSION_COOKIE_NAME = os.getenv('TELEWATCH_USER_SESSION_COOKIE_NAME', 'telewatch_user_session').strip() or 'telewatch_user_session'
+USER_REMEMBER_DAYS = max(1, min(120, int(os.getenv('TELEWATCH_USER_REMEMBER_DAYS', '30'))))
+AUTH_WINDOW_SECONDS = max(60, min(3600, int(os.getenv('TELEWATCH_AUTH_WINDOW_SECONDS', '600'))))
+AUTH_MAX_ATTEMPTS = max(3, min(100, int(os.getenv('TELEWATCH_AUTH_MAX_ATTEMPTS', '20'))))
+IP_VERIFY_CODE_TTL_MINUTES = max(3, min(30, int(os.getenv('TELEWATCH_IP_VERIFY_CODE_TTL_MINUTES', '7'))))
+IP_VERIFY_MAX_ATTEMPTS = max(2, min(12, int(os.getenv('TELEWATCH_IP_VERIFY_MAX_ATTEMPTS', '5'))))
+IP_VERIFY_LOCKOUT_SECONDS = max(30, min(3600, int(os.getenv('TELEWATCH_IP_VERIFY_LOCKOUT_SECONDS', '300'))))
+IP_VERIFY_REQUEST_COOLDOWN_SECONDS = max(5, min(600, int(os.getenv('TELEWATCH_IP_VERIFY_REQUEST_COOLDOWN_SECONDS', '45'))))
 TELEWATCH_SFU_URL = os.getenv('TELEWATCH_SFU_URL', '').strip()
 TELEWATCH_SFU_API_KEY = os.getenv('TELEWATCH_SFU_API_KEY', '').strip()
 TELEWATCH_SFU_API_SECRET = os.getenv('TELEWATCH_SFU_API_SECRET', '').strip()
 TELEWATCH_SFU_DEFAULT_MODE = str(os.getenv('TELEWATCH_SFU_DEFAULT_MODE', 'webrtc')).strip().lower()
 TELEWATCH_ORIGIN = os.getenv('TELEWATCH_ORIGIN', 'https://frenzynets.com').strip().rstrip('/')
 TELEWATCH_API_PUBLIC = os.getenv('TELEWATCH_API_PUBLIC', 'https://api.frenzynets.com').strip().rstrip('/')
+TELEWATCH_ALLOWED_ORIGINS = {
+    p.strip().rstrip('/')
+    for p in str(os.getenv('TELEWATCH_ALLOWED_ORIGINS', f'{TELEWATCH_ORIGIN},{TELEWATCH_API_PUBLIC}')).split(',')
+    if p.strip()
+}
 TELEWATCH_INTERNAL_API_KEY = os.getenv('TELEWATCH_INTERNAL_API_KEY', '').strip()
+TELEWATCH_BILLING_MONTHLY_PRO_URL = os.getenv('TELEWATCH_BILLING_MONTHLY_PRO_URL', '').strip()
+TELEWATCH_BILLING_ANNUAL_PRO_URL = os.getenv('TELEWATCH_BILLING_ANNUAL_PRO_URL', '').strip()
+TELEWATCH_BILLING_LIFETIME_PRO_URL = os.getenv('TELEWATCH_BILLING_LIFETIME_PRO_URL', '').strip()
+TELEWATCH_BILLING_PORTAL_URL = os.getenv('TELEWATCH_BILLING_PORTAL_URL', '').strip()
+TELEWATCH_BILLING_SUCCESS_URL = os.getenv('TELEWATCH_BILLING_SUCCESS_URL', f'{TELEWATCH_ORIGIN}/telewatch/?billing=success').strip()
+TELEWATCH_BILLING_CANCEL_URL = os.getenv('TELEWATCH_BILLING_CANCEL_URL', f'{TELEWATCH_ORIGIN}/telewatch/?billing=cancel').strip()
+TELEWATCH_BILLING_SUPPORT_URL = os.getenv('TELEWATCH_BILLING_SUPPORT_URL', 'https://discord.gg/4uRUSAN498').strip()
+TELEWATCH_PRO_FEATURES = [
+    'High-quality stream presets (Ultra)',
+    'SFU relay mode for larger rooms',
+    'Saved rooms and device/session manager',
+    'Priority support queue',
+]
+TELEWATCH_PRO_CONS = [
+    'Paid tier adds billing overhead and payment processor fees',
+    'Higher support expectations and stricter uptime pressure',
+    'Feature roadmap pressure to maintain Pro value',
+]
 DISCORD_CLIENT_ID = os.getenv('TELEWATCH_DISCORD_CLIENT_ID', '').strip()
 DISCORD_CLIENT_SECRET = os.getenv('TELEWATCH_DISCORD_CLIENT_SECRET', '').strip()
 DISCORD_REDIRECT_URI = os.getenv('TELEWATCH_DISCORD_REDIRECT_URI', f'{TELEWATCH_API_PUBLIC}/api/telewatch/api/watch/user/discord/callback').strip()
@@ -57,9 +92,46 @@ TELEWATCH_SMTP_PASS = os.getenv('TELEWATCH_SMTP_PASS', '').strip()
 TELEWATCH_SMTP_FROM = os.getenv('TELEWATCH_SMTP_FROM', TELEWATCH_SMTP_USER or 'no-reply@frenzynets.com').strip()
 TELEWATCH_SMTP_TLS = str(os.getenv('TELEWATCH_SMTP_TLS', '1')).strip().lower() not in {'0', 'false', 'no'}
 
+_auth_failures: dict[str, list[float]] = {}
+_auth_fail_lock = threading.Lock()
+_request_metrics_lock = threading.Lock()
+_request_metrics = {
+    'started_at': utc_iso() if 'utc_iso' in globals() else '',
+    'total_requests': 0,
+    'total_errors': 0,
+    'by_method': {},
+    'by_path': {},
+    'by_status': {},
+}
+
 
 def utc_iso() -> str:
     return dt.datetime.now(dt.timezone.utc).isoformat(timespec='seconds').replace('+00:00', 'Z')
+
+
+with _request_metrics_lock:
+    _request_metrics['started_at'] = utc_iso()
+
+
+def metrics_record(method: str, path: str, status_code: int, error: bool = False) -> None:
+    m = str(method or '').upper()[:12] or 'UNKNOWN'
+    p = str(path or '').strip()[:180] or 'unknown'
+    s = str(int(status_code or 0))
+    with _request_metrics_lock:
+        _request_metrics['total_requests'] = int(_request_metrics.get('total_requests', 0)) + 1
+        by_method = _request_metrics.setdefault('by_method', {})
+        by_method[m] = int(by_method.get(m, 0)) + 1
+        by_path = _request_metrics.setdefault('by_path', {})
+        by_path[p] = int(by_path.get(p, 0)) + 1
+        by_status = _request_metrics.setdefault('by_status', {})
+        by_status[s] = int(by_status.get(s, 0)) + 1
+        if error:
+            _request_metrics['total_errors'] = int(_request_metrics.get('total_errors', 0)) + 1
+
+
+def metrics_snapshot() -> dict:
+    with _request_metrics_lock:
+        return json.loads(json.dumps(_request_metrics, ensure_ascii=True))
 
 
 def default_main_event_countdown_iso(now_utc: dt.datetime | None = None) -> str:
@@ -236,6 +308,48 @@ def smtp_configured() -> bool:
     return bool(TELEWATCH_SMTP_HOST and TELEWATCH_SMTP_FROM)
 
 
+def _auth_key(kind: str, axis: str, value: str) -> str:
+    return f'{str(kind or "").strip().lower()}:{str(axis or "").strip().lower()}:{str(value or "").strip().lower()[:180]}'
+
+
+def auth_fail_blocked(kind: str, ip_addr: str, username: str) -> bool:
+    now = time.time()
+    keys = [
+        _auth_key(kind, 'ip', ip_addr),
+        _auth_key(kind, 'user', username),
+    ]
+    with _auth_fail_lock:
+        for key in keys:
+            rows = [t for t in _auth_failures.get(key, []) if (now - t) <= AUTH_WINDOW_SECONDS]
+            _auth_failures[key] = rows
+            if len(rows) >= AUTH_MAX_ATTEMPTS:
+                return True
+    return False
+
+
+def auth_fail_record(kind: str, ip_addr: str, username: str) -> None:
+    now = time.time()
+    keys = [
+        _auth_key(kind, 'ip', ip_addr),
+        _auth_key(kind, 'user', username),
+    ]
+    with _auth_fail_lock:
+        for key in keys:
+            rows = [t for t in _auth_failures.get(key, []) if (now - t) <= AUTH_WINDOW_SECONDS]
+            rows.append(now)
+            _auth_failures[key] = rows[-AUTH_MAX_ATTEMPTS:]
+
+
+def auth_fail_clear(kind: str, ip_addr: str, username: str) -> None:
+    keys = [
+        _auth_key(kind, 'ip', ip_addr),
+        _auth_key(kind, 'user', username),
+    ]
+    with _auth_fail_lock:
+        for key in keys:
+            _auth_failures.pop(key, None)
+
+
 def send_password_reset_email(to_email: str, reset_url: str) -> None:
     msg = EmailMessage()
     msg['Subject'] = 'Frenzy Telewatch password reset'
@@ -261,6 +375,77 @@ def send_password_reset_email(to_email: str, reset_url: str) -> None:
             smtp.send_message(msg)
 
 
+def send_ip_verify_email(to_email: str, verify_code: str) -> None:
+    msg = EmailMessage()
+    msg['Subject'] = 'Frenzy Telewatch new login location verification code'
+    msg['From'] = TELEWATCH_SMTP_FROM
+    msg['To'] = to_email
+    msg.set_content(
+        (
+            'A login from a new IP address was detected for your Frenzy Telewatch account.\n\n'
+            f'Your verification code: {verify_code}\n\n'
+            f'This code expires in {IP_VERIFY_CODE_TTL_MINUTES} minutes.\n'
+            'If this was not you, change your password and revoke sessions.\n'
+        )
+    )
+    if TELEWATCH_SMTP_TLS:
+        with smtplib.SMTP(TELEWATCH_SMTP_HOST, TELEWATCH_SMTP_PORT, timeout=20) as smtp:
+            smtp.starttls()
+            if TELEWATCH_SMTP_USER:
+                smtp.login(TELEWATCH_SMTP_USER, TELEWATCH_SMTP_PASS)
+            smtp.send_message(msg)
+    else:
+        with smtplib.SMTP(TELEWATCH_SMTP_HOST, TELEWATCH_SMTP_PORT, timeout=20) as smtp:
+            if TELEWATCH_SMTP_USER:
+                smtp.login(TELEWATCH_SMTP_USER, TELEWATCH_SMTP_PASS)
+            smtp.send_message(msg)
+
+
+def send_ip_verify_discord_dm(discord_user_id: str, verify_code: str) -> tuple[bool, str]:
+    user_id = str(discord_user_id or '').strip()
+    if not (user_id and DISCORD_BOT_TOKEN):
+        return False, 'discord_not_configured_or_linked'
+    auth = {'Authorization': f'Bot {DISCORD_BOT_TOKEN}'}
+    try:
+        dm = json_post(
+            'https://discord.com/api/v10/users/@me/channels',
+            {'recipient_id': user_id},
+            headers=auth,
+            timeout_sec=12,
+        )
+        channel_id = str(dm.get('id') or '').strip()
+        if not channel_id:
+            return False, 'discord_dm_channel_create_failed'
+        json_post(
+            f'https://discord.com/api/v10/channels/{channel_id}/messages',
+            {
+                'content': (
+                    'Frenzy Telewatch login verification code: '
+                    f'`{verify_code}`\n'
+                    f'This code expires in {IP_VERIFY_CODE_TTL_MINUTES} minutes.'
+                )
+            },
+            headers=auth,
+            timeout_sec=12,
+        )
+        return True, 'ok'
+    except HTTPError as ex:
+        code = int(getattr(ex, 'code', 0) or 0)
+        if code == 401:
+            return False, 'discord_bot_unauthorized'
+        if code == 403:
+            return False, 'discord_dm_forbidden_or_blocked'
+        if code == 404:
+            return False, 'discord_user_not_found'
+        if code == 429:
+            return False, 'discord_rate_limited'
+        return False, f'discord_http_error_{code}'
+    except URLError:
+        return False, 'discord_network_error'
+    except Exception as ex:
+        return False, f'discord_dm_send_failed:{ex}'
+
+
 def room_code(length: int = 6) -> str:
     alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
     return ''.join(secrets.choice(alphabet) for _ in range(length))
@@ -283,10 +468,10 @@ def is_public_room(code: str) -> bool:
 
 def get_db() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH, timeout=30.0)
+    conn = sqlite3.connect(DB_PATH, timeout=60.0)
     conn.row_factory = sqlite3.Row
     conn.execute('PRAGMA foreign_keys=ON')
-    conn.execute('PRAGMA busy_timeout=30000')
+    conn.execute('PRAGMA busy_timeout=60000')
     try:
         conn.execute('PRAGMA journal_mode=WAL')
     except Exception:
@@ -426,6 +611,9 @@ def ensure_schema() -> None:
             CREATE TABLE IF NOT EXISTS watch_user_sessions (
               session_token TEXT PRIMARY KEY,
               username TEXT NOT NULL,
+              client_ip TEXT NOT NULL DEFAULT '',
+              user_agent TEXT NOT NULL DEFAULT '',
+              remember_me INTEGER NOT NULL DEFAULT 0,
               created_at TEXT NOT NULL DEFAULT (datetime('now')),
               last_seen_at TEXT NOT NULL DEFAULT (datetime('now')),
               FOREIGN KEY (username) REFERENCES watch_users(username) ON DELETE CASCADE
@@ -438,6 +626,29 @@ def ensure_schema() -> None:
               expires_at TEXT NOT NULL,
               used_at TEXT NOT NULL DEFAULT '',
               FOREIGN KEY (username) REFERENCES watch_users(username) ON DELETE CASCADE
+            );
+            CREATE TABLE IF NOT EXISTS watch_user_ip_verifications (
+              verify_token TEXT PRIMARY KEY,
+              username TEXT NOT NULL,
+              session_token TEXT NOT NULL,
+              requested_ip TEXT NOT NULL DEFAULT '',
+              verify_code_hash TEXT NOT NULL,
+              attempt_count INTEGER NOT NULL DEFAULT 0,
+              locked_until TEXT NOT NULL DEFAULT '',
+              created_at TEXT NOT NULL DEFAULT (datetime('now')),
+              expires_at TEXT NOT NULL,
+              used_at TEXT NOT NULL DEFAULT '',
+              FOREIGN KEY (username) REFERENCES watch_users(username) ON DELETE CASCADE,
+              FOREIGN KEY (session_token) REFERENCES watch_user_sessions(session_token) ON DELETE CASCADE
+            );
+            CREATE TABLE IF NOT EXISTS watch_audit_logs (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              event_type TEXT NOT NULL,
+              username TEXT NOT NULL DEFAULT '',
+              session_token TEXT NOT NULL DEFAULT '',
+              ip_addr TEXT NOT NULL DEFAULT '',
+              detail_json TEXT NOT NULL DEFAULT '{}',
+              created_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
             CREATE TABLE IF NOT EXISTS watch_user_saved_rooms (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -472,6 +683,8 @@ def ensure_schema() -> None:
             CREATE INDEX IF NOT EXISTS idx_watch_user_saved_rooms_user ON watch_user_saved_rooms(username, updated_at);
             CREATE INDEX IF NOT EXISTS idx_watch_user_entitlements_user ON watch_user_entitlements(username, updated_at);
             CREATE INDEX IF NOT EXISTS idx_watch_password_resets_user ON watch_password_resets(username, created_at);
+            CREATE INDEX IF NOT EXISTS idx_watch_user_ip_verifications_user ON watch_user_ip_verifications(username, created_at);
+            CREATE INDEX IF NOT EXISTS idx_watch_audit_logs_created ON watch_audit_logs(created_at);
             '''
         )
         try:
@@ -536,6 +749,26 @@ def ensure_schema() -> None:
             pass
         try:
             conn.execute("ALTER TABLE watch_users ADD COLUMN discord_username TEXT NOT NULL DEFAULT ''")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            conn.execute("ALTER TABLE watch_user_sessions ADD COLUMN client_ip TEXT NOT NULL DEFAULT ''")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            conn.execute("ALTER TABLE watch_user_sessions ADD COLUMN user_agent TEXT NOT NULL DEFAULT ''")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            conn.execute("ALTER TABLE watch_user_sessions ADD COLUMN remember_me INTEGER NOT NULL DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            conn.execute("ALTER TABLE watch_user_ip_verifications ADD COLUMN attempt_count INTEGER NOT NULL DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            conn.execute("ALTER TABLE watch_user_ip_verifications ADD COLUMN locked_until TEXT NOT NULL DEFAULT ''")
         except sqlite3.OperationalError:
             pass
         conn.execute(
@@ -637,6 +870,7 @@ def ensure_schema() -> None:
         conn.execute("DELETE FROM watch_room_bans WHERE expires_at <= datetime('now')")
         conn.execute("DELETE FROM watch_room_invites WHERE expires_at <= datetime('now') OR (max_uses > 0 AND used_count >= max_uses)")
         conn.execute("DELETE FROM watch_password_resets WHERE expires_at <= datetime('now') OR (used_at IS NOT NULL AND trim(used_at) != '')")
+        conn.execute("DELETE FROM watch_user_ip_verifications WHERE expires_at <= datetime('now') OR (used_at IS NOT NULL AND trim(used_at) != '')")
         ensure_public_rooms(conn)
         conn.commit()
 
@@ -804,14 +1038,26 @@ def create_admin_session(conn: sqlite3.Connection, username: str) -> str:
     return session_token
 
 
-def create_user_session(conn: sqlite3.Connection, username: str) -> str:
+def create_user_session(
+    conn: sqlite3.Connection,
+    username: str,
+    client_ip: str = '',
+    remember_me: bool = False,
+    user_agent: str = '',
+) -> str:
     session_token = secrets.token_urlsafe(40)
     conn.execute(
         '''
-        INSERT INTO watch_user_sessions(session_token, username, created_at, last_seen_at)
-        VALUES(?,?,datetime('now'),datetime('now'))
+        INSERT INTO watch_user_sessions(session_token, username, client_ip, user_agent, remember_me, created_at, last_seen_at)
+        VALUES(?,?,?,?,?,datetime('now'),datetime('now'))
         ''',
-        (session_token, clean_username(username)),
+        (
+            session_token,
+            clean_username(username),
+            str(client_ip or '').strip()[:64],
+            str(user_agent or '').strip()[:240],
+            1 if bool(remember_me) else 0,
+        ),
     )
     return session_token
 
@@ -836,19 +1082,19 @@ def validate_admin_session(conn: sqlite3.Connection, session_token: str) -> sqli
     return row
 
 
-def validate_user_session(conn: sqlite3.Connection, session_token: str) -> sqlite3.Row | None:
+def validate_user_session(conn: sqlite3.Connection, session_token: str, client_ip: str = '') -> sqlite3.Row | None:
     token = str(session_token or '').strip()
     if not token:
         return None
     row = conn.execute(
         '''
-        SELECT s.session_token, s.username, u.display_name, u.donation_tier
+        SELECT s.session_token, s.username, s.client_ip, s.user_agent, s.remember_me, u.display_name, u.donation_tier
         FROM watch_user_sessions s
         JOIN watch_users u ON u.username=s.username
-        WHERE s.session_token=? AND s.last_seen_at >= datetime('now', ?)
+        WHERE s.session_token=? AND s.last_seen_at >= datetime('now', ?) AND (trim(s.client_ip)='' OR s.client_ip=?)
         LIMIT 1
         ''',
-        (token, f'-{USER_SESSION_TTL_HOURS} hours'),
+        (token, f'-{USER_SESSION_TTL_HOURS} hours', str(client_ip or '').strip()[:64]),
     ).fetchone()
     if row is None:
         return None
@@ -856,15 +1102,77 @@ def validate_user_session(conn: sqlite3.Connection, session_token: str) -> sqlit
     return row
 
 
-def pricing_catalog() -> list[dict]:
-    # Baseline donation pricing aligned with common creator-support tiers.
-    return [
-        {'code': 'monthly_supporter', 'title': 'Supporter Monthly', 'donationTier': 'supporter', 'billingMode': 'monthly', 'amountUsd': 4.99, 'currency': 'USD'},
-        {'code': 'monthly_pro', 'title': 'Pro Monthly', 'donationTier': 'pro', 'billingMode': 'monthly', 'amountUsd': 9.99, 'currency': 'USD'},
-        {'code': 'lifetime_supporter', 'title': 'Supporter Lifetime', 'donationTier': 'supporter', 'billingMode': 'lifetime', 'amountUsd': 79.00, 'currency': 'USD'},
-        {'code': 'lifetime_pro', 'title': 'Pro Lifetime', 'donationTier': 'pro', 'billingMode': 'lifetime', 'amountUsd': 149.00, 'currency': 'USD'},
-        {'code': 'lifetime_vip_addon', 'title': 'VIP Badge Lifetime', 'donationTier': 'free', 'billingMode': 'lifetime', 'amountUsd': 29.00, 'currency': 'USD'},
+def _billing_link(base_url: str, username: str, plan_code: str) -> str:
+    base = str(base_url or '').strip()
+    if not base:
+        return ''
+    replaced = (
+        base.replace('{username}', clean_username(username))
+        .replace('{plan_code}', str(plan_code or '').strip().lower())
+        .replace('{success_url}', TELEWATCH_BILLING_SUCCESS_URL)
+        .replace('{cancel_url}', TELEWATCH_BILLING_CANCEL_URL)
+    )
+    parsed = urlparse(replaced)
+    if not parsed.scheme or not parsed.netloc:
+        return replaced
+    q = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    q.setdefault('email', clean_username(username))
+    q.setdefault('plan', str(plan_code or '').strip().lower())
+    q.setdefault('success_url', TELEWATCH_BILLING_SUCCESS_URL)
+    q.setdefault('cancel_url', TELEWATCH_BILLING_CANCEL_URL)
+    return urlunparse((parsed.scheme, parsed.netloc, parsed.path, parsed.params, urlencode(q), parsed.fragment))
+
+
+def checkout_url_for_plan(plan_code: str, username: str) -> str:
+    code = str(plan_code or '').strip().lower()
+    by_code = {
+        'pro_monthly': TELEWATCH_BILLING_MONTHLY_PRO_URL,
+        'pro_annual': TELEWATCH_BILLING_ANNUAL_PRO_URL,
+        'pro_lifetime_founders': TELEWATCH_BILLING_LIFETIME_PRO_URL,
+    }
+    return _billing_link(by_code.get(code, ''), username, code)
+
+
+def pricing_catalog(username: str = '') -> list[dict]:
+    email = clean_username(username)
+    plans = [
+        {
+            'code': 'pro_monthly',
+            'title': 'Pro Monthly',
+            'donationTier': 'pro',
+            'billingMode': 'monthly',
+            'amountUsd': 4.99,
+            'currency': 'USD',
+            'features': TELEWATCH_PRO_FEATURES,
+        },
+        {
+            'code': 'pro_annual',
+            'title': 'Pro Annual',
+            'donationTier': 'pro',
+            'billingMode': 'annual',
+            'amountUsd': 39.99,
+            'currency': 'USD',
+            'features': TELEWATCH_PRO_FEATURES,
+            'savingsLabel': 'Save 33% vs monthly',
+        },
+        {
+            'code': 'pro_lifetime_founders',
+            'title': 'Pro Lifetime (Founders)',
+            'donationTier': 'pro',
+            'billingMode': 'lifetime',
+            'amountUsd': 79.00,
+            'currency': 'USD',
+            'features': TELEWATCH_PRO_FEATURES,
+            'limited': True,
+        },
     ]
+    out: list[dict] = []
+    for item in plans:
+        row = dict(item)
+        row['checkoutUrl'] = checkout_url_for_plan(str(item.get('code') or ''), email)
+        row['checkoutEnabled'] = bool(str(row['checkoutUrl'] or '').strip())
+        out.append(row)
+    return out
 
 
 def entitlement_rows(conn: sqlite3.Connection, username: str) -> list[sqlite3.Row]:
@@ -877,6 +1185,68 @@ def entitlement_rows(conn: sqlite3.Connection, username: str) -> list[sqlite3.Ro
         ''',
         (clean_username(username),),
     ).fetchall()
+
+
+def upsert_user_entitlement(
+    conn: sqlite3.Connection,
+    username: str,
+    entitlement_code: str,
+    title: str,
+    donation_tier: str,
+    billing_mode: str,
+    amount_usd: float,
+    currency: str,
+    source: str,
+    status: str,
+    expires_at: str,
+    discord_role_id: str = '',
+) -> None:
+    uname = clean_username(username)
+    code = str(entitlement_code or '').strip().lower()[:80]
+    if not uname or not code:
+        raise ValueError('username_and_entitlement_code_required')
+    bmode = str(billing_mode or 'monthly').strip().lower()
+    if bmode not in {'monthly', 'annual', 'lifetime'}:
+        bmode = 'monthly'
+    stat = str(status or 'active').strip().lower()
+    if stat not in {'active', 'canceled', 'expired', 'paused'}:
+        stat = 'active'
+    exp = str(expires_at or '').strip()
+    if bmode == 'lifetime':
+        exp = ''
+    conn.execute(
+        '''
+        INSERT INTO watch_user_entitlements(
+          username, entitlement_code, title, donation_tier, billing_mode, amount_usd, currency,
+          source, status, expires_at, discord_role_id, created_at, updated_at
+        )
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,datetime('now'),datetime('now'))
+        ON CONFLICT(username, entitlement_code) DO UPDATE SET
+          title=excluded.title,
+          donation_tier=excluded.donation_tier,
+          billing_mode=excluded.billing_mode,
+          amount_usd=excluded.amount_usd,
+          currency=excluded.currency,
+          source=excluded.source,
+          status=excluded.status,
+          expires_at=excluded.expires_at,
+          discord_role_id=excluded.discord_role_id,
+          updated_at=datetime('now')
+        ''',
+        (
+            uname,
+            code,
+            str(title or code).strip()[:120],
+            clean_donation_tier(donation_tier, 'free'),
+            bmode,
+            float(amount_usd or 0),
+            str(currency or 'USD').strip().upper()[:12] or 'USD',
+            str(source or 'billing').strip()[:64] or 'billing',
+            stat,
+            exp,
+            str(discord_role_id or '').strip()[:80],
+        ),
+    )
 
 
 def compute_effective_tier(conn: sqlite3.Connection, username: str, base_tier: str) -> tuple[str, list[dict]]:
@@ -970,20 +1340,59 @@ def sync_discord_roles(conn: sqlite3.Connection, username: str) -> tuple[bool, s
     return True, 'ok'
 
 
+def audit_event(conn: sqlite3.Connection, event_type: str, username: str = '', session_token: str = '', ip_addr: str = '', detail: dict | None = None) -> None:
+    try:
+        conn.execute(
+            '''
+            INSERT INTO watch_audit_logs(event_type, username, session_token, ip_addr, detail_json, created_at)
+            VALUES(?,?,?,?,?,datetime('now'))
+            ''',
+            (
+                str(event_type or '').strip()[:80],
+                clean_username(username),
+                str(session_token or '').strip()[:180],
+                str(ip_addr or '').strip()[:64],
+                stable_json(detail or {}),
+            ),
+        )
+    except Exception:
+        # Auditing should never block core auth flows.
+        return
+
+
 class TelewatchHandler(BaseHTTPRequestHandler):
     server_version = 'Telewatch/1.0'
 
     def log_message(self, fmt, *args):
         return
 
-    def _json(self, code: int, data: dict):
+    def end_headers(self):
+        origin = str(self.headers.get('Origin', '')).strip().rstrip('/')
+        if origin and (origin in TELEWATCH_ALLOWED_ORIGINS):
+            self.send_header('Access-Control-Allow-Origin', origin)
+            self.send_header('Access-Control-Allow-Credentials', 'true')
+            self.send_header('Vary', 'Origin')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        super().end_headers()
+
+    def _json(self, code: int, data: dict, headers: list[tuple[str, str]] | None = None):
         body = json.dumps(data, ensure_ascii=True).encode('utf-8')
         try:
             self.send_response(code)
             self.send_header('Content-Type', 'application/json; charset=utf-8')
+            if headers:
+                for k, v in headers:
+                    self.send_header(str(k), str(v))
             self.send_header('Content-Length', str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+            metrics_record(
+                str(getattr(self, '_req_method', self.command or '')).upper(),
+                str(getattr(self, '_req_path', self.path or '')).strip(),
+                int(code),
+                error=bool(int(code) >= 500),
+            )
         except (BrokenPipeError, ConnectionResetError):
             # Client disconnected before response write completed.
             return
@@ -1010,12 +1419,79 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             return str(self.client_address[0]).strip()[:64]
         return ''
 
+    def _user_agent(self) -> str:
+        return str(self.headers.get('User-Agent', '')).strip()[:240]
+
+    def _cookie_value(self, key: str) -> str:
+        raw = str(self.headers.get('Cookie', '')).strip()
+        if not raw:
+            return ''
+        needle = str(key or '').strip()
+        if not needle:
+            return ''
+        for chunk in raw.split(';'):
+            part = chunk.strip()
+            if not part or '=' not in part:
+                continue
+            k, v = part.split('=', 1)
+            if k.strip() == needle:
+                return v.strip()[:512]
+        return ''
+
+    def _set_user_cookie_header(self, token: str, remember_me: bool) -> tuple[str, str]:
+        max_age = USER_REMEMBER_DAYS * 24 * 60 * 60
+        attrs = [f'{USER_SESSION_COOKIE_NAME}={str(token or "").strip()}', 'Path=/', 'HttpOnly', 'Secure', 'SameSite=Strict']
+        if remember_me:
+            attrs.append(f'Max-Age={max_age}')
+        return ('Set-Cookie', '; '.join(attrs))
+
+    def _clear_user_cookie_header(self) -> tuple[str, str]:
+        attrs = [f'{USER_SESSION_COOKIE_NAME}=', 'Path=/', 'HttpOnly', 'Secure', 'SameSite=Strict', 'Max-Age=0']
+        return ('Set-Cookie', '; '.join(attrs))
+
     def do_OPTIONS(self):
         self.send_response(HTTPStatus.NO_CONTENT)
         self.send_header('Content-Length', '0')
         self.end_headers()
 
+    def _handle_uncaught(self, method: str, path: str, ex: Exception):
+        trace = ''.join(traceback.format_exception(type(ex), ex, ex.__traceback__))
+        print(
+            f'[{utc_iso()}] telewatch_uncaught method={method} path={path} error={type(ex).__name__}:{str(ex)}\n{trace}',
+            flush=True,
+        )
+        if isinstance(ex, sqlite3.OperationalError) and 'locked' in str(ex).lower():
+            metrics_record(method, path, HTTPStatus.SERVICE_UNAVAILABLE, error=True)
+            try:
+                self._json(
+                    HTTPStatus.SERVICE_UNAVAILABLE,
+                    {'error': 'db_busy', 'message': 'Database is busy, retry shortly'},
+                    headers=[('Retry-After', '1')],
+                )
+            except Exception:
+                return
+            return
+        metrics_record(method, path, HTTPStatus.INTERNAL_SERVER_ERROR, error=True)
+        try:
+            self._json(
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+                {'error': 'internal_error', 'message': 'Unexpected server error'},
+            )
+        except Exception:
+            return
+
     def do_GET(self):
+        parsed = urlparse(self.path)
+        path = parsed.path.rstrip('/') or '/'
+        self._req_method = 'GET'
+        self._req_path = path
+        try:
+            return self._do_GET()
+        except Exception as ex:
+            self._handle_uncaught('GET', path, ex)
+            return
+
+    def _do_GET(self):
         parsed = urlparse(self.path)
         path = parsed.path.rstrip('/') or '/'
         q = parse_qs(parsed.query)
@@ -1038,6 +1514,12 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             '/api/telewatch/public-settings',
             '/api/telewatch/api/public-settings',
         }
+        health_paths = {
+            '/healthz',
+            '/api/healthz',
+            '/api/telewatch/healthz',
+            '/api/telewatch/api/healthz',
+        }
         discord_callback_paths = {
             '/watch/user/discord/callback',
             '/api/watch/user/discord/callback',
@@ -1045,6 +1527,23 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             '/api/telewatch/api/watch/user/discord/callback',
         }
         state_paths = {'/watch/state', '/api/watch/state', '/api/telewatch/watch/state', '/api/telewatch/api/watch/state'}
+        if path in health_paths:
+            db_ok = True
+            try:
+                with get_db() as conn:
+                    conn.execute('SELECT 1').fetchone()
+                    conn.commit()
+            except Exception:
+                db_ok = False
+            payload = {
+                'ok': bool(db_ok),
+                'service': 'telewatch',
+                'dbOk': bool(db_ok),
+                'serverNow': utc_iso(),
+                'metrics': metrics_snapshot(),
+            }
+            self._json(HTTPStatus.OK if db_ok else HTTPStatus.SERVICE_UNAVAILABLE, payload)
+            return
         if path in sfu_config_paths:
             self._json(
                 HTTPStatus.OK,
@@ -1470,6 +1969,17 @@ class TelewatchHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         parsed = urlparse(self.path)
         path = parsed.path.rstrip('/') or '/'
+        self._req_method = 'POST'
+        self._req_path = path
+        try:
+            return self._do_POST()
+        except Exception as ex:
+            self._handle_uncaught('POST', path, ex)
+            return
+
+    def _do_POST(self):
+        parsed = urlparse(self.path)
+        path = parsed.path.rstrip('/') or '/'
         payload, err = self._read_json()
         if err:
             self._json(HTTPStatus.BAD_REQUEST, {'error': err})
@@ -1512,6 +2022,18 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             '/api/watch/admin/rooms',
             '/api/telewatch/watch/admin/rooms',
             '/api/telewatch/api/watch/admin/rooms',
+        }
+        admin_host_router_status_paths = {
+            '/watch/admin/host-router/status',
+            '/api/watch/admin/host-router/status',
+            '/api/telewatch/watch/admin/host-router/status',
+            '/api/telewatch/api/watch/admin/host-router/status',
+        }
+        admin_metrics_paths = {
+            '/watch/admin/metrics',
+            '/api/watch/admin/metrics',
+            '/api/telewatch/watch/admin/metrics',
+            '/api/telewatch/api/watch/admin/metrics',
         }
         admin_settings_paths = {
             '/watch/admin/settings',
@@ -1561,6 +2083,42 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             '/api/telewatch/watch/user/logout',
             '/api/telewatch/api/watch/user/logout',
         }
+        user_sessions_paths = {
+            '/watch/user/sessions',
+            '/api/watch/user/sessions',
+            '/api/telewatch/watch/user/sessions',
+            '/api/telewatch/api/watch/user/sessions',
+        }
+        user_session_revoke_paths = {
+            '/watch/user/session/revoke',
+            '/api/watch/user/session/revoke',
+            '/api/telewatch/watch/user/session/revoke',
+            '/api/telewatch/api/watch/user/session/revoke',
+        }
+        user_session_revoke_others_paths = {
+            '/watch/user/session/revoke-others',
+            '/api/watch/user/session/revoke-others',
+            '/api/telewatch/watch/user/session/revoke-others',
+            '/api/telewatch/api/watch/user/session/revoke-others',
+        }
+        user_logout_all_paths = {
+            '/watch/user/logout-all',
+            '/api/watch/user/logout-all',
+            '/api/telewatch/watch/user/logout-all',
+            '/api/telewatch/api/watch/user/logout-all',
+        }
+        user_ip_verify_request_paths = {
+            '/watch/user/ip-verify/request',
+            '/api/watch/user/ip-verify/request',
+            '/api/telewatch/watch/user/ip-verify/request',
+            '/api/telewatch/api/watch/user/ip-verify/request',
+        }
+        user_ip_verify_confirm_paths = {
+            '/watch/user/ip-verify/confirm',
+            '/api/watch/user/ip-verify/confirm',
+            '/api/telewatch/watch/user/ip-verify/confirm',
+            '/api/telewatch/api/watch/user/ip-verify/confirm',
+        }
         user_password_reset_request_paths = {
             '/watch/user/password-reset/request',
             '/api/watch/user/password-reset/request',
@@ -1596,6 +2154,18 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             '/api/watch/donations/catalog',
             '/api/telewatch/watch/donations/catalog',
             '/api/telewatch/api/watch/donations/catalog',
+        }
+        user_billing_start_paths = {
+            '/watch/user/billing/start',
+            '/api/watch/user/billing/start',
+            '/api/telewatch/watch/user/billing/start',
+            '/api/telewatch/api/watch/user/billing/start',
+        }
+        user_billing_portal_paths = {
+            '/watch/user/billing/portal',
+            '/api/watch/user/billing/portal',
+            '/api/telewatch/watch/user/billing/portal',
+            '/api/telewatch/api/watch/user/billing/portal',
         }
         admin_user_entitlement_set_paths = {
             '/watch/admin/user-entitlement/set',
@@ -1672,6 +2242,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
         delete_paths = {'/watch/delete', '/api/watch/delete', '/api/telewatch/watch/delete', '/api/telewatch/api/watch/delete'}
         control_paths = {'/watch/control', '/api/watch/control', '/api/telewatch/watch/control', '/api/telewatch/api/watch/control'}
         client_ip = self._client_ip()
+        user_agent = self._user_agent()
 
         def is_ip_blocked(conn: sqlite3.Connection, ip_addr: str) -> bool:
             if not ip_addr:
@@ -1691,6 +2262,27 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                 (clean,),
             ).fetchone()
             return row is not None
+
+        def user_token_from_request() -> str:
+            from_body = str(payload.get('userToken', '')).strip()
+            if from_body:
+                return from_body
+            return self._cookie_value(USER_SESSION_COOKIE_NAME)
+
+        def user_auth(conn: sqlite3.Connection, user_token: str) -> tuple[sqlite3.Row | None, str]:
+            token = str(user_token or '').strip()
+            if not token:
+                return None, 'missing'
+            row = validate_user_session(conn, token, client_ip=client_ip)
+            if row is not None:
+                return row, 'ok'
+            probe = conn.execute(
+                'SELECT username FROM watch_user_sessions WHERE session_token=? LIMIT 1',
+                (token,),
+            ).fetchone()
+            if probe is not None:
+                return None, 'ip_changed'
+            return None, 'invalid'
 
         if path in sfu_token_paths:
             if not sfu_enabled():
@@ -1750,23 +2342,33 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             username = clean_username(payload.get('username', ''))
             password = str(payload.get('password', '')).strip()
             display_name = clean_name(payload.get('displayName', ''), 'Viewer')
+            remember_raw = payload.get('rememberMe', False)
+            remember_me = bool(remember_raw) if isinstance(remember_raw, bool) else str(remember_raw).strip().lower() in {'1', 'true', 'yes', 'on'}
+            if auth_fail_blocked('register', client_ip, username):
+                self._json(HTTPStatus.TOO_MANY_REQUESTS, {'error': 'auth_rate_limited'})
+                return
             if len(username) < 3 or '@' not in username:
+                auth_fail_record('register', client_ip, username)
                 self._json(HTTPStatus.BAD_REQUEST, {'error': 'username_invalid'})
                 return
             if len(password) < 8:
+                auth_fail_record('register', client_ip, username)
                 self._json(HTTPStatus.BAD_REQUEST, {'error': 'password_too_short'})
                 return
             with get_db() as conn:
                 ensure_public_rooms(conn)
                 cleanup_rooms(conn)
                 if is_ip_blocked(conn, client_ip):
+                    auth_fail_record('register', client_ip, username)
                     self._json(HTTPStatus.FORBIDDEN, {'error': 'ip_blocked'})
                     return
                 if is_user_blocked(conn, username):
+                    auth_fail_record('register', client_ip, username)
                     self._json(HTTPStatus.FORBIDDEN, {'error': 'user_blocked'})
                     return
                 exists = conn.execute('SELECT 1 FROM watch_users WHERE username=? LIMIT 1', (username,)).fetchone()
                 if exists is not None:
+                    auth_fail_record('register', client_ip, username)
                     self._json(HTTPStatus.CONFLICT, {'error': 'user_exists'})
                     return
                 conn.execute(
@@ -1776,8 +2378,9 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     ''',
                     (username, hash_password(password), display_name),
                 )
-                token = create_user_session(conn, username)
+                token = create_user_session(conn, username, client_ip=client_ip, remember_me=remember_me, user_agent=user_agent)
                 conn.commit()
+            auth_fail_clear('register', client_ip, username)
             self._json(
                 HTTPStatus.OK,
                 {
@@ -1790,22 +2393,31 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     'discordUsername': '',
                     'entitlements': [],
                 },
+                headers=[self._set_user_cookie_header(token, remember_me)],
             )
             return
 
         if path in user_login_paths:
             username = clean_username(payload.get('username', ''))
             password = str(payload.get('password', '')).strip()
+            remember_raw = payload.get('rememberMe', False)
+            remember_me = bool(remember_raw) if isinstance(remember_raw, bool) else str(remember_raw).strip().lower() in {'1', 'true', 'yes', 'on'}
+            if auth_fail_blocked('login', client_ip, username):
+                self._json(HTTPStatus.TOO_MANY_REQUESTS, {'error': 'auth_rate_limited'})
+                return
             if not username or not password:
+                auth_fail_record('login', client_ip, username)
                 self._json(HTTPStatus.BAD_REQUEST, {'error': 'username_password_required'})
                 return
             with get_db() as conn:
                 ensure_public_rooms(conn)
                 cleanup_rooms(conn)
                 if is_ip_blocked(conn, client_ip):
+                    auth_fail_record('login', client_ip, username)
                     self._json(HTTPStatus.FORBIDDEN, {'error': 'ip_blocked'})
                     return
                 if is_user_blocked(conn, username):
+                    auth_fail_record('login', client_ip, username)
                     self._json(HTTPStatus.FORBIDDEN, {'error': 'user_blocked'})
                     return
                 row = conn.execute(
@@ -1813,9 +2425,10 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     (username,),
                 ).fetchone()
                 if row is None or not verify_password(password, row['password_hash']):
+                    auth_fail_record('login', client_ip, username)
                     self._json(HTTPStatus.UNAUTHORIZED, {'error': 'user_login_invalid'})
                     return
-                token = create_user_session(conn, username)
+                token = create_user_session(conn, username, client_ip=client_ip, remember_me=remember_me, user_agent=user_agent)
                 effective_tier, active_items = compute_effective_tier(
                     conn,
                     username,
@@ -1823,6 +2436,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                 )
                 sync_discord_roles(conn, username)
                 conn.commit()
+            auth_fail_clear('login', client_ip, username)
             self._json(
                 HTTPStatus.OK,
                 {
@@ -1835,17 +2449,18 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     'discordUsername': str(row['discord_username'] if 'discord_username' in row.keys() else ''),
                     'entitlements': active_items,
                 },
+                headers=[self._set_user_cookie_header(token, remember_me)],
             )
             return
 
         if path in user_me_paths:
-            user_token = str(payload.get('userToken', '')).strip()
+            user_token = user_token_from_request()
             with get_db() as conn:
                 ensure_public_rooms(conn)
                 cleanup_rooms(conn)
-                row = validate_user_session(conn, user_token)
+                row, auth_state = user_auth(conn, user_token)
                 if row is None:
-                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'user_auth_invalid'})
+                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'user_auth_ip_changed' if auth_state == 'ip_changed' else 'user_auth_invalid'})
                     return
                 effective_tier, active_items = compute_effective_tier(
                     conn,
@@ -1873,13 +2488,13 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             return
 
         if path in user_saved_rooms_paths:
-            user_token = str(payload.get('userToken', '')).strip()
+            user_token = user_token_from_request()
             with get_db() as conn:
                 ensure_public_rooms(conn)
                 cleanup_rooms(conn)
-                user = validate_user_session(conn, user_token)
+                user, auth_state = user_auth(conn, user_token)
                 if user is None:
-                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'user_auth_invalid'})
+                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'user_auth_ip_changed' if auth_state == 'ip_changed' else 'user_auth_invalid'})
                     return
                 rows = conn.execute(
                     '''
@@ -1910,7 +2525,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             return
 
         if path in user_save_room_paths:
-            user_token = str(payload.get('userToken', '')).strip()
+            user_token = user_token_from_request()
             room_code_val = normalize_room_code(payload.get('roomCode', ''), '')
             room_title = str(payload.get('roomTitle', '')).strip()[:160]
             saved_name = str(payload.get('savedName', '')).strip()[:120]
@@ -1920,9 +2535,9 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             with get_db() as conn:
                 ensure_public_rooms(conn)
                 cleanup_rooms(conn)
-                user = validate_user_session(conn, user_token)
+                user, auth_state = user_auth(conn, user_token)
                 if user is None:
-                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'user_auth_invalid'})
+                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'user_auth_ip_changed' if auth_state == 'ip_changed' else 'user_auth_invalid'})
                     return
                 conn.execute(
                     '''
@@ -1940,7 +2555,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             return
 
         if path in user_delete_saved_room_paths:
-            user_token = str(payload.get('userToken', '')).strip()
+            user_token = user_token_from_request()
             room_code_val = normalize_room_code(payload.get('roomCode', ''), '')
             if not room_code_val:
                 self._json(HTTPStatus.BAD_REQUEST, {'error': 'roomCode_required'})
@@ -1948,9 +2563,9 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             with get_db() as conn:
                 ensure_public_rooms(conn)
                 cleanup_rooms(conn)
-                user = validate_user_session(conn, user_token)
+                user, auth_state = user_auth(conn, user_token)
                 if user is None:
-                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'user_auth_invalid'})
+                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'user_auth_ip_changed' if auth_state == 'ip_changed' else 'user_auth_invalid'})
                     return
                 conn.execute(
                     'DELETE FROM watch_user_saved_rooms WHERE username=? AND room_code=?',
@@ -1961,14 +2576,327 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             return
 
         if path in user_logout_paths:
-            user_token = str(payload.get('userToken', '')).strip()
-            if not user_token:
-                self._json(HTTPStatus.BAD_REQUEST, {'error': 'userToken_required'})
+            user_token = user_token_from_request()
+            with get_db() as conn:
+                if user_token:
+                    conn.execute('DELETE FROM watch_user_sessions WHERE session_token=?', (user_token,))
+                conn.commit()
+            self._json(HTTPStatus.OK, {'ok': True, 'loggedOut': True}, headers=[self._clear_user_cookie_header()])
+            return
+
+        if path in user_sessions_paths:
+            user_token = user_token_from_request()
+            with get_db() as conn:
+                ensure_public_rooms(conn)
+                cleanup_rooms(conn)
+                user, auth_state = user_auth(conn, user_token)
+                if user is None:
+                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'user_auth_ip_changed' if auth_state == 'ip_changed' else 'user_auth_invalid'})
+                    return
+                rows = conn.execute(
+                    '''
+                    SELECT session_token, client_ip, user_agent, remember_me, created_at, last_seen_at
+                    FROM watch_user_sessions
+                    WHERE username=?
+                    ORDER BY last_seen_at DESC
+                    LIMIT 40
+                    ''',
+                    (str(user['username'] or ''),),
+                ).fetchall()
+                conn.commit()
+            self._json(
+                HTTPStatus.OK,
+                {
+                    'ok': True,
+                    'sessions': [
+                        {
+                            'sessionToken': str(r['session_token'] or ''),
+                            'clientIp': str(r['client_ip'] or ''),
+                            'userAgent': str(r['user_agent'] or ''),
+                            'rememberMe': bool(int(r['remember_me'] or 0)),
+                            'createdAt': str(r['created_at'] or ''),
+                            'lastSeenAt': str(r['last_seen_at'] or ''),
+                            'isCurrent': bool(str(r['session_token'] or '') == str(user_token or '')),
+                        }
+                        for r in rows
+                    ],
+                },
+            )
+            return
+
+        if path in user_session_revoke_paths:
+            user_token = user_token_from_request()
+            target_token = str(payload.get('sessionToken', '')).strip()
+            if not target_token:
+                self._json(HTTPStatus.BAD_REQUEST, {'error': 'sessionToken_required'})
                 return
             with get_db() as conn:
-                conn.execute('DELETE FROM watch_user_sessions WHERE session_token=?', (user_token,))
+                ensure_public_rooms(conn)
+                cleanup_rooms(conn)
+                user, auth_state = user_auth(conn, user_token)
+                if user is None:
+                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'user_auth_ip_changed' if auth_state == 'ip_changed' else 'user_auth_invalid'})
+                    return
+                conn.execute(
+                    'DELETE FROM watch_user_sessions WHERE username=? AND session_token=?',
+                    (str(user['username'] or ''), target_token),
+                )
+                audit_event(
+                    conn,
+                    'user_session_revoked',
+                    username=str(user['username'] or ''),
+                    session_token=target_token,
+                    ip_addr=client_ip,
+                    detail={'actorSession': str(user_token or '')[:32]},
+                )
                 conn.commit()
-            self._json(HTTPStatus.OK, {'ok': True, 'loggedOut': True})
+            self._json(HTTPStatus.OK, {'ok': True, 'revoked': True, 'sessionToken': target_token})
+            return
+
+        if path in user_session_revoke_others_paths:
+            user_token = user_token_from_request()
+            with get_db() as conn:
+                ensure_public_rooms(conn)
+                cleanup_rooms(conn)
+                user, auth_state = user_auth(conn, user_token)
+                if user is None:
+                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'user_auth_ip_changed' if auth_state == 'ip_changed' else 'user_auth_invalid'})
+                    return
+                conn.execute(
+                    'DELETE FROM watch_user_sessions WHERE username=? AND session_token<>?',
+                    (str(user['username'] or ''), str(user_token or '').strip()),
+                )
+                audit_event(
+                    conn,
+                    'user_sessions_revoked_others',
+                    username=str(user['username'] or ''),
+                    session_token=str(user_token or '').strip(),
+                    ip_addr=client_ip,
+                )
+                conn.commit()
+            self._json(HTTPStatus.OK, {'ok': True, 'revokedOthers': True})
+            return
+
+        if path in user_logout_all_paths:
+            user_token = user_token_from_request()
+            with get_db() as conn:
+                ensure_public_rooms(conn)
+                cleanup_rooms(conn)
+                user, auth_state = user_auth(conn, user_token)
+                if user is None:
+                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'user_auth_ip_changed' if auth_state == 'ip_changed' else 'user_auth_invalid'})
+                    return
+                conn.execute(
+                    'DELETE FROM watch_user_sessions WHERE username=?',
+                    (str(user['username'] or ''),),
+                )
+                conn.commit()
+            self._json(HTTPStatus.OK, {'ok': True, 'loggedOutAll': True}, headers=[self._clear_user_cookie_header()])
+            return
+
+        if path in user_ip_verify_request_paths:
+            user_token = user_token_from_request()
+            channel = str(payload.get('channel', 'email')).strip().lower()
+            dev_code = ''
+            discord_sent = False
+            discord_reason = ''
+            email_sent = False
+            with get_db() as conn:
+                ensure_public_rooms(conn)
+                cleanup_rooms(conn)
+                token = str(user_token or '').strip()
+                if not token:
+                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'user_auth_invalid'})
+                    return
+                session_row = conn.execute(
+                    '''
+                    SELECT s.session_token, s.username, s.client_ip
+                    FROM watch_user_sessions s
+                    WHERE s.session_token=?
+                    LIMIT 1
+                    ''',
+                    (token,),
+                ).fetchone()
+                if session_row is None:
+                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'user_auth_invalid'})
+                    return
+                # If already on same IP there is nothing to verify.
+                if str(session_row['client_ip'] or '').strip() == str(client_ip or '').strip():
+                    self._json(HTTPStatus.OK, {'ok': True, 'alreadyVerified': True})
+                    return
+                cooldown_row = conn.execute(
+                    '''
+                    SELECT 1
+                    FROM watch_user_ip_verifications
+                    WHERE session_token=?
+                      AND created_at >= datetime('now', ?)
+                    LIMIT 1
+                    ''',
+                    (token, f'-{IP_VERIFY_REQUEST_COOLDOWN_SECONDS} seconds'),
+                ).fetchone()
+                if cooldown_row is not None:
+                    self._json(
+                        HTTPStatus.TOO_MANY_REQUESTS,
+                        {
+                            'error': 'verification_request_cooldown',
+                            'retryAfterSec': IP_VERIFY_REQUEST_COOLDOWN_SECONDS,
+                        },
+                    )
+                    return
+                username = clean_username(session_row['username'])
+                user_row = conn.execute(
+                    'SELECT discord_user_id FROM watch_users WHERE username=? LIMIT 1',
+                    (username,),
+                ).fetchone()
+                discord_user_id = str(user_row['discord_user_id'] or '') if user_row and 'discord_user_id' in user_row.keys() else ''
+                verify_code = ''.join(secrets.choice('0123456789') for _ in range(6))
+                verify_token = secrets.token_urlsafe(24)
+                code_hash = hash_password(f'ipverify:{verify_code}')
+                conn.execute(
+                    "DELETE FROM watch_user_ip_verifications WHERE session_token=? AND (used_at IS NULL OR trim(used_at)='')",
+                    (token,),
+                )
+                conn.execute(
+                    '''
+                    INSERT INTO watch_user_ip_verifications(verify_token, username, session_token, requested_ip, verify_code_hash, created_at, expires_at, used_at)
+                    VALUES(?,?,?,?,?,datetime('now'),datetime('now', ?),'')
+                    ''',
+                    (verify_token, username, token, str(client_ip or '')[:64], code_hash, f'+{IP_VERIFY_CODE_TTL_MINUTES} minutes'),
+                )
+                if channel in {'discord', 'dm'}:
+                    try:
+                        discord_sent, discord_reason = send_ip_verify_discord_dm(discord_user_id, verify_code)
+                    except Exception:
+                        discord_reason = 'discord_unknown_error'
+                        discord_sent = False
+                if (not discord_sent) and smtp_configured():
+                    try:
+                        send_ip_verify_email(username, verify_code)
+                        email_sent = True
+                    except Exception:
+                        email_sent = False
+                if (not discord_sent) and (not email_sent):
+                    dev_code = verify_code
+                audit_event(
+                    conn,
+                    'ip_verify_requested',
+                    username=username,
+                    session_token=token,
+                    ip_addr=client_ip,
+                    detail={
+                        'requestedChannel': channel,
+                        'discordSent': bool(discord_sent),
+                        'discordReason': str(discord_reason or ''),
+                        'emailSent': bool(email_sent),
+                        'deliveredVia': 'discord' if discord_sent else ('email' if email_sent else 'dev'),
+                    },
+                )
+                conn.commit()
+            self._json(
+                HTTPStatus.OK,
+                {
+                    'ok': True,
+                    'verificationRequested': True,
+                    'emailSent': bool(email_sent),
+                    'discordSent': bool(discord_sent),
+                    'discordReason': str(discord_reason or ''),
+                    'deliveredVia': 'discord' if discord_sent else ('email' if email_sent else 'dev'),
+                    'devCode': dev_code,
+                },
+            )
+            return
+
+        if path in user_ip_verify_confirm_paths:
+            user_token = user_token_from_request()
+            verify_code = str(payload.get('verifyCode', '')).strip()[:16]
+            if len(verify_code) < 4:
+                self._json(HTTPStatus.BAD_REQUEST, {'error': 'verifyCode_required'})
+                return
+            with get_db() as conn:
+                ensure_public_rooms(conn)
+                cleanup_rooms(conn)
+                token = str(user_token or '').strip()
+                if not token:
+                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'user_auth_invalid'})
+                    return
+                row = conn.execute(
+                    '''
+                    SELECT verify_token, session_token, verify_code_hash, attempt_count, locked_until
+                    FROM watch_user_ip_verifications
+                    WHERE session_token=?
+                      AND expires_at > datetime('now')
+                      AND (used_at IS NULL OR trim(used_at)='')
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                    ''',
+                    (token,),
+                ).fetchone()
+                if row is None:
+                    self._json(HTTPStatus.BAD_REQUEST, {'error': 'verification_not_requested'})
+                    return
+                lock_until = str(row['locked_until'] or '').strip()
+                if lock_until:
+                    lock_row = conn.execute("SELECT 1 WHERE datetime('now') < datetime(?)", (lock_until,)).fetchone()
+                    if lock_row is not None:
+                        self._json(
+                            HTTPStatus.TOO_MANY_REQUESTS,
+                            {'error': 'verifyCode_rate_limited', 'retryAfterSec': IP_VERIFY_LOCKOUT_SECONDS},
+                        )
+                        return
+                if hash_password(f'ipverify:{verify_code}') != str(row['verify_code_hash'] or ''):
+                    attempts = int(row['attempt_count'] or 0) + 1
+                    if attempts >= IP_VERIFY_MAX_ATTEMPTS:
+                        conn.execute(
+                            '''
+                            UPDATE watch_user_ip_verifications
+                            SET attempt_count=?, locked_until=datetime('now', ?), used_at=datetime('now')
+                            WHERE verify_token=?
+                            ''',
+                            (attempts, f'+{IP_VERIFY_LOCKOUT_SECONDS} seconds', str(row['verify_token'] or '')),
+                        )
+                        audit_event(
+                            conn,
+                            'ip_verify_locked',
+                            session_token=token,
+                            ip_addr=client_ip,
+                            detail={'attempts': attempts},
+                        )
+                        conn.commit()
+                        self._json(
+                            HTTPStatus.TOO_MANY_REQUESTS,
+                            {'error': 'verifyCode_rate_limited', 'retryAfterSec': IP_VERIFY_LOCKOUT_SECONDS},
+                        )
+                        return
+                    conn.execute(
+                        "UPDATE watch_user_ip_verifications SET attempt_count=? WHERE verify_token=?",
+                        (attempts, str(row['verify_token'] or '')),
+                    )
+                    audit_event(
+                        conn,
+                        'ip_verify_failed',
+                        session_token=token,
+                        ip_addr=client_ip,
+                        detail={'attempts': attempts},
+                    )
+                    conn.commit()
+                    self._json(HTTPStatus.BAD_REQUEST, {'error': 'verifyCode_invalid', 'attempts': attempts, 'maxAttempts': IP_VERIFY_MAX_ATTEMPTS})
+                    return
+                conn.execute(
+                    "UPDATE watch_user_sessions SET client_ip=?, last_seen_at=datetime('now') WHERE session_token=?",
+                    (str(client_ip or '')[:64], token),
+                )
+                conn.execute(
+                    "UPDATE watch_user_ip_verifications SET used_at=datetime('now') WHERE verify_token=?",
+                    (str(row['verify_token'] or ''),),
+                )
+                audit_event(
+                    conn,
+                    'ip_verify_success',
+                    session_token=token,
+                    ip_addr=client_ip,
+                )
+                conn.commit()
+            self._json(HTTPStatus.OK, {'ok': True, 'verified': True})
             return
 
         if path in user_password_reset_request_paths:
@@ -2061,21 +2989,78 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             return
 
         if path in donation_catalog_paths:
-            self._json(HTTPStatus.OK, {'ok': True, 'plans': pricing_catalog()})
+            self._json(
+                HTTPStatus.OK,
+                {
+                    'ok': True,
+                    'plans': pricing_catalog(''),
+                    'billingPortalUrl': TELEWATCH_BILLING_PORTAL_URL,
+                    'supportUrl': TELEWATCH_BILLING_SUPPORT_URL,
+                    'proCons': TELEWATCH_PRO_CONS,
+                },
+            )
+            return
+
+        if path in user_billing_start_paths:
+            plan_code = str(payload.get('planCode', '')).strip().lower()
+            user_token = user_token_from_request()
+            if not plan_code:
+                self._json(HTTPStatus.BAD_REQUEST, {'error': 'planCode_required'})
+                return
+            with get_db() as conn:
+                user, auth_state = user_auth(conn, user_token)
+                if user is None:
+                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'user_auth_ip_changed' if auth_state == 'ip_changed' else 'user_auth_invalid'})
+                    return
+                username = str(user['username'] or '')
+                plans = pricing_catalog(username)
+                plan = next((p for p in plans if str(p.get('code') or '').strip().lower() == plan_code), None)
+                if plan is None:
+                    self._json(HTTPStatus.NOT_FOUND, {'error': 'plan_not_found'})
+                    return
+                checkout_url = str(plan.get('checkoutUrl') or '').strip()
+                if not checkout_url:
+                    self._json(
+                        HTTPStatus.SERVICE_UNAVAILABLE,
+                        {'error': 'billing_checkout_not_configured', 'planCode': plan_code},
+                    )
+                    return
+                conn.commit()
+            self._json(
+                HTTPStatus.OK,
+                {
+                    'ok': True,
+                    'planCode': plan_code,
+                    'checkoutUrl': checkout_url,
+                },
+            )
+            return
+
+        if path in user_billing_portal_paths:
+            user_token = user_token_from_request()
+            with get_db() as conn:
+                user, auth_state = user_auth(conn, user_token)
+                if user is None:
+                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'user_auth_ip_changed' if auth_state == 'ip_changed' else 'user_auth_invalid'})
+                    return
+                username = str(user['username'] or '')
+                if not TELEWATCH_BILLING_PORTAL_URL:
+                    self._json(HTTPStatus.SERVICE_UNAVAILABLE, {'error': 'billing_portal_not_configured'})
+                    return
+                portal_url = _billing_link(TELEWATCH_BILLING_PORTAL_URL, username, 'portal')
+                conn.commit()
+            self._json(HTTPStatus.OK, {'ok': True, 'portalUrl': portal_url})
             return
 
         if path in user_discord_link_start_paths:
-            user_token = str(payload.get('userToken', '')).strip()
-            if not user_token:
-                self._json(HTTPStatus.BAD_REQUEST, {'error': 'userToken_required'})
-                return
+            user_token = user_token_from_request()
             if not (DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET and DISCORD_REDIRECT_URI):
                 self._json(HTTPStatus.SERVICE_UNAVAILABLE, {'error': 'discord_oauth_not_configured'})
                 return
             with get_db() as conn:
-                user = validate_user_session(conn, user_token)
+                user, auth_state = user_auth(conn, user_token)
                 if user is None:
-                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'user_auth_invalid'})
+                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'user_auth_ip_changed' if auth_state == 'ip_changed' else 'user_auth_invalid'})
                     return
                 username = str(user['username'] or '')
                 state_token = secrets.token_urlsafe(32)
@@ -2105,14 +3090,11 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             return
 
         if path in user_discord_status_paths:
-            user_token = str(payload.get('userToken', '')).strip()
-            if not user_token:
-                self._json(HTTPStatus.BAD_REQUEST, {'error': 'userToken_required'})
-                return
+            user_token = user_token_from_request()
             with get_db() as conn:
-                user = validate_user_session(conn, user_token)
+                user, auth_state = user_auth(conn, user_token)
                 if user is None:
-                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'user_auth_invalid'})
+                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'user_auth_ip_changed' if auth_state == 'ip_changed' else 'user_auth_invalid'})
                     return
                 row = conn.execute(
                     'SELECT discord_user_id, discord_username, donation_tier FROM watch_users WHERE username=? LIMIT 1',
@@ -2137,14 +3119,11 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             return
 
         if path in user_discord_unlink_paths:
-            user_token = str(payload.get('userToken', '')).strip()
-            if not user_token:
-                self._json(HTTPStatus.BAD_REQUEST, {'error': 'userToken_required'})
-                return
+            user_token = user_token_from_request()
             with get_db() as conn:
-                user = validate_user_session(conn, user_token)
+                user, auth_state = user_auth(conn, user_token)
                 if user is None:
-                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'user_auth_invalid'})
+                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'user_auth_ip_changed' if auth_state == 'ip_changed' else 'user_auth_invalid'})
                     return
                 username = str(user['username'] or '')
                 conn.execute(
@@ -2158,6 +3137,192 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                 conn.execute('DELETE FROM watch_discord_link_states WHERE username=?', (username,))
                 conn.commit()
             self._json(HTTPStatus.OK, {'ok': True, 'unlinked': True})
+            return
+
+        if path in admin_user_entitlement_set_paths:
+            admin_token = str(payload.get('adminToken', '')).strip()
+            admin_code = str(payload.get('adminCode', '')).strip()
+            username = clean_username(payload.get('username', ''))
+            entitlement_code = str(payload.get('entitlementCode', '')).strip().lower()
+            title = str(payload.get('title', '')).strip()
+            donation_tier = clean_donation_tier(payload.get('donationTier', 'free'), 'free')
+            billing_mode = str(payload.get('billingMode', 'monthly')).strip().lower()
+            amount_usd = float(payload.get('amountUsd', 0) or 0)
+            currency = str(payload.get('currency', 'USD')).strip().upper() or 'USD'
+            source = str(payload.get('source', 'admin')).strip() or 'admin'
+            status = str(payload.get('status', 'active')).strip().lower() or 'active'
+            expires_at = str(payload.get('expiresAt', '')).strip()
+            discord_role_id = str(payload.get('discordRoleId', '')).strip()
+            if not admin_token:
+                self._json(HTTPStatus.UNAUTHORIZED, {'error': 'admin_auth_required'})
+                return
+            if TELEWATCH_ADMIN_CODE and admin_code != TELEWATCH_ADMIN_CODE:
+                self._json(HTTPStatus.FORBIDDEN, {'error': 'admin_code_invalid'})
+                return
+            if not username:
+                self._json(HTTPStatus.BAD_REQUEST, {'error': 'username_required'})
+                return
+            if not entitlement_code:
+                self._json(HTTPStatus.BAD_REQUEST, {'error': 'entitlementCode_required'})
+                return
+            if not expires_at and status == 'active':
+                now = dt.datetime.now(dt.timezone.utc).replace(microsecond=0)
+                if billing_mode == 'monthly':
+                    expires_at = (now + dt.timedelta(days=31)).isoformat().replace('+00:00', 'Z')
+                elif billing_mode == 'annual':
+                    expires_at = (now + dt.timedelta(days=366)).isoformat().replace('+00:00', 'Z')
+            with get_db() as conn:
+                actor = validate_admin_session(conn, admin_token)
+                if actor is None:
+                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'admin_auth_invalid'})
+                    return
+                user_row = conn.execute('SELECT username, donation_tier FROM watch_users WHERE username=? LIMIT 1', (username,)).fetchone()
+                if user_row is None:
+                    self._json(HTTPStatus.NOT_FOUND, {'error': 'user_not_found'})
+                    return
+                upsert_user_entitlement(
+                    conn,
+                    username=username,
+                    entitlement_code=entitlement_code,
+                    title=title or entitlement_code,
+                    donation_tier=donation_tier,
+                    billing_mode=billing_mode,
+                    amount_usd=amount_usd,
+                    currency=currency,
+                    source=source,
+                    status=status,
+                    expires_at=expires_at,
+                    discord_role_id=discord_role_id,
+                )
+                effective_tier, active_items = compute_effective_tier(
+                    conn,
+                    username,
+                    clean_donation_tier(user_row['donation_tier'] if 'donation_tier' in user_row.keys() else 'free', 'free'),
+                )
+                sync_discord_roles(conn, username)
+                audit_event(
+                    conn,
+                    'admin_entitlement_set',
+                    username=username,
+                    session_token=admin_token,
+                    ip_addr=client_ip,
+                    detail={'entitlementCode': entitlement_code, 'billingMode': billing_mode, 'status': status, 'actor': str(actor['username'] or 'admin')},
+                )
+                conn.commit()
+            self._json(
+                HTTPStatus.OK,
+                {'ok': True, 'username': username, 'effectiveTier': effective_tier, 'entitlements': active_items},
+            )
+            return
+
+        if path in admin_user_entitlement_list_paths:
+            admin_token = str(payload.get('adminToken', '')).strip()
+            username = clean_username(payload.get('username', ''))
+            if not admin_token:
+                self._json(HTTPStatus.UNAUTHORIZED, {'error': 'admin_auth_required'})
+                return
+            if not username:
+                self._json(HTTPStatus.BAD_REQUEST, {'error': 'username_required'})
+                return
+            with get_db() as conn:
+                actor = validate_admin_session(conn, admin_token)
+                if actor is None:
+                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'admin_auth_invalid'})
+                    return
+                rows = entitlement_rows(conn, username)
+                conn.commit()
+            self._json(
+                HTTPStatus.OK,
+                {
+                    'ok': True,
+                    'username': username,
+                    'entitlements': [
+                        {
+                            'code': str(r['entitlement_code'] or ''),
+                            'title': str(r['title'] or ''),
+                            'donationTier': clean_donation_tier(r['donation_tier'], 'free'),
+                            'billingMode': str(r['billing_mode'] or 'monthly').strip().lower() or 'monthly',
+                            'amountUsd': float(r['amount_usd'] or 0),
+                            'currency': str(r['currency'] or 'USD'),
+                            'source': str(r['source'] or ''),
+                            'status': str(r['status'] or 'active'),
+                            'expiresAt': str(r['expires_at'] or ''),
+                            'discordRoleId': str(r['discord_role_id'] or ''),
+                        }
+                        for r in rows
+                    ],
+                },
+            )
+            return
+
+        if path in internal_entitlement_upsert_paths:
+            internal_key = str(self.headers.get('X-Telewatch-Internal-Key', '')).strip() or str(payload.get('internalKey', '')).strip()
+            if not TELEWATCH_INTERNAL_API_KEY:
+                self._json(HTTPStatus.SERVICE_UNAVAILABLE, {'error': 'internal_api_key_not_configured'})
+                return
+            if internal_key != TELEWATCH_INTERNAL_API_KEY:
+                self._json(HTTPStatus.FORBIDDEN, {'error': 'internal_api_key_invalid'})
+                return
+            username = clean_username(payload.get('username', ''))
+            entitlement_code = str(payload.get('entitlementCode', '')).strip().lower()
+            title = str(payload.get('title', '')).strip()
+            donation_tier = clean_donation_tier(payload.get('donationTier', 'free'), 'free')
+            billing_mode = str(payload.get('billingMode', 'monthly')).strip().lower()
+            amount_usd = float(payload.get('amountUsd', 0) or 0)
+            currency = str(payload.get('currency', 'USD')).strip().upper() or 'USD'
+            source = str(payload.get('source', 'billing')).strip() or 'billing'
+            status = str(payload.get('status', 'active')).strip().lower() or 'active'
+            expires_at = str(payload.get('expiresAt', '')).strip()
+            discord_role_id = str(payload.get('discordRoleId', '')).strip()
+            if not username:
+                self._json(HTTPStatus.BAD_REQUEST, {'error': 'username_required'})
+                return
+            if not entitlement_code:
+                self._json(HTTPStatus.BAD_REQUEST, {'error': 'entitlementCode_required'})
+                return
+            if not expires_at and status == 'active':
+                now = dt.datetime.now(dt.timezone.utc).replace(microsecond=0)
+                if billing_mode == 'monthly':
+                    expires_at = (now + dt.timedelta(days=31)).isoformat().replace('+00:00', 'Z')
+                elif billing_mode == 'annual':
+                    expires_at = (now + dt.timedelta(days=366)).isoformat().replace('+00:00', 'Z')
+            with get_db() as conn:
+                user_row = conn.execute('SELECT username, donation_tier FROM watch_users WHERE username=? LIMIT 1', (username,)).fetchone()
+                if user_row is None:
+                    self._json(HTTPStatus.NOT_FOUND, {'error': 'user_not_found'})
+                    return
+                upsert_user_entitlement(
+                    conn,
+                    username=username,
+                    entitlement_code=entitlement_code,
+                    title=title or entitlement_code,
+                    donation_tier=donation_tier,
+                    billing_mode=billing_mode,
+                    amount_usd=amount_usd,
+                    currency=currency,
+                    source=source,
+                    status=status,
+                    expires_at=expires_at,
+                    discord_role_id=discord_role_id,
+                )
+                effective_tier, active_items = compute_effective_tier(
+                    conn,
+                    username,
+                    clean_donation_tier(user_row['donation_tier'] if 'donation_tier' in user_row.keys() else 'free', 'free'),
+                )
+                sync_discord_roles(conn, username)
+                audit_event(
+                    conn,
+                    'internal_entitlement_upsert',
+                    username=username,
+                    ip_addr=client_ip,
+                    detail={'entitlementCode': entitlement_code, 'billingMode': billing_mode, 'status': status, 'source': source},
+                )
+                conn.commit()
+            self._json(
+                HTTPStatus.OK,
+                {'ok': True, 'username': username, 'effectiveTier': effective_tier, 'entitlements': active_items},
+            )
             return
 
         if path in admin_ip_block_add_paths:
@@ -2610,6 +3775,135 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             )
             return
 
+        if path in admin_host_router_status_paths:
+            admin_token = str(payload.get('adminToken', '')).strip()
+            requested_ip = str(payload.get('ipAddress', '')).strip()[:64] or str(client_ip or '').strip()[:64]
+            room_code_filter = normalize_room_code(payload.get('roomCode', ''), '')
+            with get_db() as conn:
+                ensure_public_rooms(conn)
+                cleanup_rooms(conn)
+                actor = validate_admin_session(conn, admin_token)
+                if actor is None:
+                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'admin_auth_invalid'})
+                    return
+                lock_rows = []
+                if requested_ip:
+                    lock_rows = conn.execute(
+                        '''
+                        SELECT
+                          r.room_code,
+                          r.title,
+                          r.host_ip,
+                          r.updated_at,
+                          p.display_name AS host_name,
+                          p.last_seen_at AS host_last_seen,
+                          (
+                            SELECT COUNT(*)
+                            FROM watch_participants p2
+                            WHERE p2.room_code=r.room_code
+                              AND p2.last_seen_at >= datetime('now', '-20 minutes')
+                          ) AS active_count
+                        FROM watch_rooms r
+                        JOIN watch_participants p
+                          ON p.room_code=r.room_code
+                         AND p.participant_token=r.host_token
+                         AND p.is_host=1
+                        WHERE r.host_ip=?
+                          AND p.last_seen_at >= datetime('now', ?)
+                        ORDER BY p.last_seen_at DESC, r.updated_at DESC
+                        LIMIT 12
+                        ''',
+                        (requested_ip, f'-{HOST_ROUTER_LOCK_MINUTES} minutes'),
+                    ).fetchall()
+                room_info = None
+                if room_code_filter:
+                    room_info = conn.execute(
+                        '''
+                        SELECT
+                          r.room_code,
+                          r.title,
+                          r.host_ip,
+                          r.updated_at,
+                          (
+                            SELECT p.display_name
+                            FROM watch_participants p
+                            WHERE p.room_code=r.room_code
+                              AND p.participant_token=r.host_token
+                              AND p.is_host=1
+                            LIMIT 1
+                          ) AS host_name,
+                          (
+                            SELECT p.last_seen_at
+                            FROM watch_participants p
+                            WHERE p.room_code=r.room_code
+                              AND p.participant_token=r.host_token
+                              AND p.is_host=1
+                            LIMIT 1
+                          ) AS host_last_seen,
+                          (
+                            SELECT COUNT(*)
+                            FROM watch_participants p2
+                            WHERE p2.room_code=r.room_code
+                              AND p2.last_seen_at >= datetime('now', '-20 minutes')
+                          ) AS active_count
+                        FROM watch_rooms r
+                        WHERE r.room_code=?
+                        LIMIT 1
+                        ''',
+                        (room_code_filter,),
+                    ).fetchone()
+                conn.commit()
+            lock_payload = [
+                {
+                    'roomCode': str(r['room_code'] or ''),
+                    'title': str(r['title'] or ''),
+                    'hostIp': str(r['host_ip'] or ''),
+                    'hostName': str(r['host_name'] or ''),
+                    'hostLastSeenAt': str(r['host_last_seen'] or ''),
+                    'updatedAt': str(r['updated_at'] or ''),
+                    'activeCount': int(r['active_count'] or 0),
+                }
+                for r in lock_rows
+            ]
+            room_info_payload = (
+                {
+                    'roomCode': str(room_info['room_code'] or ''),
+                    'title': str(room_info['title'] or ''),
+                    'hostIp': str(room_info['host_ip'] or ''),
+                    'hostName': str(room_info['host_name'] or ''),
+                    'hostLastSeenAt': str(room_info['host_last_seen'] or ''),
+                    'updatedAt': str(room_info['updated_at'] or ''),
+                    'activeCount': int(room_info['active_count'] or 0),
+                }
+                if room_info is not None
+                else None
+            )
+            self._json(
+                HTTPStatus.OK,
+                {
+                    'ok': True,
+                    'requestedIp': requested_ip,
+                    'roomCodeFilter': room_code_filter,
+                    'lockActive': bool(lock_payload),
+                    'lockRooms': lock_payload,
+                    'roomInfo': room_info_payload,
+                },
+            )
+            return
+
+        if path in admin_metrics_paths:
+            admin_token = str(payload.get('adminToken', '')).strip()
+            with get_db() as conn:
+                ensure_public_rooms(conn)
+                cleanup_rooms(conn)
+                actor = validate_admin_session(conn, admin_token)
+                if actor is None:
+                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'admin_auth_invalid'})
+                    return
+                conn.commit()
+            self._json(HTTPStatus.OK, {'ok': True, 'metrics': metrics_snapshot(), 'serverNow': utc_iso()})
+            return
+
         if path in admin_settings_paths:
             admin_token = str(payload.get('adminToken', '')).strip()
             action = str(payload.get('action', 'get')).strip().lower()
@@ -2777,7 +4071,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     self._json(HTTPStatus.CONFLICT, {'error': 'room_capacity_reached', 'maxRooms': MAX_ROOMS})
                     return
                 host_ip = str(client_ip or '').strip()[:64]
-                if host_ip:
+                if host_ip and ENFORCE_HOST_ROUTER_LIMIT:
                     existing_host_room = conn.execute(
                         '''
                         SELECT r.room_code
@@ -2787,17 +4081,17 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                          AND p.participant_token=r.host_token
                          AND p.is_host=1
                         WHERE r.host_ip=?
-                          AND p.last_seen_at >= datetime('now', '-30 minutes')
+                          AND p.last_seen_at >= datetime('now', ?)
                         LIMIT 1
                         ''',
-                        (host_ip,),
+                        (host_ip, f'-{HOST_ROUTER_LOCK_MINUTES} minutes'),
                     ).fetchone()
                     if existing_host_room is not None:
                         self._json(
                             HTTPStatus.CONFLICT,
                             {
                                 'error': 'host_router_limit',
-                                'message': 'This router/network can host only one watch party at a time.',
+                                'message': f'This router/network can host only one watch party at a time (lock window: {HOST_ROUTER_LOCK_MINUTES} minutes).',
                                 'roomCode': str(existing_host_room['room_code'] or ''),
                             },
                         )
