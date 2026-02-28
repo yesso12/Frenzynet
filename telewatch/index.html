@@ -244,6 +244,38 @@
       display: grid;
       gap: 6px;
     }
+    .pricing-list {
+      display: grid;
+      gap: 8px;
+    }
+    .pricing-card {
+      border: 1px solid var(--line-soft);
+      border-radius: 10px;
+      background: var(--input-bg);
+      padding: 8px;
+      display: grid;
+      gap: 6px;
+    }
+    .pricing-title {
+      font-weight: 700;
+      font-size: 12px;
+    }
+    .pricing-price {
+      font-weight: 800;
+      font-size: 16px;
+      color: var(--accent-strong);
+    }
+    .pricing-meta {
+      color: var(--muted);
+      font-size: 11px;
+    }
+    .pricing-features {
+      margin: 0;
+      padding-left: 16px;
+      display: grid;
+      gap: 3px;
+      font-size: 11px;
+    }
     .ui-easy [data-advanced-ui="true"] {
       display: none !important;
     }
@@ -1066,6 +1098,16 @@
           </div>
         </div>
         <div class="side-block">
+          <h3>Pro Plans</h3>
+          <div id="pricingList" class="pricing-list">
+            <div class="muted">Loading plans…</div>
+          </div>
+          <div class="row">
+            <button id="billingPortalBtn" class="secondary">Manage Billing</button>
+          </div>
+          <div id="pricingCons" class="muted">Paid plan tradeoffs will show here.</div>
+        </div>
+        <div class="side-block">
           <h3>Layout</h3>
           <div class="side-controls">
             <select id="uiModeSelect">
@@ -1712,6 +1754,9 @@
       logoutAllSessionsBtn: document.getElementById('logoutAllSessionsBtn'),
       userSessionsSelect: document.getElementById('userSessionsSelect'),
       revokeSessionBtn: document.getElementById('revokeSessionBtn'),
+      pricingList: document.getElementById('pricingList'),
+      billingPortalBtn: document.getElementById('billingPortalBtn'),
+      pricingCons: document.getElementById('pricingCons'),
       savedRoomsSelect: document.getElementById('savedRoomsSelect'),
       joinSavedRoomBtn: document.getElementById('joinSavedRoomBtn'),
       removeSavedRoomBtn: document.getElementById('removeSavedRoomBtn'),
@@ -1922,6 +1967,10 @@
       rememberUser: false,
       ipVerificationRequired: false,
       donationTier: 'free',
+      entitlements: [],
+      pricingPlans: [],
+      pricingCons: [],
+      billingPortalUrl: '',
       userSessions: [],
       savedRooms: [],
       pushToTalk: false,
@@ -4855,6 +4904,97 @@
       return (rank[normalizedDonationTier()] || 0) >= (rank[want] || 0);
     }
 
+    function moneyLabel(amount, currency) {
+      const n = Number(amount);
+      if (!Number.isFinite(n)) return '$0.00';
+      const code = String(currency || 'USD').toUpperCase();
+      try {
+        return new Intl.NumberFormat('en-US', { style: 'currency', currency: code }).format(n);
+      } catch (_) {
+        return `$${n.toFixed(2)}`;
+      }
+    }
+
+    function renderPricingCatalog() {
+      if (els.pricingList) {
+        els.pricingList.innerHTML = '';
+        const plans = Array.isArray(state.pricingPlans) ? state.pricingPlans : [];
+        if (!plans.length) {
+          const empty = document.createElement('div');
+          empty.className = 'muted';
+          empty.textContent = 'Plans unavailable right now.';
+          els.pricingList.appendChild(empty);
+        } else {
+          for (const plan of plans) {
+            const card = document.createElement('div');
+            card.className = 'pricing-card';
+            const code = String(plan.code || '').trim();
+            const title = String(plan.title || code || 'Plan');
+            const mode = String(plan.billingMode || '').toLowerCase();
+            const tier = String(plan.donationTier || 'free').toLowerCase();
+            const isCurrent = hasTier(tier);
+            const price = moneyLabel(plan.amountUsd, plan.currency);
+            const modeText = mode === 'monthly' ? '/month' : (mode === 'annual' ? '/year' : ' one-time');
+            const cta = plan.checkoutEnabled
+              ? (isCurrent ? 'Change Plan' : 'Upgrade')
+              : 'Unavailable';
+            const features = Array.isArray(plan.features) ? plan.features : [];
+            const featuresHtml = features.map((f) => `<li>${String(f)}</li>`).join('');
+            card.innerHTML = `
+              <div class="pricing-title">${title}</div>
+              <div class="pricing-price">${price}${modeText}</div>
+              <div class="pricing-meta">Tier: ${tier}${plan.savingsLabel ? ` · ${String(plan.savingsLabel)}` : ''}</div>
+              ${features.length ? `<ul class="pricing-features">${featuresHtml}</ul>` : ''}
+              <button class="secondary" data-plan-start="${code}" ${plan.checkoutEnabled ? '' : 'disabled'}>${cta}</button>
+            `;
+            els.pricingList.appendChild(card);
+          }
+        }
+      }
+      if (els.pricingCons) {
+        const cons = Array.isArray(state.pricingCons) ? state.pricingCons : [];
+        els.pricingCons.textContent = cons.length
+          ? `Pro tradeoffs: ${cons.join(' | ')}`
+          : 'Pro adds stronger features, but paid plans increase support and billing overhead.';
+      }
+      if (els.billingPortalBtn) {
+        els.billingPortalBtn.disabled = !(isPremiumUser() && state.billingPortalUrl);
+      }
+    }
+
+    async function refreshPricingCatalog() {
+      try {
+        const data = await apiRequest('POST', '/api/watch/donations/catalog', {});
+        state.pricingPlans = Array.isArray(data.plans) ? data.plans : [];
+        state.pricingCons = Array.isArray(data.proCons) ? data.proCons : [];
+        state.billingPortalUrl = String(data.billingPortalUrl || '');
+      } catch (_) {
+        state.pricingPlans = [];
+      } finally {
+        renderPricingCatalog();
+      }
+    }
+
+    async function startPlanCheckout(planCode) {
+      const code = String(planCode || '').trim();
+      if (!code) throw new Error('plan_required');
+      if (!isPremiumUser()) throw new Error('Sign in first, then select your Pro plan.');
+      const data = await apiRequest('POST', '/api/watch/user/billing/start', { planCode: code });
+      const url = String(data.checkoutUrl || '').trim();
+      if (!url) throw new Error('billing_checkout_not_configured');
+      window.open(url, '_blank', 'noopener');
+      setStatus(true, 'Opened secure checkout.');
+    }
+
+    async function openBillingPortal() {
+      if (!isPremiumUser()) throw new Error('Sign in first to manage billing.');
+      const data = await apiRequest('POST', '/api/watch/user/billing/portal', {});
+      const url = String(data.portalUrl || '').trim();
+      if (!url) throw new Error('billing_portal_not_configured');
+      window.open(url, '_blank', 'noopener');
+      setStatus(true, 'Opened billing portal.');
+    }
+
     function enforceDonationGates() {
       const tier = normalizedDonationTier();
       if (els.mediaModeSelect && els.mediaModeSelect.value === 'sfu' && !hasTier('pro')) {
@@ -4887,8 +5027,9 @@
         els.ipVerifyStatus.textContent = 'New IP detected. Verify to continue account actions.';
       }
       if (els.userBadge) {
+        const entCount = Array.isArray(state.entitlements) ? state.entitlements.length : 0;
         els.userBadge.textContent = premium
-          ? `Premium: ${state.userDisplayName || state.userEmail} · Tier: ${normalizedDonationTier()}`
+          ? `Premium: ${state.userDisplayName || state.userEmail} · Tier: ${normalizedDonationTier()}${entCount ? ` · Entitlements: ${entCount}` : ''}`
           : 'Not signed in';
       }
       if (els.macroStartBtn) els.macroStartBtn.disabled = !premium;
@@ -4908,6 +5049,7 @@
       if (els.requestIpVerifyDiscordBtn) els.requestIpVerifyDiscordBtn.disabled = !premium;
       if (els.confirmIpVerifyBtn) els.confirmIpVerifyBtn.disabled = !premium;
       enforceDonationGates();
+      renderPricingCatalog();
       renderMainEventState();
     }
 
@@ -4940,6 +5082,7 @@
       state.userEmail = '';
       state.userDisplayName = '';
       state.donationTier = 'free';
+      state.entitlements = [];
       state.ipVerificationRequired = false;
       state.userSessions = [];
       state.savedRooms = [];
@@ -5124,6 +5267,7 @@
       state.userEmail = String(data.username || username);
       state.userDisplayName = String(data.displayName || '');
       state.donationTier = String(data.donationTier || 'free').toLowerCase();
+      state.entitlements = Array.isArray(data.entitlements) ? data.entitlements : [];
       state.ipVerificationRequired = false;
       saveUserSession();
       renderPremiumState();
@@ -5154,6 +5298,7 @@
       state.userEmail = String(data.username || username);
       state.userDisplayName = String(data.displayName || displayName);
       state.donationTier = String(data.donationTier || 'free').toLowerCase();
+      state.entitlements = Array.isArray(data.entitlements) ? data.entitlements : [];
       state.ipVerificationRequired = false;
       saveUserSession();
       renderPremiumState();
@@ -6923,6 +7068,20 @@
         await userLogout();
       });
     }
+    if (els.pricingList) {
+      els.pricingList.addEventListener('click', async (ev) => {
+        const btn = ev.target && ev.target.closest ? ev.target.closest('[data-plan-start]') : null;
+        if (!btn) return;
+        const code = String(btn.getAttribute('data-plan-start') || '').trim();
+        if (!code) return;
+        try { await startPlanCheckout(code); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
+      });
+    }
+    if (els.billingPortalBtn) {
+      els.billingPortalBtn.addEventListener('click', async () => {
+        try { await openBillingPortal(); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
+      });
+    }
     if (els.refreshSessionsBtn) {
       els.refreshSessionsBtn.addEventListener('click', async () => {
         try { await refreshUserSessions(); setStatus(true, 'Device sessions refreshed.'); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
@@ -7317,12 +7476,14 @@
         }
       } catch (_) {}
       renderPremiumState();
+      refreshPricingCatalog().catch(() => {});
       if (isPremiumUser()) {
         apiRequest('POST', '/api/watch/user/me', {})
           .then((data) => {
             state.userEmail = String(data.username || state.userEmail);
             state.userDisplayName = String(data.displayName || state.userDisplayName);
             state.donationTier = String(data.donationTier || state.donationTier || 'free').toLowerCase();
+            state.entitlements = Array.isArray(data.entitlements) ? data.entitlements : [];
             state.ipVerificationRequired = false;
             saveUserSession();
             renderPremiumState();
