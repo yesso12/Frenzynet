@@ -722,6 +722,20 @@
       gap: 8px;
       grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
     }
+    .webcam-grid.layout-focus .webcam-tile:first-child {
+      grid-column: span 2;
+    }
+    .webcam-grid.layout-filmstrip {
+      display: flex;
+      overflow-x: auto;
+      gap: 8px;
+      padding-bottom: 2px;
+    }
+    .webcam-grid.layout-filmstrip .webcam-tile {
+      min-width: 220px;
+      max-width: 260px;
+      flex: 0 0 auto;
+    }
     .webcam-tile {
       border: 1px solid var(--line-soft);
       border-radius: 10px;
@@ -785,6 +799,27 @@
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+    }
+    .voice-mixer-list {
+      display: grid;
+      gap: 8px;
+      max-height: 220px;
+      overflow: auto;
+    }
+    .voice-mixer-row {
+      display: grid;
+      grid-template-columns: minmax(120px, 1fr) minmax(180px, 1fr);
+      gap: 8px;
+      align-items: center;
+      font-size: 12px;
+    }
+    .verify-panel {
+      border: 1px solid var(--line-soft);
+      border-radius: 10px;
+      background: var(--panel-2);
+      padding: 8px;
+      display: grid;
+      gap: 8px;
     }
     .reaction-bar {
       display: flex;
@@ -986,6 +1021,10 @@
             <input id="userEmailInput" type="email" placeholder="Email" />
             <input id="userPassInput" type="password" placeholder="Password" />
             <input id="userDisplayInput" placeholder="Display name (optional)" />
+            <label for="userRememberInput" class="muted">
+              <input id="userRememberInput" type="checkbox" />
+              Remember me on this device
+            </label>
             <div class="row">
               <button id="userLoginBtn" class="secondary">Sign In</button>
               <button id="userRegisterBtn" class="secondary">Create</button>
@@ -997,9 +1036,27 @@
           </div>
           <div id="accountUserWrap" class="side-controls hidden">
             <div id="userBadge" class="side-item">Signed in</div>
+            <div id="ipVerifyPanel" class="verify-panel hidden">
+              <div id="ipVerifyStatus" class="muted">New IP detected. Verify to continue account actions.</div>
+              <div class="row">
+                <button id="requestIpVerifyBtn" class="secondary">Send Code (Email)</button>
+                <button id="requestIpVerifyDiscordBtn" class="secondary">Send Code (Discord DM)</button>
+              </div>
+              <input id="ipVerifyCodeInput" placeholder="Enter 6-digit code" />
+              <button id="confirmIpVerifyBtn" class="secondary">Confirm New IP</button>
+            </div>
             <div class="row">
               <button id="saveRoomBtn" class="secondary">Save Current Room</button>
               <button id="userLogoutBtn" class="secondary">Sign Out</button>
+            </div>
+            <div class="row">
+              <button id="refreshSessionsBtn" class="secondary">Refresh Devices</button>
+              <button id="revokeOtherSessionsBtn" class="danger-btn">Keep Only This Device</button>
+              <button id="logoutAllSessionsBtn" class="danger-btn">Log Out All Devices</button>
+            </div>
+            <select id="userSessionsSelect"></select>
+            <div class="row">
+              <button id="revokeSessionBtn" class="danger-btn">Revoke Selected Device</button>
             </div>
             <select id="savedRoomsSelect"></select>
             <div class="row">
@@ -1105,6 +1162,14 @@
               <select id="recentRoomsSelect"></select>
             </div>
             <div class="muted" id="joinHint">Share your room code in Discord voice chat. Everyone runs their own stream account.</div>
+            <div id="hostRouterLimitPanel" class="verify-panel hidden">
+              <div style="font-weight:700">Router Lock Diagnostics</div>
+              <div id="hostRouterLimitStatus" class="muted">No diagnostics yet.</div>
+              <div class="row">
+                <button id="hostRouterDiagnoseBtn" class="secondary">Diagnose Lock</button>
+                <button id="hostRouterDeleteBtn" class="danger-btn">Delete Locked Room</button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1465,6 +1530,18 @@
                       <button id="refreshDevicesBtn" class="secondary">Refresh Devices</button>
                     </div>
                   </div>
+                  <div class="row">
+                    <label for="webcamLayoutSelect">Webcam Layout</label>
+                    <select id="webcamLayoutSelect">
+                      <option value="grid">Grid</option>
+                      <option value="focus">Focus Speaker</option>
+                      <option value="filmstrip">Filmstrip</option>
+                    </select>
+                    <label for="pushToTalkToggle" style="display:flex; align-items:center; gap:8px; margin:0;">
+                      <input id="pushToTalkToggle" type="checkbox" />
+                      Push-to-Talk (hold Space)
+                    </label>
+                  </div>
                 </div>
                 <details class="dropdown" data-host-only="true">
                   <summary>Host Preview (What Viewers See)</summary>
@@ -1496,6 +1573,12 @@
                   <div class="webcam-stage-box">
                     <div class="webcam-stage-label">Family Webcam Grid</div>
                     <div id="remoteWebcamGrid" class="webcam-grid hidden-media"></div>
+                  </div>
+                </div>
+                <div class="webcam-stage-box">
+                  <div class="webcam-stage-label">Voice Mixer</div>
+                  <div id="voiceMixerList" class="voice-mixer-list">
+                    <div class="muted">Join voice to adjust participant volume.</div>
                   </div>
                 </div>
                 <div class="row" data-host-only="true">
@@ -1577,9 +1660,8 @@
   <script defer src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
   <script>
     const API_PREFIXES = [
-      'https://api.frenzynets.com',
-      '/api/telewatch',
-      'https://api.frenzynets.com/api/telewatch'
+      'https://api.frenzynets.com/api/telewatch',
+      '/api/telewatch'
     ];
     const POLL_RETRY_MS = 1200;
     const LONG_POLL_WAIT_MS = 20000;
@@ -1612,12 +1694,24 @@
       userEmailInput: document.getElementById('userEmailInput'),
       userPassInput: document.getElementById('userPassInput'),
       userDisplayInput: document.getElementById('userDisplayInput'),
+      userRememberInput: document.getElementById('userRememberInput'),
       forgotPassBtn: document.getElementById('forgotPassBtn'),
       userLoginBtn: document.getElementById('userLoginBtn'),
       userRegisterBtn: document.getElementById('userRegisterBtn'),
       userBadge: document.getElementById('userBadge'),
+      ipVerifyPanel: document.getElementById('ipVerifyPanel'),
+      ipVerifyStatus: document.getElementById('ipVerifyStatus'),
+      requestIpVerifyBtn: document.getElementById('requestIpVerifyBtn'),
+      requestIpVerifyDiscordBtn: document.getElementById('requestIpVerifyDiscordBtn'),
+      ipVerifyCodeInput: document.getElementById('ipVerifyCodeInput'),
+      confirmIpVerifyBtn: document.getElementById('confirmIpVerifyBtn'),
       saveRoomBtn: document.getElementById('saveRoomBtn'),
       userLogoutBtn: document.getElementById('userLogoutBtn'),
+      refreshSessionsBtn: document.getElementById('refreshSessionsBtn'),
+      revokeOtherSessionsBtn: document.getElementById('revokeOtherSessionsBtn'),
+      logoutAllSessionsBtn: document.getElementById('logoutAllSessionsBtn'),
+      userSessionsSelect: document.getElementById('userSessionsSelect'),
+      revokeSessionBtn: document.getElementById('revokeSessionBtn'),
       savedRoomsSelect: document.getElementById('savedRoomsSelect'),
       joinSavedRoomBtn: document.getElementById('joinSavedRoomBtn'),
       removeSavedRoomBtn: document.getElementById('removeSavedRoomBtn'),
@@ -1670,6 +1764,8 @@
       refreshDevicesBtn: document.getElementById('refreshDevicesBtn'),
       voiceQualitySelect: document.getElementById('voiceQualitySelect'),
       liveWebcamQualitySelect: document.getElementById('liveWebcamQualitySelect'),
+      webcamLayoutSelect: document.getElementById('webcamLayoutSelect'),
+      pushToTalkToggle: document.getElementById('pushToTalkToggle'),
       shareSourceInfo: document.getElementById('shareSourceInfo'),
       shareAudioInfo: document.getElementById('shareAudioInfo'),
       hostPreviewInfo: document.getElementById('hostPreviewInfo'),
@@ -1690,6 +1786,7 @@
       stopWebcamBtn: document.getElementById('stopWebcamBtn'),
       localWebcamPreview: document.getElementById('localWebcamPreview'),
       remoteWebcamGrid: document.getElementById('remoteWebcamGrid'),
+      voiceMixerList: document.getElementById('voiceMixerList'),
       muteTargetSelect: document.getElementById('muteTargetSelect'),
       muteTargetBtn: document.getElementById('muteTargetBtn'),
       unmuteTargetBtn: document.getElementById('unmuteTargetBtn'),
@@ -1707,6 +1804,10 @@
       denyJoinBtn: document.getElementById('denyJoinBtn'),
       createBtn: document.getElementById('createBtn'),
       joinBtn: document.getElementById('joinBtn'),
+      hostRouterLimitPanel: document.getElementById('hostRouterLimitPanel'),
+      hostRouterLimitStatus: document.getElementById('hostRouterLimitStatus'),
+      hostRouterDiagnoseBtn: document.getElementById('hostRouterDiagnoseBtn'),
+      hostRouterDeleteBtn: document.getElementById('hostRouterDeleteBtn'),
       setMediaBtn: document.getElementById('setMediaBtn'),
       copyLinkBtn: document.getElementById('copyLinkBtn'),
       startShareBtn: document.getElementById('startShareBtn'),
@@ -1818,8 +1919,19 @@
       userToken: '',
       userEmail: '',
       userDisplayName: '',
+      rememberUser: false,
+      ipVerificationRequired: false,
       donationTier: 'free',
-      savedRooms: []
+      userSessions: [],
+      savedRooms: [],
+      pushToTalk: false,
+      pttHeld: false,
+      webcamLayout: 'grid',
+      userVolumes: {},
+      userMuted: {},
+      activeSpeakerId: '',
+      hostRouterLockRoomCode: '',
+      hostRouterDiag: null
     };
     const SESSION_KEY = 'telewatch_session';
     const ADMIN_SESSION_KEY = 'telewatch_admin_session';
@@ -1833,12 +1945,18 @@
     const DENSITY_MODE_KEY = 'telewatch_density_mode';
     const ROOM_TEMPLATE_KEY = 'telewatch_room_templates_v1';
     const USER_SESSION_KEY = 'telewatch_user_session_v1';
+    const USER_SESSION_EPHEMERAL_KEY = 'telewatch_user_session_ephemeral_v1';
+    const USER_REMEMBER_KEY = 'telewatch_user_remember_pref_v1';
     const UI_MODE_KEY = 'telewatch_ui_mode';
     const HOST_VIEW_MODE_KEY = 'telewatch_host_view_mode';
     const STAGE_CHAT_MIN_KEY = 'telewatch_stage_chat_min';
     const HOST_OPTIONS_MIN_KEY = 'telewatch_host_options_min';
     const MIC_DEVICE_KEY = 'telewatch_mic_device_id';
     const CAM_DEVICE_KEY = 'telewatch_cam_device_id';
+    const PTT_MODE_KEY = 'telewatch_push_to_talk_v1';
+    const WEBCAM_LAYOUT_KEY = 'telewatch_webcam_layout_v1';
+    const USER_VOLUME_KEY = 'telewatch_user_volume_map_v1';
+    const USER_MUTED_KEY = 'telewatch_user_mute_map_v1';
     const ROOM_CAPACITY_LIMIT = 50;
 
     const THEMES = {
@@ -2324,7 +2442,10 @@
       voiceOfferedTo: new Set(),
       camOfferedTo: new Set(),
       adaptive: new Map(),
-      adaptiveTimer: null
+      adaptiveTimer: null,
+      audioAnalyzers: new Map(),
+      speakerTimer: null,
+      audioCtx: null
     };
     const sfu = {
       room: null,
@@ -2750,6 +2871,102 @@
         }
       }
       renderSideParticipants(rows);
+      renderVoiceMixer();
+    }
+
+    function participantVolume(participantId) {
+      const key = String(participantId || '').trim().toLowerCase();
+      if (state.userMuted[key]) return 0;
+      const val = Number(state.userVolumes[key]);
+      if (Number.isFinite(val)) return Math.max(0, Math.min(1, val));
+      return 1;
+    }
+
+    function applyParticipantVolume(participantId) {
+      const key = String(participantId || '').trim();
+      if (!key) return;
+      const volume = participantVolume(key);
+      const rtcEl = rtc.audioEls.get(key);
+      if (rtcEl) rtcEl.volume = volume;
+      for (const [k, audio] of sfu.remoteAudioEls.entries()) {
+        if (!audio) continue;
+        const pid = String(audio.dataset.participantId || '').trim();
+        if (pid === key || String(k || '').startsWith(`${key}:`)) {
+          audio.volume = volume;
+        }
+      }
+    }
+
+    function setParticipantVolume(participantId, volume, persist) {
+      const key = String(participantId || '').trim().toLowerCase();
+      if (!key) return;
+      state.userVolumes[key] = Math.max(0, Math.min(1, Number(volume) || 0));
+      if (state.userVolumes[key] > 0 && state.userMuted[key]) state.userMuted[key] = false;
+      applyParticipantVolume(key);
+      if (persist) {
+        try { localStorage.setItem(USER_VOLUME_KEY, JSON.stringify(state.userVolumes || {})); } catch (_) {}
+        try { localStorage.setItem(USER_MUTED_KEY, JSON.stringify(state.userMuted || {})); } catch (_) {}
+      }
+    }
+
+    function setParticipantMuted(participantId, muted, persist) {
+      const key = String(participantId || '').trim().toLowerCase();
+      if (!key) return;
+      state.userMuted[key] = !!muted;
+      applyParticipantVolume(key);
+      if (persist) {
+        try { localStorage.setItem(USER_MUTED_KEY, JSON.stringify(state.userMuted || {})); } catch (_) {}
+      }
+    }
+
+    function renderVoiceMixer() {
+      if (!els.voiceMixerList) return;
+      const rows = Array.isArray(state.participants) ? state.participants : [];
+      els.voiceMixerList.innerHTML = '';
+      const remote = rows.filter((p) => p && !p.isSelf);
+      if (!remote.length) {
+        const d = document.createElement('div');
+        d.className = 'muted';
+        d.textContent = 'No remote participants in room.';
+        els.voiceMixerList.appendChild(d);
+        return;
+      }
+      for (const p of remote) {
+        const pid = String(p.participantId || '').trim();
+        const row = document.createElement('div');
+        row.className = 'voice-mixer-row';
+        const name = document.createElement('div');
+        name.textContent = String(p.displayName || 'Guest');
+        const slider = document.createElement('input');
+        slider.type = 'range';
+        slider.min = '0';
+        slider.max = '100';
+        slider.step = '1';
+        slider.value = String(Math.round(participantVolume(pid) * 100));
+        slider.title = 'Volume';
+        slider.addEventListener('input', () => {
+          setParticipantVolume(pid, Number(slider.value) / 100, true);
+          if (Number(slider.value) > 0 && state.userMuted[String(pid || '').toLowerCase()]) {
+            setParticipantMuted(pid, false, true);
+            renderVoiceMixer();
+          }
+        });
+        const controls = document.createElement('div');
+        controls.className = 'row';
+        const muteBtn = document.createElement('button');
+        muteBtn.className = 'secondary';
+        const isMuted = !!state.userMuted[String(pid || '').toLowerCase()];
+        muteBtn.textContent = isMuted ? 'Unmute' : 'Mute';
+        muteBtn.addEventListener('click', () => {
+          setParticipantMuted(pid, !isMuted, true);
+          renderVoiceMixer();
+        });
+        controls.appendChild(slider);
+        controls.appendChild(muteBtn);
+        row.appendChild(name);
+        row.appendChild(controls);
+        els.voiceMixerList.appendChild(row);
+      }
     }
 
     function renderSideParticipants(rows) {
@@ -2962,6 +3179,122 @@
       return !!(rtc.localCamStream && rtc.localCamStream.getVideoTracks().length);
     }
 
+    function isTypingContext(target) {
+      if (!target) return false;
+      const tag = String(target.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select' || tag === 'button') return true;
+      return !!target.isContentEditable;
+    }
+
+    function updatePushToTalkState() {
+      const enableMic = !state.pushToTalk || !!state.pttHeld;
+      const stream = rtc.localVoiceStream;
+      if (!stream || !stream.getAudioTracks) return;
+      for (const t of stream.getAudioTracks()) {
+        t.enabled = enableMic;
+      }
+      if (els.voiceStatus && voiceOn() && state.pushToTalk) {
+        els.voiceStatus.textContent = `Voice: on (${state.pttHeld ? 'talking' : 'hold Space to talk'})`;
+      }
+    }
+
+    function applyWebcamLayout(mode, persist) {
+      const clean = String(mode || '').trim().toLowerCase();
+      state.webcamLayout = (clean === 'focus' || clean === 'filmstrip') ? clean : 'grid';
+      if (els.webcamLayoutSelect) els.webcamLayoutSelect.value = state.webcamLayout;
+      if (els.remoteWebcamGrid) {
+        els.remoteWebcamGrid.classList.remove('layout-focus', 'layout-filmstrip');
+        if (state.webcamLayout === 'focus') els.remoteWebcamGrid.classList.add('layout-focus');
+        if (state.webcamLayout === 'filmstrip') els.remoteWebcamGrid.classList.add('layout-filmstrip');
+      }
+      promoteActiveSpeakerTile();
+      if (persist) {
+        try { localStorage.setItem(WEBCAM_LAYOUT_KEY, state.webcamLayout); } catch (_) {}
+      }
+    }
+
+    function ensureAudioContext() {
+      if (rtc.audioCtx) return rtc.audioCtx;
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return null;
+      try {
+        rtc.audioCtx = new Ctx();
+      } catch (_) {
+        rtc.audioCtx = null;
+      }
+      return rtc.audioCtx;
+    }
+
+    function attachSpeakerAnalyzer(participantId, stream) {
+      const pid = String(participantId || '').trim();
+      if (!pid || !stream) return;
+      detachSpeakerAnalyzer(pid);
+      const ctx = ensureAudioContext();
+      if (!ctx) return;
+      try {
+        const source = ctx.createMediaStreamSource(stream);
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 256;
+        source.connect(analyser);
+        const data = new Uint8Array(analyser.frequencyBinCount);
+        rtc.audioAnalyzers.set(pid, { source, analyser, data, level: 0 });
+      } catch (_) {}
+      startSpeakerMonitor();
+    }
+
+    function detachSpeakerAnalyzer(participantId) {
+      const pid = String(participantId || '').trim();
+      if (!pid) return;
+      const row = rtc.audioAnalyzers.get(pid);
+      if (row) {
+        try { row.source.disconnect(); } catch (_) {}
+        rtc.audioAnalyzers.delete(pid);
+      }
+      if (!rtc.audioAnalyzers.size) stopSpeakerMonitor();
+    }
+
+    function promoteActiveSpeakerTile() {
+      if (state.webcamLayout !== 'focus' || !els.remoteWebcamGrid) return;
+      const pid = String(state.activeSpeakerId || '').trim();
+      if (!pid) return;
+      const tile = rtc.camEls.get(pid);
+      if (!tile || !tile.wrap) return;
+      try { els.remoteWebcamGrid.prepend(tile.wrap); } catch (_) {}
+    }
+
+    function startSpeakerMonitor() {
+      if (rtc.speakerTimer) return;
+      rtc.speakerTimer = setInterval(() => {
+        let bestId = '';
+        let best = 0;
+        for (const [pid, row] of rtc.audioAnalyzers.entries()) {
+          try {
+            row.analyser.getByteFrequencyData(row.data);
+            let sum = 0;
+            for (let i = 0; i < row.data.length; i += 1) sum += row.data[i];
+            const level = sum / Math.max(1, row.data.length);
+            row.level = Math.max(level, Number(row.level || 0) * 0.8);
+            if (row.level > best) {
+              best = row.level;
+              bestId = pid;
+            }
+          } catch (_) {}
+        }
+        if (bestId && best >= 14 && state.activeSpeakerId !== bestId) {
+          state.activeSpeakerId = bestId;
+          promoteActiveSpeakerTile();
+        }
+      }, 600);
+    }
+
+    function stopSpeakerMonitor() {
+      if (rtc.speakerTimer) {
+        clearInterval(rtc.speakerTimer);
+        rtc.speakerTimer = null;
+      }
+      state.activeSpeakerId = '';
+    }
+
     function getQualityProfile(rawIn) {
       const raw = String(rawIn || 'balanced').toLowerCase();
       if (raw === 'ultra') {
@@ -3112,11 +3445,14 @@
     function clearSfuRemoteAudio() {
       for (const el of sfu.remoteAudioEls.values()) {
         try {
+          const pid = String(el && el.dataset && el.dataset.participantId || '').trim();
+          if (pid) detachSpeakerAnalyzer(pid);
           el.srcObject = null;
           el.remove();
         } catch (_) {}
       }
       sfu.remoteAudioEls.clear();
+      renderVoiceMixer();
     }
 
     function handleSfuTrackSubscribed(track, publication, participant) {
@@ -3139,8 +3475,12 @@
           audio.autoplay = true;
           audio.playsInline = true;
           audio.dataset.sfuAudio = key;
+          audio.dataset.participantId = String(participant && participant.identity || '');
           document.body.appendChild(audio);
           sfu.remoteAudioEls.set(key, audio);
+          try { attachSpeakerAnalyzer(String(participant && participant.identity || ''), new MediaStream([track.mediaStreamTrack])); } catch (_) {}
+          applyParticipantVolume(String(participant && participant.identity || ''));
+          renderVoiceMixer();
         } catch (_) {}
       }
     }
@@ -3149,8 +3489,14 @@
       const key = `${String(participant && participant.identity || '')}:${String(publication && publication.trackSid || '')}`;
       const audio = sfu.remoteAudioEls.get(key);
       if (audio) {
-        try { audio.srcObject = null; audio.remove(); } catch (_) {}
+        try {
+          const pid = String(audio.dataset.participantId || '').trim();
+          if (pid) detachSpeakerAnalyzer(pid);
+          audio.srcObject = null;
+          audio.remove();
+        } catch (_) {}
         sfu.remoteAudioEls.delete(key);
+        renderVoiceMixer();
       }
       if (track && track.kind === 'video' && !state.isHost && els.screenView) {
         const src = els.screenView.srcObject;
@@ -3271,6 +3617,13 @@
       if (els.refreshDevicesBtn) els.refreshDevicesBtn.disabled = false;
       if (els.voiceQualitySelect) els.voiceQualitySelect.disabled = false;
       if (els.liveWebcamQualitySelect) els.liveWebcamQualitySelect.disabled = false;
+      if (els.pushToTalkToggle) {
+        els.pushToTalkToggle.checked = !!state.pushToTalk;
+        els.pushToTalkToggle.disabled = !voiceOn();
+      }
+      if (els.webcamLayoutSelect) {
+        els.webcamLayoutSelect.value = state.webcamLayout || 'grid';
+      }
       const hostCanModerate = isHostViewActive();
       if (els.muteTargetBtn) els.muteTargetBtn.disabled = !hostCanModerate;
       if (els.unmuteTargetBtn) els.unmuteTargetBtn.disabled = !hostCanModerate;
@@ -3294,6 +3647,7 @@
       if (els.remoteWebcamGrid) {
         els.remoteWebcamGrid.classList.toggle('hidden-media', rtc.camEls.size < 1);
       }
+      updatePushToTalkState();
     }
 
     async function setSenderAudioQuality(sender, maxBitrate) {
@@ -3700,6 +4054,7 @@
       els.remoteWebcamGrid.appendChild(wrap);
       tile = { wrap, video, label };
       rtc.camEls.set(key, tile);
+      applyWebcamLayout(state.webcamLayout || 'grid', false);
       return tile;
     }
 
@@ -3748,7 +4103,7 @@
       }
       refreshDeviceLists().catch(() => {});
       const mutedByHost = !!state.hostMuted[state.participantId || ''];
-      for (const t of stream.getAudioTracks()) t.enabled = !mutedByHost;
+      for (const t of stream.getAudioTracks()) t.enabled = !mutedByHost && (!state.pushToTalk || !!state.pttHeld);
       if (isSfuMode()) {
         await ensureSfuConnected();
         const micTrack = stream.getAudioTracks()[0];
@@ -4485,7 +4840,7 @@
     }
 
     function isPremiumUser() {
-      return !!(state.userToken && state.userEmail);
+      return !!state.userEmail;
     }
 
     function normalizedDonationTier() {
@@ -4525,6 +4880,12 @@
       const premium = isPremiumUser();
       if (els.accountGuestWrap) els.accountGuestWrap.classList.toggle('hidden', premium);
       if (els.accountUserWrap) els.accountUserWrap.classList.toggle('hidden', !premium);
+      if (els.ipVerifyPanel) {
+        els.ipVerifyPanel.classList.toggle('hidden', !(premium && state.ipVerificationRequired));
+      }
+      if (els.ipVerifyStatus && state.ipVerificationRequired) {
+        els.ipVerifyStatus.textContent = 'New IP detected. Verify to continue account actions.';
+      }
       if (els.userBadge) {
         els.userBadge.textContent = premium
           ? `Premium: ${state.userDisplayName || state.userEmail} · Tier: ${normalizedDonationTier()}`
@@ -4539,22 +4900,38 @@
       if (els.saveRoomBtn) els.saveRoomBtn.disabled = !premium;
       if (els.joinSavedRoomBtn) els.joinSavedRoomBtn.disabled = !premium;
       if (els.removeSavedRoomBtn) els.removeSavedRoomBtn.disabled = !premium;
+      if (els.refreshSessionsBtn) els.refreshSessionsBtn.disabled = !premium;
+      if (els.revokeOtherSessionsBtn) els.revokeOtherSessionsBtn.disabled = !premium;
+      if (els.revokeSessionBtn) els.revokeSessionBtn.disabled = !premium;
+      if (els.logoutAllSessionsBtn) els.logoutAllSessionsBtn.disabled = !premium;
+      if (els.requestIpVerifyBtn) els.requestIpVerifyBtn.disabled = !premium;
+      if (els.requestIpVerifyDiscordBtn) els.requestIpVerifyDiscordBtn.disabled = !premium;
+      if (els.confirmIpVerifyBtn) els.confirmIpVerifyBtn.disabled = !premium;
       enforceDonationGates();
       renderMainEventState();
     }
 
     function saveUserSession() {
       try {
-        if (!state.userToken || !state.userEmail) {
+        if (!state.userEmail) {
           localStorage.removeItem(USER_SESSION_KEY);
+          sessionStorage.removeItem(USER_SESSION_EPHEMERAL_KEY);
           return;
         }
-        localStorage.setItem(USER_SESSION_KEY, JSON.stringify({
-          userToken: state.userToken,
+        const payload = JSON.stringify({
           userEmail: state.userEmail,
           userDisplayName: state.userDisplayName,
           donationTier: normalizedDonationTier(),
-        }));
+        });
+        if (state.rememberUser) {
+          localStorage.setItem(USER_SESSION_KEY, payload);
+          sessionStorage.removeItem(USER_SESSION_EPHEMERAL_KEY);
+          localStorage.setItem(USER_REMEMBER_KEY, '1');
+        } else {
+          localStorage.removeItem(USER_SESSION_KEY);
+          sessionStorage.setItem(USER_SESSION_EPHEMERAL_KEY, payload);
+          localStorage.setItem(USER_REMEMBER_KEY, '0');
+        }
       } catch (_) {}
     }
 
@@ -4563,9 +4940,16 @@
       state.userEmail = '';
       state.userDisplayName = '';
       state.donationTier = 'free';
+      state.ipVerificationRequired = false;
+      state.userSessions = [];
       state.savedRooms = [];
-      try { localStorage.removeItem(USER_SESSION_KEY); } catch (_) {}
+      try {
+        localStorage.removeItem(USER_SESSION_KEY);
+        sessionStorage.removeItem(USER_SESSION_EPHEMERAL_KEY);
+      } catch (_) {}
+      renderUserSessions();
       renderSavedRooms();
+      renderVoiceMixer();
       renderPremiumState();
     }
 
@@ -4589,45 +4973,192 @@
       }
     }
 
+    function renderUserSessions() {
+      if (!els.userSessionsSelect) return;
+      els.userSessionsSelect.innerHTML = '';
+      const list = Array.isArray(state.userSessions) ? state.userSessions : [];
+      if (!list.length) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = isPremiumUser() ? 'No active sessions found' : 'Sign in to manage devices';
+        els.userSessionsSelect.appendChild(opt);
+        return;
+      }
+      for (const row of list) {
+        const opt = document.createElement('option');
+        const tok = String(row.sessionToken || '').trim();
+        const ip = String(row.clientIp || 'unknown').trim();
+        const ua = String(row.userAgent || '').trim();
+        const uaLabel = ua ? ua.slice(0, 34) : 'browser';
+        const last = relativeTimeLabel(String(row.lastSeenAt || '').trim());
+        const curr = !!row.isCurrent;
+        opt.value = tok;
+        opt.textContent = `${curr ? '[Current Device]' : ip} · ${uaLabel} · ${last || 'recent'}`;
+        els.userSessionsSelect.appendChild(opt);
+      }
+    }
+
+    function relativeTimeLabel(rawIso) {
+      const text = String(rawIso || '').trim();
+      if (!text) return '';
+      const when = Date.parse(text.endsWith('Z') ? text : `${text}Z`);
+      if (!Number.isFinite(when)) return text;
+      const diffMs = Date.now() - when;
+      const diffMin = Math.max(0, Math.round(diffMs / 60000));
+      if (diffMin < 1) return 'just now';
+      if (diffMin < 60) return `${diffMin}m ago`;
+      const diffHr = Math.round(diffMin / 60);
+      if (diffHr < 24) return `${diffHr}h ago`;
+      const diffDay = Math.round(diffHr / 24);
+      return `${diffDay}d ago`;
+    }
+
     async function refreshSavedRooms() {
       if (!isPremiumUser()) {
         state.savedRooms = [];
         renderSavedRooms();
         return;
       }
-      const data = await apiRequest('POST', '/api/watch/user/saved-rooms', { userToken: state.userToken });
-      state.savedRooms = Array.isArray(data.rooms) ? data.rooms : [];
-      renderSavedRooms();
+      try {
+        const data = await apiRequest('POST', '/api/watch/user/saved-rooms', {});
+        state.savedRooms = Array.isArray(data.rooms) ? data.rooms : [];
+      } catch (err) {
+        const msg = String(err && err.message ? err.message : err);
+        if (msg.includes('user_auth_ip_changed')) state.ipVerificationRequired = true;
+        throw err;
+      } finally {
+        renderSavedRooms();
+        renderPremiumState();
+      }
+    }
+
+    async function refreshUserSessions() {
+      if (!isPremiumUser()) {
+        state.userSessions = [];
+        renderUserSessions();
+        return;
+      }
+      try {
+        const data = await apiRequest('POST', '/api/watch/user/sessions', {});
+        state.userSessions = Array.isArray(data.sessions) ? data.sessions : [];
+      } catch (err) {
+        const msg = String(err && err.message ? err.message : err);
+        if (msg.includes('user_auth_ip_changed')) state.ipVerificationRequired = true;
+        throw err;
+      } finally {
+        renderUserSessions();
+        renderPremiumState();
+      }
+    }
+
+    async function revokeSelectedSession() {
+      if (!isPremiumUser()) return;
+      const token = String((els.userSessionsSelect && els.userSessionsSelect.value) || '').trim();
+      if (!token) {
+        setStatus(false, 'Select a device session first.');
+        return;
+      }
+      await apiRequest('POST', '/api/watch/user/session/revoke', { sessionToken: token });
+      await refreshUserSessions();
+      setStatus(true, 'Selected device session revoked.');
+    }
+
+    async function revokeOtherSessions() {
+      if (!isPremiumUser()) return;
+      await apiRequest('POST', '/api/watch/user/session/revoke-others', {});
+      await refreshUserSessions();
+      setStatus(true, 'All other devices were signed out.');
+    }
+
+    async function userLogoutAll() {
+      if (!isPremiumUser()) return;
+      await apiRequest('POST', '/api/watch/user/logout-all', {});
+      clearUserSession();
+      setStatus(true, 'Logged out on all devices.');
+    }
+
+    async function requestIpVerificationCode(channel) {
+      if (!isPremiumUser()) return;
+      const mode = String(channel || 'email').toLowerCase() === 'discord' ? 'discord' : 'email';
+      const data = await apiRequest('POST', '/api/watch/user/ip-verify/request', { channel: mode });
+      state.ipVerificationRequired = true;
+      renderPremiumState();
+      if (els.ipVerifyStatus) {
+        if (data && data.devCode) {
+          els.ipVerifyStatus.textContent = `Verification code (dev mode): ${String(data.devCode)}`;
+        } else if (data && data.alreadyVerified) {
+          els.ipVerifyStatus.textContent = 'This IP is already verified for your session.';
+          state.ipVerificationRequired = false;
+          renderPremiumState();
+        } else if (data && data.discordSent) {
+          els.ipVerifyStatus.textContent = 'Verification code sent to your Discord DM.';
+        } else if (mode === 'discord' && data && data.discordReason) {
+          els.ipVerifyStatus.textContent = `Discord DM failed (${String(data.discordReason)}). Check email or use email send.`;
+        } else {
+          els.ipVerifyStatus.textContent = 'Verification code sent. Check your email.';
+        }
+      }
+    }
+
+    async function confirmIpVerificationCode() {
+      if (!isPremiumUser()) return;
+      const verifyCode = String((els.ipVerifyCodeInput && els.ipVerifyCodeInput.value) || '').trim();
+      if (!verifyCode) throw new Error('Enter the verification code first.');
+      await apiRequest('POST', '/api/watch/user/ip-verify/confirm', { verifyCode });
+      state.ipVerificationRequired = false;
+      if (els.ipVerifyCodeInput) els.ipVerifyCodeInput.value = '';
+      if (els.ipVerifyStatus) els.ipVerifyStatus.textContent = 'IP verified. Account features restored.';
+      renderPremiumState();
+      await refreshSavedRooms().catch(() => {});
+      await refreshUserSessions().catch(() => {});
+      setStatus(true, 'New IP verified.');
     }
 
     async function userLogin() {
       const username = String((els.userEmailInput && els.userEmailInput.value) || '').trim().toLowerCase();
       const password = String((els.userPassInput && els.userPassInput.value) || '').trim();
+      state.rememberUser = !!(els.userRememberInput && els.userRememberInput.checked);
       if (!username || !password) throw new Error('Enter email and password.');
-      const data = await apiRequest('POST', '/api/watch/user/login', { username, password });
-      state.userToken = String(data.userToken || '');
+      const data = await apiRequest('POST', '/api/watch/user/login', { username, password, rememberMe: state.rememberUser });
+      state.userToken = '';
       state.userEmail = String(data.username || username);
       state.userDisplayName = String(data.displayName || '');
       state.donationTier = String(data.donationTier || 'free').toLowerCase();
+      state.ipVerificationRequired = false;
       saveUserSession();
       renderPremiumState();
       await refreshSavedRooms();
+      await refreshUserSessions();
       setStatus(true, 'Premium account connected.');
+    }
+
+    function friendlyAuthError(err) {
+      const msg = String(err && err.message ? err.message : err || '').trim();
+      if (!msg) return 'Sign-in failed. Please try again.';
+      if (msg === 'user_login_invalid') return 'Email or password is incorrect.';
+      if (msg === 'auth_rate_limited') return 'Too many sign-in attempts. Wait 10 minutes and try again.';
+      if (msg === 'ip_blocked') return 'This network is blocked from sign-in. Contact support in Discord.';
+      if (msg === 'user_blocked') return 'This account is blocked. Contact support in Discord.';
+      if (msg === 'username_password_required') return 'Enter email and password.';
+      return msg;
     }
 
     async function userRegister() {
       const username = String((els.userEmailInput && els.userEmailInput.value) || '').trim().toLowerCase();
       const password = String((els.userPassInput && els.userPassInput.value) || '').trim();
       const displayName = String((els.userDisplayInput && els.userDisplayInput.value) || '').trim() || (els.displayName && els.displayName.value.trim()) || 'Viewer';
+      state.rememberUser = !!(els.userRememberInput && els.userRememberInput.checked);
       if (!username || !password) throw new Error('Enter email and password.');
-      const data = await apiRequest('POST', '/api/watch/user/register', { username, password, displayName });
-      state.userToken = String(data.userToken || '');
+      const data = await apiRequest('POST', '/api/watch/user/register', { username, password, displayName, rememberMe: state.rememberUser });
+      state.userToken = '';
       state.userEmail = String(data.username || username);
       state.userDisplayName = String(data.displayName || displayName);
       state.donationTier = String(data.donationTier || 'free').toLowerCase();
+      state.ipVerificationRequired = false;
       saveUserSession();
       renderPremiumState();
       await refreshSavedRooms();
+      await refreshUserSessions();
       setStatus(true, 'Premium account created.');
     }
 
@@ -4646,10 +5177,7 @@
     }
 
     async function userLogout() {
-      const token = String(state.userToken || '').trim();
-      if (token) {
-        try { await apiRequest('POST', '/api/watch/user/logout', { userToken: token }); } catch (_) {}
-      }
+      try { await apiRequest('POST', '/api/watch/user/logout', {}); } catch (_) {}
       clearUserSession();
       setStatus(true, 'Signed out.');
     }
@@ -4663,7 +5191,6 @@
       }
       const savedName = String(window.prompt('Saved room name', roomCode) || '').trim();
       await apiRequest('POST', '/api/watch/user/save-room', {
-        userToken: state.userToken,
         roomCode,
         roomTitle: String((els.titleInput && els.titleInput.value) || '').trim(),
         savedName,
@@ -4688,7 +5215,8 @@
             method,
             headers: { 'Content-Type': 'application/json' },
             body: body ? JSON.stringify(body) : undefined,
-            cache: 'no-store'
+            cache: 'no-store',
+            credentials: 'include'
           });
           const text = await res.text();
           let data = {};
@@ -4696,6 +5224,11 @@
           if (!res.ok) throw new Error(data.error || ('HTTP ' + res.status));
           return data;
         } catch (err) {
+          const msg = String(err && err.message ? err.message : err);
+          if (msg.includes('user_auth_ip_changed')) {
+            state.ipVerificationRequired = true;
+            renderPremiumState();
+          }
           lastError = err;
         }
       }
@@ -4778,11 +5311,13 @@
         try { audioEl.srcObject = null; audioEl.remove(); } catch (_) {}
         rtc.audioEls.delete(participantId);
       }
+      detachSpeakerAnalyzer(participantId);
       const camTile = rtc.camEls.get(participantId);
       if (camTile) {
         try { camTile.video.srcObject = null; camTile.wrap.remove(); } catch (_) {}
         rtc.camEls.delete(participantId);
       }
+      renderVoiceMixer();
     }
 
     function ensurePeer(participantId) {
@@ -4814,8 +5349,12 @@
           }
           if (ev.streams && ev.streams[0]) {
             audioEl.srcObject = ev.streams[0];
+            audioEl.dataset.participantId = String(participantId || '');
+            attachSpeakerAnalyzer(participantId, ev.streams[0]);
+            applyParticipantVolume(participantId);
             audioEl.play().catch(() => {});
           }
+          renderVoiceMixer();
           return;
         }
         if (state.isHost && track && track.kind === 'video') {
@@ -5082,12 +5621,14 @@
       saveRecentRoom(state.roomCode);
       if (isPremiumUser()) {
         apiRequest('POST', '/api/watch/user/save-room', {
-          userToken: state.userToken,
           roomCode: state.roomCode,
           roomTitle: String((els.titleInput && els.titleInput.value) || '').trim(),
           savedName: '',
         }).then(() => refreshSavedRooms()).catch(() => {});
       }
+      state.hostRouterLockRoomCode = '';
+      state.hostRouterDiag = null;
+      if (els.hostRouterLimitPanel) els.hostRouterLimitPanel.classList.add('hidden');
       onSessionStart();
       addEventLine('Room created: ' + state.roomCode);
     }
@@ -5124,7 +5665,6 @@
       saveRecentRoom(state.roomCode);
       if (isPremiumUser()) {
         apiRequest('POST', '/api/watch/user/save-room', {
-          userToken: state.userToken,
           roomCode: state.roomCode,
           roomTitle: String((data.room && data.room.title) || ''),
           savedName: '',
@@ -5148,7 +5688,7 @@
     }
 
     async function deleteRoomByCode(codeOverride) {
-      const code = normalizeRoomCode(codeOverride || els.adminDeleteCodeInput.value || els.roomInput.value || state.roomCode);
+      const code = normalizeRoomCode(codeOverride || els.roomInput.value || state.roomCode);
       const adminCode = String(els.adminKeyInput.value || '').trim();
       if (!code) {
         setStatus(false, 'Enter a room code first.');
@@ -5165,6 +5705,73 @@
       addEventLine(`Room ${data.roomCode || code} deleted.`);
     }
 
+    function updateHostRouterPanelActions() {
+      const hasAdmin = !!(state.adminToken && state.adminUsername);
+      const hasCode = !!String(els.adminKeyInput && els.adminKeyInput.value || '').trim();
+      const hasLockedRoom = !!normalizeRoomCode(state.hostRouterLockRoomCode || '');
+      if (els.hostRouterDiagnoseBtn) els.hostRouterDiagnoseBtn.disabled = !hasAdmin;
+      if (els.hostRouterDeleteBtn) els.hostRouterDeleteBtn.disabled = !(hasAdmin && hasCode && hasLockedRoom);
+    }
+
+    function renderHostRouterDiag(data, reasonText) {
+      state.hostRouterDiag = data || null;
+      const rows = Array.isArray(data && data.lockRooms) ? data.lockRooms : [];
+      const locked = rows.length > 0 ? rows[0] : null;
+      state.hostRouterLockRoomCode = normalizeRoomCode(locked && locked.roomCode ? locked.roomCode : '');
+      if (els.hostRouterLimitPanel) els.hostRouterLimitPanel.classList.remove('hidden');
+      if (els.hostRouterLimitStatus) {
+        const lines = [];
+        if (reasonText) lines.push(String(reasonText));
+        lines.push('Requested IP: ' + String((data && data.requestedIp) || 'unknown'));
+        lines.push('Lock active: ' + (rows.length ? 'yes' : 'no'));
+        if (locked) {
+          lines.push('Locked room: ' + String(locked.roomCode || ''));
+          lines.push('Host: ' + String(locked.hostName || 'Host'));
+          lines.push('Host last seen: ' + String(locked.hostLastSeenAt || ''));
+          lines.push('Active participants: ' + String(Number(locked.activeCount || 0)));
+        } else {
+          lines.push('No current lock room found for this router.');
+        }
+        if (!(state.adminToken && state.adminUsername)) {
+          lines.push('Tip: Sign in as admin to run full diagnostics.');
+        } else if (!String(els.adminKeyInput && els.adminKeyInput.value || '').trim()) {
+          lines.push('Tip: Enter admin code to enable one-click delete.');
+        }
+        els.hostRouterLimitStatus.textContent = lines.join('\n');
+      }
+      updateHostRouterPanelActions();
+    }
+
+    async function diagnoseHostRouterLock(reasonText) {
+      if (!(state.adminToken && state.adminUsername)) {
+        if (els.hostRouterLimitPanel) els.hostRouterLimitPanel.classList.remove('hidden');
+        if (els.hostRouterLimitStatus) {
+          els.hostRouterLimitStatus.textContent = [
+            String(reasonText || 'Router lock detected.'),
+            'Sign in as admin in the Admin tab, then click Diagnose Lock.',
+          ].join('\n');
+        }
+        state.hostRouterLockRoomCode = '';
+        updateHostRouterPanelActions();
+        return;
+      }
+      const roomHint = normalizeRoomCode((els.roomInput && els.roomInput.value) || state.roomCode || '');
+      const payload = { adminToken: state.adminToken };
+      if (roomHint) payload.roomCode = roomHint;
+      const data = await apiRequest('POST', '/api/watch/admin/host-router/status', payload);
+      renderHostRouterDiag(data, reasonText || 'Router lock diagnostics loaded.');
+    }
+
+    async function deleteLockedRouterRoom() {
+      if (!(state.adminToken && state.adminUsername)) throw new Error('Sign in as admin first.');
+      const adminCode = String(els.adminKeyInput.value || '').trim();
+      if (!adminCode) throw new Error('Admin code required.');
+      const lockCode = normalizeRoomCode(state.hostRouterLockRoomCode || '');
+      if (!lockCode) throw new Error('No locked room to delete.');
+      await deleteRoomByCode(lockCode);
+      await diagnoseHostRouterLock('Locked room deleted. You can retry Create Room now.');
+    }
+
     function renderAdminIdentity() {
       const signedIn = !!(state.adminToken && state.adminUsername);
       els.adminWhoami.textContent = signedIn ? ('Admin: ' + state.adminUsername) : 'Admin: not signed in';
@@ -5174,6 +5781,7 @@
       setEventsVisibility();
       updateMediaModeGate();
       renderMainEventState();
+      updateHostRouterPanelActions();
       if (adminRoomsTimer) {
         clearInterval(adminRoomsTimer);
         adminRoomsTimer = null;
@@ -5646,7 +6254,7 @@
             const muted = !!ev.payload?.muted;
             if (targetId) state.hostMuted[targetId] = muted;
             if (targetId && targetId === String(state.participantId || '').toLowerCase() && rtc.localVoiceStream) {
-              for (const t of rtc.localVoiceStream.getAudioTracks()) t.enabled = !muted;
+              for (const t of rtc.localVoiceStream.getAudioTracks()) t.enabled = !muted && (!state.pushToTalk || !!state.pttHeld);
               updateVoiceUi();
             }
             renderParticipants();
@@ -5785,6 +6393,11 @@
         await createRoom();
       } catch (err) {
         const msg = String(err && err.message ? err.message : err);
+        if (msg.includes('host_router_limit')) {
+          setStatus(false, 'This router already has an active hosted room. Run diagnostics below to unlock.');
+          await diagnoseHostRouterLock('Host-router limit triggered during room creation.');
+          return;
+        }
         if (msg.includes('room_capacity_reached')) {
           setStatus(false, 'Room limit reached (35 max). Delete an existing room first.');
           return;
@@ -5830,6 +6443,35 @@
         setStatus(false, msg);
       }
     });
+    if (els.hostRouterDiagnoseBtn) {
+      els.hostRouterDiagnoseBtn.addEventListener('click', async () => {
+        try {
+          await diagnoseHostRouterLock('Manual diagnostics requested.');
+          setStatus(true, 'Router diagnostics updated.');
+        } catch (err) {
+          setStatus(false, String(err && err.message ? err.message : err));
+        }
+      });
+    }
+    if (els.hostRouterDeleteBtn) {
+      els.hostRouterDeleteBtn.addEventListener('click', async () => {
+        try {
+          await deleteLockedRouterRoom();
+          setStatus(true, 'Locked room removed. Try creating your room again.');
+        } catch (err) {
+          const msg = String(err && err.message ? err.message : err);
+          if (msg.includes('admin_code_invalid')) {
+            setStatus(false, 'Admin code is invalid.');
+            return;
+          }
+          if (msg.includes('admin_auth_invalid') || msg.includes('admin_auth_required')) {
+            setStatus(false, 'Admin session expired. Sign in again.');
+            return;
+          }
+          setStatus(false, msg);
+        }
+      });
+    }
     if (els.quickHostBtn) {
       els.quickHostBtn.addEventListener('click', async () => {
         if (state.clientMode === 'desktop') {
@@ -5887,6 +6529,35 @@
         try { await stopVoiceChat(); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
       });
     }
+    if (els.webcamLayoutSelect) {
+      els.webcamLayoutSelect.addEventListener('change', () => {
+        applyWebcamLayout(els.webcamLayoutSelect.value, true);
+      });
+    }
+    if (els.pushToTalkToggle) {
+      els.pushToTalkToggle.addEventListener('change', () => {
+        state.pushToTalk = !!els.pushToTalkToggle.checked;
+        state.pttHeld = false;
+        try { localStorage.setItem(PTT_MODE_KEY, state.pushToTalk ? '1' : '0'); } catch (_) {}
+        updatePushToTalkState();
+      });
+    }
+    document.addEventListener('keydown', (ev) => {
+      if (!state.pushToTalk || !voiceOn()) return;
+      if (ev.code !== 'Space') return;
+      if (isTypingContext(ev.target)) return;
+      if (state.pttHeld) return;
+      state.pttHeld = true;
+      updatePushToTalkState();
+      ev.preventDefault();
+    });
+    document.addEventListener('keyup', (ev) => {
+      if (!state.pushToTalk || !voiceOn()) return;
+      if (ev.code !== 'Space') return;
+      state.pttHeld = false;
+      updatePushToTalkState();
+      ev.preventDefault();
+    });
     if (els.setWebcamPolicyBtn) {
       els.setWebcamPolicyBtn.addEventListener('click', async () => {
         try { await setWebcamPolicy(); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
@@ -6227,7 +6898,7 @@
     }
     if (els.userLoginBtn) {
       els.userLoginBtn.addEventListener('click', async () => {
-        try { await userLogin(); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
+        try { await userLogin(); } catch (err) { setStatus(false, friendlyAuthError(err)); }
       });
     }
     if (els.userRegisterBtn) {
@@ -6243,6 +6914,41 @@
     if (els.userLogoutBtn) {
       els.userLogoutBtn.addEventListener('click', async () => {
         await userLogout();
+      });
+    }
+    if (els.refreshSessionsBtn) {
+      els.refreshSessionsBtn.addEventListener('click', async () => {
+        try { await refreshUserSessions(); setStatus(true, 'Device sessions refreshed.'); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
+      });
+    }
+    if (els.revokeOtherSessionsBtn) {
+      els.revokeOtherSessionsBtn.addEventListener('click', async () => {
+        try { await revokeOtherSessions(); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
+      });
+    }
+    if (els.requestIpVerifyBtn) {
+      els.requestIpVerifyBtn.addEventListener('click', async () => {
+        try { await requestIpVerificationCode('email'); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
+      });
+    }
+    if (els.requestIpVerifyDiscordBtn) {
+      els.requestIpVerifyDiscordBtn.addEventListener('click', async () => {
+        try { await requestIpVerificationCode('discord'); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
+      });
+    }
+    if (els.confirmIpVerifyBtn) {
+      els.confirmIpVerifyBtn.addEventListener('click', async () => {
+        try { await confirmIpVerificationCode(); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
+      });
+    }
+    if (els.revokeSessionBtn) {
+      els.revokeSessionBtn.addEventListener('click', async () => {
+        try { await revokeSelectedSession(); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
+      });
+    }
+    if (els.logoutAllSessionsBtn) {
+      els.logoutAllSessionsBtn.addEventListener('click', async () => {
+        try { await userLogoutAll(); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
       });
     }
     if (els.saveRoomBtn) {
@@ -6264,7 +6970,7 @@
         const code = normalizeRoomCode((els.savedRoomsSelect && els.savedRoomsSelect.value) || '');
         if (!code) return;
         try {
-          await apiRequest('POST', '/api/watch/user/delete-saved-room', { userToken: state.userToken, roomCode: code });
+          await apiRequest('POST', '/api/watch/user/delete-saved-room', { roomCode: code });
           await refreshSavedRooms();
           setStatus(true, `Removed saved room ${code}.`);
         } catch (err) {
@@ -6471,7 +7177,9 @@
       } catch (_) {}
       els.adminKeyInput.addEventListener('input', () => {
         try { localStorage.setItem('telewatch_admin_key', els.adminKeyInput.value); } catch (_) {}
+        updateHostRouterPanelActions();
       });
+      updateHostRouterPanelActions();
       if (!els.adminUserInput.value.trim()) {
         els.adminUserInput.value = 'Trimbledustn@gmail.com';
       }
@@ -6498,6 +7206,35 @@
       }
       if (els.liveWebcamQualitySelect && !els.liveWebcamQualitySelect.value) {
         els.liveWebcamQualitySelect.value = String((els.webcamQualitySelect && els.webcamQualitySelect.value) || 'high');
+      }
+      try {
+        state.pushToTalk = String(localStorage.getItem(PTT_MODE_KEY) || '0') === '1';
+      } catch (_) {
+        state.pushToTalk = false;
+      }
+      if (els.pushToTalkToggle) {
+        els.pushToTalkToggle.checked = !!state.pushToTalk;
+      }
+      try {
+        const raw = localStorage.getItem(WEBCAM_LAYOUT_KEY) || 'grid';
+        state.webcamLayout = String(raw || 'grid');
+      } catch (_) {
+        state.webcamLayout = 'grid';
+      }
+      applyWebcamLayout(state.webcamLayout, false);
+      try {
+        const rawVolumes = localStorage.getItem(USER_VOLUME_KEY) || '{}';
+        const parsed = JSON.parse(rawVolumes);
+        state.userVolumes = parsed && typeof parsed === 'object' ? parsed : {};
+      } catch (_) {
+        state.userVolumes = {};
+      }
+      try {
+        const rawMuted = localStorage.getItem(USER_MUTED_KEY) || '{}';
+        const parsed = JSON.parse(rawMuted);
+        state.userMuted = parsed && typeof parsed === 'object' ? parsed : {};
+      } catch (_) {
+        state.userMuted = {};
       }
       loadPreferredMediaDevices();
       syncQualitySelectors();
@@ -6550,10 +7287,22 @@
       applyUIMode(savedUIMode, false);
       renderTemplateOptions();
       try {
-        const rawUser = localStorage.getItem(USER_SESSION_KEY) || '';
+        state.rememberUser = String(localStorage.getItem(USER_REMEMBER_KEY) || '0') === '1';
+      } catch (_) {
+        state.rememberUser = false;
+      }
+      if (els.userRememberInput) {
+        els.userRememberInput.checked = !!state.rememberUser;
+        els.userRememberInput.addEventListener('change', () => {
+          state.rememberUser = !!els.userRememberInput.checked;
+          try { localStorage.setItem(USER_REMEMBER_KEY, state.rememberUser ? '1' : '0'); } catch (_) {}
+        });
+      }
+      try {
+        const rawUser = (localStorage.getItem(USER_SESSION_KEY) || sessionStorage.getItem(USER_SESSION_EPHEMERAL_KEY) || '');
         if (rawUser) {
           const u = JSON.parse(rawUser);
-          state.userToken = String(u.userToken || '').trim();
+          state.userToken = '';
           state.userEmail = String(u.userEmail || '').trim().toLowerCase();
           state.userDisplayName = String(u.userDisplayName || '').trim();
           state.donationTier = String(u.donationTier || 'free').trim().toLowerCase();
@@ -6562,19 +7311,29 @@
       } catch (_) {}
       renderPremiumState();
       if (isPremiumUser()) {
-        apiRequest('POST', '/api/watch/user/me', { userToken: state.userToken })
+        apiRequest('POST', '/api/watch/user/me', {})
           .then((data) => {
             state.userEmail = String(data.username || state.userEmail);
             state.userDisplayName = String(data.displayName || state.userDisplayName);
             state.donationTier = String(data.donationTier || state.donationTier || 'free').toLowerCase();
+            state.ipVerificationRequired = false;
             saveUserSession();
             renderPremiumState();
             refreshSavedRooms().catch(() => {});
+            refreshUserSessions().catch(() => {});
           })
-          .catch(() => {
+          .catch((err) => {
+            const msg = String(err && err.message ? err.message : err);
+            if (msg.includes('user_auth_ip_changed')) {
+              state.ipVerificationRequired = true;
+              renderPremiumState();
+              setStatus(false, 'New IP detected for your login. Verify your account to continue.');
+              return;
+            }
             clearUserSession();
           });
       } else {
+        renderUserSessions();
         renderSavedRooms();
       }
       const inviteSettings = readInviteSettings();
