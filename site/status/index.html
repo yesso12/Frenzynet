@@ -34,7 +34,10 @@
   </div>
   <script>
     async function load() {
-      const endpoints = ['/api/public/status', '/api/frenzynet/api/public/status'];
+      const endpoints = [
+        'https://api.frenzynets.com/api/public/status',
+        'https://api.frenzynets.com/api/frenzynet/api/public/status'
+      ];
       let data = null;
       for (const ep of endpoints) {
         try {
