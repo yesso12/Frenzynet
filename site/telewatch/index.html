@@ -4937,7 +4937,7 @@
             const modeText = mode === 'monthly' ? '/month' : (mode === 'annual' ? '/year' : ' one-time');
             const cta = plan.checkoutEnabled
               ? (isCurrent ? 'Change Plan' : 'Upgrade')
-              : 'Unavailable';
+              : 'Message on Discord';
             const features = Array.isArray(plan.features) ? plan.features : [];
             const featuresHtml = features.map((f) => `<li>${String(f)}</li>`).join('');
             card.innerHTML = `
@@ -4980,6 +4980,15 @@
       if (!code) throw new Error('plan_required');
       if (!isPremiumUser()) throw new Error('Sign in first, then select your Pro plan.');
       const data = await apiRequest('POST', '/api/watch/user/billing/start', { planCode: code });
+      if (data && data.manualSupport) {
+        const supportUrl = String(data.supportUrl || '').trim();
+        if (supportUrl) {
+          window.open(supportUrl, '_blank', 'noopener');
+          setStatus(true, 'Opened Discord support for Pro activation.');
+          return;
+        }
+        throw new Error(String(data.message || 'billing_checkout_not_configured'));
+      }
       const url = String(data.checkoutUrl || '').trim();
       if (!url) throw new Error('billing_checkout_not_configured');
       window.open(url, '_blank', 'noopener');
@@ -4989,6 +4998,15 @@
     async function openBillingPortal() {
       if (!isPremiumUser()) throw new Error('Sign in first to manage billing.');
       const data = await apiRequest('POST', '/api/watch/user/billing/portal', {});
+      if (data && data.manualSupport) {
+        const supportUrl = String(data.supportUrl || '').trim();
+        if (supportUrl) {
+          window.open(supportUrl, '_blank', 'noopener');
+          setStatus(true, 'Opened Discord support for billing help.');
+          return;
+        }
+        throw new Error(String(data.message || 'billing_portal_not_configured'));
+      }
       const url = String(data.portalUrl || '').trim();
       if (!url) throw new Error('billing_portal_not_configured');
       window.open(url, '_blank', 'noopener');

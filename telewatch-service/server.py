@@ -3021,8 +3021,14 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                 checkout_url = str(plan.get('checkoutUrl') or '').strip()
                 if not checkout_url:
                     self._json(
-                        HTTPStatus.SERVICE_UNAVAILABLE,
-                        {'error': 'billing_checkout_not_configured', 'planCode': plan_code},
+                        HTTPStatus.OK,
+                        {
+                            'ok': True,
+                            'planCode': plan_code,
+                            'manualSupport': True,
+                            'supportUrl': TELEWATCH_BILLING_SUPPORT_URL,
+                            'message': 'Stripe checkout is not configured yet. Contact support to activate Pro.',
+                        },
                     )
                     return
                 conn.commit()
@@ -3045,7 +3051,15 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     return
                 username = str(user['username'] or '')
                 if not TELEWATCH_BILLING_PORTAL_URL:
-                    self._json(HTTPStatus.SERVICE_UNAVAILABLE, {'error': 'billing_portal_not_configured'})
+                    self._json(
+                        HTTPStatus.OK,
+                        {
+                            'ok': True,
+                            'manualSupport': True,
+                            'supportUrl': TELEWATCH_BILLING_SUPPORT_URL,
+                            'message': 'Billing portal is not configured yet. Contact support for billing changes.',
+                        },
+                    )
                     return
                 portal_url = _billing_link(TELEWATCH_BILLING_PORTAL_URL, username, 'portal')
                 conn.commit()
