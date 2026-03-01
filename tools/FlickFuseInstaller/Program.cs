@@ -111,7 +111,7 @@ internal sealed class InstallerForm : Form
     {
       var downloads = ExpandPath("%USERPROFILE%\\Downloads");
       var tempRoot = Path.Combine(downloads, "FlickFuse-Extension-Temp");
-      _installRoot = Path.Combine(ExpandPath("%LOCALAPPDATA%"), "FlickFuse", "Extensions");
+      _installRoot = Path.Combine(ExpandPath("%USERPROFILE%"), "Desktop", "FlickFuse Extensions");
 
       Directory.CreateDirectory(tempRoot);
       Directory.CreateDirectory(_installRoot);
