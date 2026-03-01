@@ -594,6 +594,7 @@
         <button id="applyMemberPlanBtn">Apply Plan</button>
         <button id="downgradeMemberBtn" class="secondary">Downgrade To Free</button>
         <button id="lookupMemberBtn" class="secondary">Lookup Tier</button>
+        <button id="reconcileMembersBtn" class="secondary">Run Auto Reconcile</button>
       </div>
       <div id="memberOpsStatus" class="muted" style="margin-top:8px">No member action yet.</div>
       </div>
@@ -738,6 +739,7 @@
       applyMemberPlanBtn: document.getElementById('applyMemberPlanBtn'),
       downgradeMemberBtn: document.getElementById('downgradeMemberBtn'),
       lookupMemberBtn: document.getElementById('lookupMemberBtn'),
+      reconcileMembersBtn: document.getElementById('reconcileMembersBtn'),
       memberOpsStatus: document.getElementById('memberOpsStatus'),
       newAdminUser: document.getElementById('newAdminUser'),
       newAdminPass: document.getElementById('newAdminPass'),
@@ -2201,6 +2203,25 @@
         const msg = describeApiError(e);
         setMemberOpsStatus(`Lookup failed: ${msg}`);
         setStatus('Tier lookup failed: ' + msg);
+      }
+    });
+
+    els.reconcileMembersBtn.addEventListener('click', async () => {
+      try {
+        const adminCode = ensureAdminCode();
+        const data = await api('/api/watch/admin/membership/reconcile', {
+          adminToken: state.token,
+          adminCode,
+        });
+        const result = data && data.result ? data.result : {};
+        const changed = Number(result.changed || 0);
+        const synced = Number(result.synced || 0);
+        setMemberOpsStatus(`Auto reconcile done. Changed: ${changed}. Discord sync: ${synced}.`);
+        setStatus(`Membership reconciliation complete. Changed ${changed} users.`);
+      } catch (e) {
+        const msg = describeApiError(e);
+        setMemberOpsStatus(`Reconcile failed: ${msg}`);
+        setStatus('Reconcile failed: ' + msg);
       }
     });
 

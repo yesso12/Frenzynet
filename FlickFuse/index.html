@@ -1226,6 +1226,12 @@
           </div>
           <div id="accountUserWrap" class="side-controls hidden">
             <div id="userBadge" class="side-item">Signed in</div>
+            <div id="aiAccessPanel" class="verify-panel hidden">
+              <div id="aiAccessStatus" class="muted">Checking AI bot access...</div>
+              <div class="row">
+                <button id="openAiBotBtn" class="secondary">Open Premium AI Bot</button>
+              </div>
+            </div>
             <div id="ipVerifyPanel" class="verify-panel hidden">
               <div id="ipVerifyStatus" class="muted">New IP detected. Verify to continue account actions.</div>
               <div class="row">
@@ -1463,6 +1469,14 @@
                   <label>&nbsp;</label>
                   <button id="setAccessModeBtn" class="secondary">Set Access Mode</button>
                 </div>
+                <div>
+                  <label for="maxParticipantsInput">Max Users</label>
+                  <input id="maxParticipantsInput" type="number" min="2" max="50" step="1" value="50" />
+                </div>
+                <div>
+                  <label>&nbsp;</label>
+                  <button id="setMaxParticipantsBtn" class="secondary">Apply Max Users</button>
+                </div>
                 <div class="full" data-advanced-ui="true">
                   <label>Cohost Permission Matrix</label>
                   <div class="row">
@@ -1489,6 +1503,20 @@
                     <button class="secondary invite-preset-btn" data-ttl="1440" data-uses="0">24h Unlimited</button>
                     <button class="secondary invite-preset-btn" data-ttl="10080" data-uses="0">7d Unlimited</button>
                   </div>
+                </div>
+                <div class="full">
+                  <label style="display:flex; align-items:center; gap:8px; margin:0;">
+                    <input id="createDiscordOnCreateInput" type="checkbox" />
+                    Auto-create Discord room on party create
+                  </label>
+                </div>
+                <div class="full">
+                  <label>Discord Room Link (Optional)</label>
+                  <div class="row">
+                    <button id="createDiscordRoomBtn" class="secondary">Create Discord Room</button>
+                    <button id="openDiscordRoomBtn" class="secondary">Open Discord Room</button>
+                  </div>
+                  <div id="discordRoomStatus" class="muted">No Discord room linked yet.</div>
                 </div>
               </div>
               <button id="setMediaBtn" class="secondary">Set Media</button>
@@ -1908,6 +1936,9 @@
       userLoginBtn: document.getElementById('userLoginBtn'),
       userRegisterBtn: document.getElementById('userRegisterBtn'),
       userBadge: document.getElementById('userBadge'),
+      aiAccessPanel: document.getElementById('aiAccessPanel'),
+      aiAccessStatus: document.getElementById('aiAccessStatus'),
+      openAiBotBtn: document.getElementById('openAiBotBtn'),
       ipVerifyPanel: document.getElementById('ipVerifyPanel'),
       ipVerifyStatus: document.getElementById('ipVerifyStatus'),
       requestIpVerifyBtn: document.getElementById('requestIpVerifyBtn'),
@@ -2008,6 +2039,12 @@
       shareAudioSelect: document.getElementById('shareAudioSelect'),
       accessModeSelect: document.getElementById('accessModeSelect'),
       setAccessModeBtn: document.getElementById('setAccessModeBtn'),
+      maxParticipantsInput: document.getElementById('maxParticipantsInput'),
+      setMaxParticipantsBtn: document.getElementById('setMaxParticipantsBtn'),
+      createDiscordOnCreateInput: document.getElementById('createDiscordOnCreateInput'),
+      createDiscordRoomBtn: document.getElementById('createDiscordRoomBtn'),
+      openDiscordRoomBtn: document.getElementById('openDiscordRoomBtn'),
+      discordRoomStatus: document.getElementById('discordRoomStatus'),
       inviteTtlInput: document.getElementById('inviteTtlInput'),
       inviteMaxUsesInput: document.getElementById('inviteMaxUsesInput'),
       invitePresetButtons: Array.from(document.querySelectorAll('.invite-preset-btn')),
@@ -2110,6 +2147,8 @@
       clientMode: 'web',
       allowWebcam: true,
       mediaMode: 'webrtc',
+      maxParticipants: ROOM_CAPACITY_LIMIT,
+      discordRoom: null,
       mainEventEnabled: false,
       sfuEnabled: false,
       sfuUrl: '',
@@ -2138,6 +2177,7 @@
       pricingPlans: [],
       pricingCons: [],
       billingPortalUrl: '',
+      aiAccess: { allowed: false, reason: 'pro_required', aiBotUrl: 'https://discord.gg/4uRUSAN498' },
       userSessions: [],
       savedRooms: [],
       pushToTalk: false,
@@ -3014,8 +3054,9 @@
         els.shareChip.classList.toggle('ok', sharing);
       }
       if (els.fullChip) {
-        const full = Number(activeCount || 0) >= ROOM_CAPACITY_LIMIT;
-        els.fullChip.textContent = full ? 'Room Full' : 'Room Open';
+        const cap = Math.max(2, Math.min(ROOM_CAPACITY_LIMIT, Number(state.maxParticipants || ROOM_CAPACITY_LIMIT)));
+        const full = Number(activeCount || 0) >= cap;
+        els.fullChip.textContent = full ? `Room Full (${cap})` : `Room Open (${cap})`;
         els.fullChip.classList.toggle('ok', !full);
       }
     }
@@ -3847,8 +3888,11 @@
       if (els.approveJoinBtn) els.approveJoinBtn.disabled = !hostCanModerate;
       if (els.denyJoinBtn) els.denyJoinBtn.disabled = !hostCanModerate;
       if (els.setAccessModeBtn) els.setAccessModeBtn.disabled = !hostCanModerate;
+      if (els.setMaxParticipantsBtn) els.setMaxParticipantsBtn.disabled = !hostCanModerate;
+      if (els.maxParticipantsInput) els.maxParticipantsInput.disabled = !hostCanModerate;
       if (els.setWebcamPolicyBtn) els.setWebcamPolicyBtn.disabled = !hostCanModerate;
       if (els.setCohostPermsBtn) els.setCohostPermsBtn.disabled = !hostCanModerate;
+      if (els.createDiscordRoomBtn) els.createDiscordRoomBtn.disabled = !hostCanModerate;
       if (els.webcamPolicySelect) {
         els.webcamPolicySelect.disabled = !hostCanModerate;
         els.webcamPolicySelect.value = state.allowWebcam ? 'allow' : 'deny';
@@ -4496,6 +4540,99 @@
       await sendControl('set_access_mode', { accessMode });
       state.accessMode = accessMode;
       setStatus(true, 'Access mode set to ' + accessMode + '.');
+    }
+
+    function renderDiscordRoomStatus() {
+      if (!els.discordRoomStatus) return;
+      const d = state.discordRoom || null;
+      if (!d || (!d.inviteUrl && !d.textChannelId)) {
+        els.discordRoomStatus.textContent = 'No Discord room linked yet.';
+        if (els.openDiscordRoomBtn) els.openDiscordRoomBtn.disabled = true;
+        return;
+      }
+      const invite = String(d.inviteUrl || '').trim();
+      const textId = String(d.textChannelId || '').trim();
+      const voiceId = String(d.voiceChannelId || '').trim();
+      const pieces = [];
+      if (invite) pieces.push(`Invite: ${invite}`);
+      if (textId) pieces.push(`Text: ${textId}`);
+      if (voiceId) pieces.push(`Voice: ${voiceId}`);
+      els.discordRoomStatus.textContent = pieces.join(' | ');
+      if (els.openDiscordRoomBtn) els.openDiscordRoomBtn.disabled = !invite;
+    }
+
+    async function setMaxParticipants() {
+      if (!state.isHost) return;
+      const raw = Number((els.maxParticipantsInput && els.maxParticipantsInput.value) || ROOM_CAPACITY_LIMIT);
+      if (!Number.isFinite(raw)) throw new Error('Invalid max user value.');
+      const maxParticipants = Math.max(2, Math.min(ROOM_CAPACITY_LIMIT, Math.round(raw)));
+      const res = await sendControl('set_max_participants', { maxParticipants });
+      state.maxParticipants = Number((res && res.actionPayload && res.actionPayload.maxParticipants) || maxParticipants);
+      if (els.maxParticipantsInput) els.maxParticipantsInput.value = String(state.maxParticipants);
+      setStatus(true, `Max users set to ${state.maxParticipants}.`);
+    }
+
+    async function createDiscordRoom() {
+      if (!state.isHost) throw new Error('Host only action.');
+      if (!state.roomCode || !state.participantToken) throw new Error('Create or join your room first.');
+      const maxUsers = Math.max(2, Math.min(ROOM_CAPACITY_LIMIT, Number((els.maxParticipantsInput && els.maxParticipantsInput.value) || ROOM_CAPACITY_LIMIT)));
+      const res = await sendControl('create_discord_room', { maxUsers, forceRecreate: false });
+      const d = res && res.actionPayload && res.actionPayload.discordRoom ? res.actionPayload.discordRoom : null;
+      state.discordRoom = d;
+      renderDiscordRoomStatus();
+      if (d && d.inviteUrl) {
+        setStatus(true, 'Discord room linked. Invite ready.');
+      } else {
+        setStatus(true, 'Discord room created.');
+      }
+    }
+
+    function openDiscordRoomLink() {
+      const d = state.discordRoom || null;
+      const invite = String((d && d.inviteUrl) || '').trim();
+      if (!invite) {
+        setStatus(false, 'No Discord invite available yet.');
+        return;
+      }
+      window.open(invite, '_blank', 'noopener');
+      setStatus(true, 'Opened Discord room invite.');
+    }
+
+    function renderAiAccessState() {
+      const premium = isPremiumUser();
+      if (els.aiAccessPanel) els.aiAccessPanel.classList.toggle('hidden', !premium);
+      if (!premium) return;
+      const a = state.aiAccess || {};
+      const allowed = !!a.allowed;
+      if (els.aiAccessStatus) {
+        if (allowed) {
+          els.aiAccessStatus.textContent = 'Premium AI bot unlocked in Discord.';
+        } else if (String(a.reason || '') === 'discord_link_required') {
+          els.aiAccessStatus.textContent = 'Link Discord to unlock AI bot access.';
+        } else {
+          els.aiAccessStatus.textContent = 'Upgrade to Pro to unlock AI bot access.';
+        }
+      }
+      if (els.openAiBotBtn) els.openAiBotBtn.disabled = !allowed;
+    }
+
+    async function refreshAiAccess() {
+      if (!isPremiumUser()) {
+        state.aiAccess = { allowed: false, reason: 'pro_required', aiBotUrl: 'https://discord.gg/4uRUSAN498' };
+        renderAiAccessState();
+        return;
+      }
+      try {
+        const data = await apiRequest('POST', '/api/watch/user/ai/access', {});
+        state.aiAccess = {
+          allowed: !!(data && data.allowed),
+          reason: String((data && data.reason) || 'pro_required'),
+          aiBotUrl: String((data && data.aiBotUrl) || 'https://discord.gg/4uRUSAN498'),
+        };
+      } catch (_) {
+        state.aiAccess = { allowed: false, reason: 'check_failed', aiBotUrl: 'https://discord.gg/4uRUSAN498' };
+      }
+      renderAiAccessState();
     }
 
     async function kickSelectedUser() {
@@ -5246,6 +5383,7 @@
       if (els.requestIpVerifyBtn) els.requestIpVerifyBtn.disabled = !premium;
       if (els.requestIpVerifyDiscordBtn) els.requestIpVerifyDiscordBtn.disabled = !premium;
       if (els.confirmIpVerifyBtn) els.confirmIpVerifyBtn.disabled = !premium;
+      renderAiAccessState();
       enforceDonationGates();
       renderPricingCatalog();
       renderMainEventState();
@@ -5282,6 +5420,7 @@
       state.donationTier = 'free';
       state.entitlements = [];
       state.ipVerificationRequired = false;
+      state.aiAccess = { allowed: false, reason: 'pro_required', aiBotUrl: 'https://discord.gg/4uRUSAN498' };
       state.userSessions = [];
       state.savedRooms = [];
       try {
@@ -5469,6 +5608,7 @@
       state.ipVerificationRequired = false;
       saveUserSession();
       renderPremiumState();
+      await refreshAiAccess();
       await refreshSavedRooms();
       await refreshUserSessions();
       setStatus(true, 'Premium account connected.');
@@ -5500,6 +5640,7 @@
       state.ipVerificationRequired = false;
       saveUserSession();
       renderPremiumState();
+      await refreshAiAccess();
       await refreshSavedRooms();
       await refreshUserSessions();
       setStatus(true, 'Premium account created.');
@@ -5956,7 +6097,9 @@
         themeKey: selectedTheme,
         mediaMode: currentMediaMode(),
         adminToken: String(state.adminToken || ''),
-        accessMode: String((els.accessModeSelect && els.accessModeSelect.value) || 'public').trim().toLowerCase()
+        accessMode: String((els.accessModeSelect && els.accessModeSelect.value) || 'public').trim().toLowerCase(),
+        maxParticipants: Math.max(2, Math.min(ROOM_CAPACITY_LIMIT, Number((els.maxParticipantsInput && els.maxParticipantsInput.value) || ROOM_CAPACITY_LIMIT))),
+        createDiscordRoom: !!(els.createDiscordOnCreateInput && els.createDiscordOnCreateInput.checked)
       };
       const data = await apiRequest('POST', '/api/watch/create', payload);
       state.roomCode = data.roomCode;
@@ -5964,6 +6107,8 @@
       state.participantId = data.participantId || '';
       state.isHost = true;
       state.sinceEventId = 0;
+      state.maxParticipants = Number(data.maxParticipants || payload.maxParticipants || ROOM_CAPACITY_LIMIT);
+      state.discordRoom = data && data.discordRoom ? data.discordRoom : null;
       applyMediaModeState(String(data.mediaMode || payload.mediaMode || 'webrtc'), true);
       state.roomThemeKey = selectedTheme || 'clean';
       applyTheme(state.roomThemeKey, false);
@@ -5980,6 +6125,7 @@
       state.hostRouterDiag = null;
       if (els.hostRouterLimitPanel) els.hostRouterLimitPanel.classList.add('hidden');
       onSessionStart();
+      renderDiscordRoomStatus();
       addEventLine('Room created: ' + state.roomCode);
     }
 
@@ -6417,6 +6563,8 @@
             : 'Share your room code in Discord voice chat. Everyone runs their own stream account.');
       }
       state.accessMode = String(room.accessMode || 'public');
+      state.maxParticipants = Math.max(2, Math.min(ROOM_CAPACITY_LIMIT, Number(room.maxParticipants || state.maxParticipants || ROOM_CAPACITY_LIMIT)));
+      state.discordRoom = room.discordRoom || state.discordRoom || null;
       state.allowWebcam = room.allowWebcam !== false;
       const perms = room.cohostPerms || {};
       state.cohostPerms = {
@@ -6430,6 +6578,9 @@
       }
       if (els.webcamPolicySelect) {
         els.webcamPolicySelect.value = state.allowWebcam ? 'allow' : 'deny';
+      }
+      if (els.maxParticipantsInput) {
+        els.maxParticipantsInput.value = String(state.maxParticipants);
       }
       if (els.cohostKickPerm) els.cohostKickPerm.checked = !!state.cohostPerms.kick;
       if (els.cohostMutePerm) els.cohostMutePerm.checked = !!state.cohostPerms.mute;
@@ -6448,6 +6599,7 @@
         }
       }
       updateVoiceUi();
+      renderDiscordRoomStatus();
       updateHealthStrip(room);
 
       const p = els.player;
@@ -6619,6 +6771,7 @@
               state.chatScopeRoom = '';
               state.participantToken = '';
               state.participantId = '';
+              state.discordRoom = null;
               clearSession();
               state.chatMessages = new Map();
               state.pinnedMessageId = 0;
@@ -6629,6 +6782,7 @@
               setSyncLabel('removed');
               updateBadges();
               setThemeControlState();
+              renderDiscordRoomStatus();
               return false;
             }
             continue;
@@ -6707,6 +6861,7 @@
           state.chatScopeRoom = '';
           state.participantToken = '';
           state.participantId = '';
+          state.discordRoom = null;
           state.participants = [];
           if (els.mediaModeSelect) els.mediaModeSelect.disabled = false;
           updateBadges();
@@ -6722,6 +6877,7 @@
           }
           setStatus(false, 'Session expired. Rejoin the room.');
           setSyncLabel('disconnected');
+          renderDiscordRoomStatus();
           return false;
         }
         setStatus(false, 'Reconnect pending: ' + msg);
@@ -6787,7 +6943,8 @@
           return;
         }
         if (msg.includes('room_full')) {
-          setStatus(false, `Room is full (${ROOM_CAPACITY_LIMIT} people max).`);
+          const cap = Math.max(2, Math.min(ROOM_CAPACITY_LIMIT, Number((els.maxParticipantsInput && els.maxParticipantsInput.value) || state.maxParticipants || ROOM_CAPACITY_LIMIT)));
+          setStatus(false, `Room is full (${cap} people max).`);
           return;
         }
         setStatus(false, msg);
@@ -6946,6 +7103,21 @@
     if (els.setAccessModeBtn) {
       els.setAccessModeBtn.addEventListener('click', async () => {
         try { await setAccessMode(); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
+      });
+    }
+    if (els.setMaxParticipantsBtn) {
+      els.setMaxParticipantsBtn.addEventListener('click', async () => {
+        try { await setMaxParticipants(); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
+      });
+    }
+    if (els.createDiscordRoomBtn) {
+      els.createDiscordRoomBtn.addEventListener('click', async () => {
+        try { await createDiscordRoom(); } catch (err) { setStatus(false, String(err && err.message ? err.message : err)); }
+      });
+    }
+    if (els.openDiscordRoomBtn) {
+      els.openDiscordRoomBtn.addEventListener('click', () => {
+        openDiscordRoomLink();
       });
     }
     if (els.approveJoinBtn) {
@@ -7266,6 +7438,13 @@
         await userLogout();
       });
     }
+    if (els.openAiBotBtn) {
+      els.openAiBotBtn.addEventListener('click', () => {
+        const url = String((state.aiAccess && state.aiAccess.aiBotUrl) || 'https://discord.gg/4uRUSAN498').trim();
+        if (!url) return;
+        window.open(url, '_blank', 'noopener');
+      });
+    }
     if (els.pricingList) {
       els.pricingList.addEventListener('click', async (ev) => {
         const btn = ev.target && ev.target.closest ? ev.target.closest('[data-plan-start]') : null;
@@ -7425,6 +7604,7 @@
         state.chatScopeRoom = '';
         state.participantToken = '';
         state.participantId = '';
+        state.discordRoom = null;
         state.participants = [];
         state.isHost = false;
         state.sinceEventId = 0;
@@ -7452,6 +7632,7 @@
         setStatus(false, 'Room deleted.');
         addEventLine('Room deleted by host.');
         updateMediaVisibility();
+        renderDiscordRoomStatus();
       } catch (err) {
         setStatus(false, String(err && err.message ? err.message : err));
       }
@@ -7674,6 +7855,7 @@
         }
       } catch (_) {}
       renderPremiumState();
+      renderDiscordRoomStatus();
       refreshPricingCatalog().catch(() => {});
       if (isPremiumUser()) {
         apiRequest('POST', '/api/watch/user/me', {})
@@ -7685,6 +7867,7 @@
             state.ipVerificationRequired = false;
             saveUserSession();
             renderPremiumState();
+            refreshAiAccess().catch(() => {});
             refreshSavedRooms().catch(() => {});
             refreshUserSessions().catch(() => {});
           })
