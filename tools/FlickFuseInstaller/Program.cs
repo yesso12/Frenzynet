@@ -62,11 +62,11 @@ static void OpenBrowserExtensionsPage(int browser)
   {
     var info = browser switch
     {
-      1 => new ProcessStartInfo { FileName = "chrome.exe", Arguments = "chrome://extensions/", UseShellExecute = true },
-      2 => new ProcessStartInfo { FileName = "msedge.exe", Arguments = "edge://extensions/", UseShellExecute = true },
-      3 => new ProcessStartInfo { FileName = "brave.exe", Arguments = "brave://extensions/", UseShellExecute = true },
-      4 => new ProcessStartInfo { FileName = "opera.exe", Arguments = "opera://extensions/", UseShellExecute = true },
-      5 => new ProcessStartInfo { FileName = "firefox.exe", Arguments = "about:debugging#/runtime/this-firefox", UseShellExecute = true },
+      1 => new ProcessStartInfo { FileName = "chrome.exe", UseShellExecute = true },
+      2 => new ProcessStartInfo { FileName = "msedge.exe", UseShellExecute = true },
+      3 => new ProcessStartInfo { FileName = "brave.exe", UseShellExecute = true },
+      4 => new ProcessStartInfo { FileName = "opera.exe", UseShellExecute = true },
+      5 => new ProcessStartInfo { FileName = "firefox.exe", UseShellExecute = true },
       _ => throw new InvalidOperationException("unknown_browser")
     };
     Process.Start(info);
@@ -116,6 +116,10 @@ try
     Console.WriteLine("Chromium browsers (Chrome/Edge/Brave/Opera):");
     Console.WriteLine("1) Developer Mode ON  2) Load unpacked  3) Select folder:");
     Console.WriteLine(chromiumExtractPath);
+    Console.WriteLine("Chrome URL: chrome://extensions/");
+    Console.WriteLine("Edge URL: edge://extensions/");
+    Console.WriteLine("Brave URL: brave://extensions/");
+    Console.WriteLine("Opera URL: opera://extensions/");
   }
   if (needsFirefoxPackage)
   {
