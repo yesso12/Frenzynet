@@ -9,40 +9,40 @@
   <title>Frenzy Telewatch | Synced Watch Rooms</title>
   <style>
     :root {
-      --bg: #f4f6fa;
-      --bg-gradient: linear-gradient(180deg, #f8f9fc, #f3f6fa);
+      --bg: #0f1116;
+      --bg-gradient: radial-gradient(circle at top, #1a1d27 0%, #0f1116 42%, #0b0d12 100%);
       --bg-graphic-image: url('/assets/themes/clean-default.svg');
       --bg-graphic-size: cover;
       --bg-graphic-position: center;
-      --bg-graphic-opacity: 0.52;
-      --panel: #ffffff;
-      --panel-2: #fbfcfe;
-      --line: #dbe2ea;
-      --line-soft: #e9eef4;
-      --text: #18212c;
-      --muted: #6a7787;
-      --accent: #ff5f1f;
-      --accent-strong: #e04d11;
-      --good: #168252;
-      --warn: #9e5d00;
-      --danger: #b42318;
-      --shadow: 0 10px 28px rgba(16, 24, 40, 0.08);
-      --pill-bg: #f8fafc;
-      --pill-line: #dbe2ea;
-      --pill-text: #314155;
-      --input-bg: #ffffff;
-      --input-line: #d1dae5;
-      --input-focus: #ff925f;
-      --input-focus-glow: rgba(255, 95, 31, 0.15);
-      --tab-active-bg: #fff3ec;
-      --tab-active-text: #a43f12;
-      --tab-active-line: #ff925f;
+      --bg-graphic-opacity: 0.08;
+      --panel: #171a22;
+      --panel-2: #11141b;
+      --line: #2a2e3a;
+      --line-soft: #222736;
+      --text: #eef1f7;
+      --muted: #9ea7bc;
+      --accent: #f73f64;
+      --accent-strong: #dc234a;
+      --good: #2ec27e;
+      --warn: #f2a700;
+      --danger: #ff5c75;
+      --shadow: 0 14px 36px rgba(0, 0, 0, 0.45);
+      --pill-bg: #1d2230;
+      --pill-line: #30374a;
+      --pill-text: #d9dfeb;
+      --input-bg: #0f131c;
+      --input-line: #32394a;
+      --input-focus: #f73f64;
+      --input-focus-glow: rgba(247, 63, 100, 0.26);
+      --tab-active-bg: #2b1f2b;
+      --tab-active-text: #ffd8e2;
+      --tab-active-line: #f73f64;
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
       color: var(--text);
-      font-family: "Inter", "Segoe UI", Arial, sans-serif;
+      font-family: "Nunito Sans", "Segoe UI", Arial, sans-serif;
       background: var(--bg-gradient);
       min-height: 100vh;
       position: relative;
@@ -69,7 +69,7 @@
     .bg-grid {
       position: absolute;
       inset: 0;
-      opacity: 0.16;
+      opacity: 0.05;
       background-image:
         linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px),
         linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px);
@@ -79,7 +79,7 @@
     .bg-noise {
       position: absolute;
       inset: -20%;
-      opacity: 0.08;
+      opacity: 0.03;
       background-image:
         radial-gradient(circle at 20% 20%, rgba(255,255,255,0.8) 0.7px, transparent 1px),
         radial-gradient(circle at 80% 40%, rgba(255,255,255,0.65) 0.7px, transparent 1px),
@@ -95,7 +95,7 @@
       min-height: 260px;
       border-radius: 50%;
       filter: blur(42px);
-      opacity: 0.34;
+      opacity: 0.12;
       animation: driftOrb 18s ease-in-out infinite alternate;
     }
     .bg-orb.a {
@@ -126,8 +126,8 @@
       100% { transform: translate3d(-3%, 2%, 0); }
     }
     .wrap {
-      width: min(2200px, calc(100% - 28px));
-      margin: 18px auto 30px;
+      width: min(1760px, calc(100% - 18px));
+      margin: 8px auto 18px;
       position: relative;
       z-index: 2;
     }
@@ -138,10 +138,15 @@
       gap: 12px;
       flex-wrap: wrap;
       border: 1px solid var(--line);
-      border-radius: 14px;
+      border-radius: 12px;
       background: var(--panel);
       box-shadow: var(--shadow);
-      padding: 14px 16px;
+      padding: 10px 14px;
+      position: sticky;
+      top: 8px;
+      z-index: 12;
+      background: rgba(23, 26, 34, 0.95);
+      backdrop-filter: blur(8px);
     }
     .hero {
       display: grid;
@@ -149,7 +154,7 @@
     }
     .hero h1 {
       margin: 0;
-      font-size: 25px;
+      font-size: 24px;
       letter-spacing: 0.01em;
     }
     .hero p {
@@ -175,7 +180,7 @@
       padding: 8px 10px;
       border-radius: 999px;
       border: 1px solid var(--pill-line);
-      background: var(--pill-bg);
+      background: #121726;
       color: var(--pill-text);
       font-weight: 700;
     }
@@ -202,21 +207,29 @@
     .workspace {
       margin-top: 14px;
       display: grid;
-      grid-template-columns: minmax(260px, 340px) minmax(420px, 560px) minmax(780px, 1fr);
+      grid-template-columns: minmax(780px, 1fr) 330px;
+      grid-template-areas:
+        "stage sidebar"
+        "controls sidebar";
       gap: 14px;
       align-items: start;
     }
+    .workspace > aside.sidebar { grid-area: sidebar; }
+    .workspace > section.card.stack:first-of-type { grid-area: controls; }
+    .workspace > section.card.stack:last-of-type { grid-area: stage; }
     .sidebar {
       border: 1px solid var(--line);
-      border-radius: 15px;
+      border-radius: 12px;
       background: var(--panel);
       box-shadow: var(--shadow);
-      padding: 12px;
+      padding: 9px;
       display: grid;
       gap: 10px;
       align-content: start;
-      max-height: calc(100vh - 120px);
+      max-height: calc(100vh - 86px);
       overflow: auto;
+      position: sticky;
+      top: 64px;
     }
     .side-block {
       border: 1px solid var(--line-soft);
@@ -234,7 +247,7 @@
     }
     .side-item {
       border: 1px solid var(--line-soft);
-      border-radius: 8px;
+      border-radius: 10px;
       padding: 6px;
       font-size: 12px;
       background: var(--input-bg);
@@ -243,6 +256,40 @@
     .side-controls {
       display: grid;
       gap: 6px;
+    }
+    .how-works {
+      display: grid;
+      gap: 8px;
+    }
+    .how-step-card {
+      border: 1px solid var(--line-soft);
+      background: #0f131b;
+      border-radius: 12px;
+      padding: 9px;
+      display: grid;
+      gap: 4px;
+    }
+    .how-step-num {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      color: #ff87a1;
+      font-weight: 800;
+    }
+    .how-step-title {
+      font-size: 13px;
+      font-weight: 800;
+      color: #ecf1ff;
+    }
+    .how-step-copy {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+    .how-cta-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
     }
     .pricing-list {
       display: grid;
@@ -263,7 +310,7 @@
     .pricing-price {
       font-weight: 800;
       font-size: 16px;
-      color: var(--accent-strong);
+      color: #ff5f80;
     }
     .pricing-meta {
       color: var(--muted);
@@ -302,8 +349,11 @@
       border: 1px solid var(--line);
       border-radius: 12px;
       background: var(--panel);
-      box-shadow: 0 6px 18px rgba(16, 24, 40, 0.06);
-      padding: 12px;
+      box-shadow: var(--shadow);
+      padding: 10px;
+    }
+    .workspace > section.card.stack:last-of-type {
+      min-height: 68vh;
     }
     h2, h3 { margin: 0; }
     h2 { font-size: 18px; }
@@ -311,7 +361,7 @@
       margin-top: 2px;
       margin-bottom: 8px;
       font-size: 13px;
-      color: #516072;
+      color: #aab3c8;
       letter-spacing: 0.05em;
       text-transform: uppercase;
     }
@@ -326,11 +376,11 @@
       align-items: center;
     }
     .tab-btn {
-      border: 1px solid #d1dae5;
-      background: #fff;
-      color: #33475f;
-      border-radius: 10px;
-      padding: 8px 12px;
+      border: 1px solid #343d53;
+      background: #151a28;
+      color: #d7def0;
+      border-radius: 8px;
+      padding: 7px 10px;
       font-size: 12px;
       font-weight: 700;
       cursor: pointer;
@@ -348,9 +398,9 @@
     .tab-pane.active { display: grid; gap: 10px; }
     .block {
       border: 1px solid var(--line-soft);
-      border-radius: 10px;
-      background: color-mix(in srgb, var(--panel-2) 90%, #ffffff 10%);
-      padding: 9px;
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--panel-2) 94%, #0f131c 6%);
+      padding: 8px;
     }
     .collapse-head {
       display: flex;
@@ -380,7 +430,7 @@
     .row > * { flex: 1; min-width: 120px; }
     label {
       font-size: 11px;
-      color: #5f6e7f;
+      color: #b4bdd2;
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.07em;
@@ -389,11 +439,11 @@
     }
     input, button, textarea, select {
       width: 100%;
-      border-radius: 10px;
+      border-radius: 8px;
       border: 1px solid var(--input-line);
       background: var(--input-bg);
       color: var(--text);
-      padding: 10px 11px;
+      padding: 8px 10px;
       font: inherit;
     }
     input:focus, textarea:focus, select:focus {
@@ -409,14 +459,33 @@
       color: #fff;
       font-weight: 800;
       cursor: pointer;
-      padding: 10px 13px;
+      padding: 8px 10px;
       transition: transform 0.16s ease, filter 0.16s ease;
     }
     button:hover { transform: translateY(-1px); filter: brightness(1.04); }
     button.secondary {
       background: var(--input-bg);
       border: 1px solid var(--input-line);
-      color: #2f3f52;
+      color: #dde5f8;
+    }
+    a.secondary {
+      width: auto;
+      border-radius: 8px;
+      border: 1px solid var(--input-line);
+      background: var(--input-bg);
+      color: #dde5f8;
+      padding: 8px 10px;
+      font: inherit;
+      font-weight: 700;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.16s ease, filter 0.16s ease;
+    }
+    a.secondary:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.06);
     }
     button:disabled { opacity: 0.45; cursor: not-allowed; }
     button.danger-btn {
@@ -425,10 +494,10 @@
     }
     video {
       width: 100%;
-      max-height: 410px;
-      border-radius: 12px;
-      border: 1px solid #d2dbe6;
-      background: #0f1720;
+      max-height: 480px;
+      border-radius: 8px;
+      border: 1px solid #2f384a;
+      background: #0b0f17;
     }
     .status-online { color: var(--good); }
     .status-warn { color: var(--warn); }
@@ -438,7 +507,7 @@
     }
     .family-lounge {
       border: 1px solid var(--line-soft);
-      border-radius: 12px;
+      border-radius: 8px;
       background: color-mix(in srgb, var(--panel-2) 92%, #ffffff 8%);
       padding: 10px;
       display: grid;
@@ -446,7 +515,7 @@
     }
     .movie-chat-dock {
       border: 1px solid #3a4f6f;
-      border-radius: 12px;
+      border-radius: 8px;
       background: #162131;
       padding: 8px;
       display: grid;
@@ -516,7 +585,7 @@
     }
     .community-chat-panel {
       grid-column: 1 / -1;
-      min-height: 560px;
+      min-height: 520px;
       grid-template-rows: auto auto auto minmax(320px, 1fr) auto;
       width: 100%;
     }
@@ -570,7 +639,7 @@
     .events div:last-child { border-bottom: 0; }
     .message-center {
       border: 1px solid #2f3c52;
-      border-radius: 14px;
+      border-radius: 10px;
       background: linear-gradient(180deg, #1f2633, #1a202b);
       padding: 10px;
       display: grid;
@@ -611,11 +680,11 @@
     .chat-feed {
       max-height: none;
       min-height: 340px;
-      height: clamp(420px, 54vh, 680px);
+      height: clamp(360px, 48vh, 560px);
       overflow: auto;
       overflow-x: hidden;
       border: 1px solid #37485f;
-      border-radius: 12px;
+      border-radius: 8px;
       padding: 10px;
       font-size: 13px;
       line-height: 1.45;
@@ -998,11 +1067,17 @@
       margin-top: 6px;
     }
     @media (max-width: 1080px) {
-      .workspace { grid-template-columns: 1fr; }
+      .workspace {
+        grid-template-columns: 1fr;
+        grid-template-areas:
+          "stage"
+          "controls"
+          "sidebar";
+      }
       .duo { grid-template-columns: 1fr; }
       .row > * { min-width: 100px; }
       .host-grid { grid-template-columns: 1fr; }
-      .sidebar { max-height: none; }
+      .sidebar { max-height: none; position: static; top: auto; }
       .webcam-stage { grid-template-columns: 1fr; }
     }
     @media (max-width: 760px) {
@@ -1030,11 +1105,11 @@
     <div class="top">
       <div class="hero">
         <h1>Frenzy Telewatch</h1>
-        <p>Host or join synced watch rooms in one clean dashboard.</p>
+        <p>Start a watch party, share one link, and sync playback with your crew.</p>
         <div class="wizard">
-          <span id="stepSession" class="wizard-step active">1. Session</span>
-          <span id="stepRoom" class="wizard-step">2. Room</span>
-          <span id="stepShare" class="wizard-step">3. Share</span>
+          <span id="stepSession" class="wizard-step active">1. Sign In</span>
+          <span id="stepRoom" class="wizard-step">2. Create/Join Room</span>
+          <span id="stepShare" class="wizard-step">3. Invite Friends</span>
         </div>
       </div>
       <div class="row">
@@ -1042,11 +1117,36 @@
         <span id="roleBadge" class="badge">Role: viewer</span>
         <span id="syncBadge" class="badge">Sync: idle</span>
         <select id="themeSelect" class="theme-select" aria-label="Theme"></select>
+        <a class="secondary" href="/setup/" target="_blank" rel="noopener">How It Works</a>
       </div>
     </div>
 
     <div class="workspace">
       <aside class="sidebar">
+        <div class="side-block">
+          <h3>How It Works</h3>
+          <div class="how-works">
+            <div class="how-step-card">
+              <div class="how-step-num">Step 1</div>
+              <div class="how-step-title">Install + Sign In</div>
+              <div class="how-step-copy">Open Telewatch in your browser and sign in once. Keep this tab pinned for fast party access.</div>
+            </div>
+            <div class="how-step-card">
+              <div class="how-step-num">Step 2</div>
+              <div class="how-step-title">Start or Join Party</div>
+              <div class="how-step-copy">Create a room code or paste an invite link, then join with one click.</div>
+            </div>
+            <div class="how-step-card">
+              <div class="how-step-num">Step 3</div>
+              <div class="how-step-title">Share With Friends</div>
+              <div class="how-step-copy">Send the room link in Discord. Everyone watches synced in the same party.</div>
+            </div>
+            <div class="how-cta-row">
+              <a class="secondary" href="/setup/" target="_blank" rel="noopener">Quick Setup</a>
+              <a class="secondary" href="https://discord.gg/4uRUSAN498" target="_blank" rel="noopener">Open Discord</a>
+            </div>
+          </div>
+        </div>
         <div class="side-block">
           <h3>Account</h3>
           <div id="accountGuestWrap" class="side-controls">
@@ -1104,7 +1204,9 @@
           </div>
           <div class="row">
             <button id="billingPortalBtn" class="secondary">Manage Billing</button>
+            <a class="secondary" href="https://discord.gg/4uRUSAN498" target="_blank" rel="noopener">Buy in Discord</a>
           </div>
+          <div class="muted">To purchase, message a Frenzy Owner or Frenzy Admin in Discord.</div>
           <div id="pricingCons" class="muted">Paid plan tradeoffs will show here.</div>
         </div>
         <div class="side-block">
@@ -1158,10 +1260,10 @@
       </aside>
 
       <section class="card stack">
-        <h2>Control Panel</h2>
+        <h2>Party Setup</h2>
         <div class="panel-tabs">
-          <button class="tab-btn active" data-tab-btn="session">Session</button>
-          <button class="tab-btn" data-tab-btn="host" data-host-only="true">Host Setup</button>
+          <button class="tab-btn active" data-tab-btn="session">Start / Join</button>
+          <button class="tab-btn" data-tab-btn="host" data-host-only="true">Host Controls</button>
           <button class="tab-btn" data-tab-btn="chat">Messages</button>
           <button class="tab-btn" data-tab-btn="admin" data-advanced-ui="true">Admin</button>
         </div>
@@ -1203,7 +1305,7 @@
               <label for="recentRoomsSelect">Recent Rooms</label>
               <select id="recentRoomsSelect"></select>
             </div>
-            <div class="muted" id="joinHint">Share your room code in Discord voice chat. Everyone runs their own stream account.</div>
+            <div class="muted" id="joinHint">Share the invite in Discord and everyone joins the same synced party room.</div>
             <div id="hostRouterLimitPanel" class="verify-panel hidden">
               <div style="font-weight:700">Router Lock Diagnostics</div>
               <div id="hostRouterLimitStatus" class="muted">No diagnostics yet.</div>
@@ -4915,6 +5017,10 @@
       }
     }
 
+    function discordSupportUrl() {
+      return 'https://discord.gg/4uRUSAN498';
+    }
+
     function renderPricingCatalog() {
       if (els.pricingList) {
         els.pricingList.innerHTML = '';
@@ -4945,6 +5051,7 @@
               <div class="pricing-price">${price}${modeText}</div>
               <div class="pricing-meta">Tier: ${tier}${plan.savingsLabel ? ` · ${String(plan.savingsLabel)}` : ''}</div>
               ${features.length ? `<ul class="pricing-features">${featuresHtml}</ul>` : ''}
+              <a class="secondary" href="${discordSupportUrl()}" target="_blank" rel="noopener">Buy on Discord</a>
               <button class="secondary" data-plan-start="${code}" ${plan.checkoutEnabled ? '' : 'disabled'}>${cta}</button>
             `;
             els.pricingList.appendChild(card);
@@ -4978,7 +5085,11 @@
     async function startPlanCheckout(planCode) {
       const code = String(planCode || '').trim();
       if (!code) throw new Error('plan_required');
-      if (!isPremiumUser()) throw new Error('Sign in first, then select your Pro plan.');
+      if (!isPremiumUser()) {
+        window.open(discordSupportUrl(), '_blank', 'noopener');
+        setStatus(true, 'Open Discord and message owner/admin to purchase your Pro plan.');
+        return;
+      }
       const data = await apiRequest('POST', '/api/watch/user/billing/start', { planCode: code });
       if (data && data.manualSupport) {
         const supportUrl = String(data.supportUrl || '').trim();
@@ -4996,7 +5107,11 @@
     }
 
     async function openBillingPortal() {
-      if (!isPremiumUser()) throw new Error('Sign in first to manage billing.');
+      if (!isPremiumUser()) {
+        window.open(discordSupportUrl(), '_blank', 'noopener');
+        setStatus(true, 'Open Discord and message owner/admin for billing help.');
+        return;
+      }
       const data = await apiRequest('POST', '/api/watch/user/billing/portal', {});
       if (data && data.manualSupport) {
         const supportUrl = String(data.supportUrl || '').trim();

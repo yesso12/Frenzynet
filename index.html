@@ -3,472 +3,505 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>FrenzyNets | Watch Party</title>
-  <meta name="description" content="FrenzyNets Watch Party platform with rooms, major-night hosting, admin controls, and desktop panel downloads." />
+  <title>Frenzy Telewatch | Watch Together</title>
+  <meta name="description" content="Frenzy Telewatch is an extension-style watch party platform. Start or join a room in seconds, sync playback, and chat live with friends." />
   <style>
     :root {
-      --bg:#070f1f;
-      --bg2:#0c1730;
-      --panel:#121f3a;
-      --line:#294878;
-      --text:#ecf3ff;
-      --muted:#9ab2d8;
-      --accent:#36d6ff;
-      --accent2:#00b9f2;
-      --ok:#76f2bb;
-      --warn:#ffd166;
+      --bg: #0b0d12;
+      --bg-2: #121722;
+      --panel: #171c28;
+      --panel-2: #1b2232;
+      --line: #2b3347;
+      --text: #eef2ff;
+      --muted: #a7b1c8;
+      --accent: #f54d74;
+      --accent-2: #db2d56;
+      --ok: #2fd18a;
     }
-    * { box-sizing:border-box; }
+    * { box-sizing: border-box; }
     body {
-      margin:0;
-      font-family:"Segoe UI",Tahoma,Arial,sans-serif;
-      color:var(--text);
+      margin: 0;
+      color: var(--text);
+      font-family: "Nunito Sans", "Segoe UI", sans-serif;
       background:
-        radial-gradient(circle at 12% 12%, rgba(54,214,255,.22), transparent 35%),
-        radial-gradient(circle at 88% 8%, rgba(90,130,255,.18), transparent 32%),
-        linear-gradient(155deg, var(--bg), var(--bg2));
-      min-height:100vh;
+        radial-gradient(circle at 12% 0%, rgba(245, 77, 116, 0.2), transparent 30%),
+        radial-gradient(circle at 100% 0%, rgba(126, 118, 255, 0.15), transparent 28%),
+        linear-gradient(180deg, #0f121a 0%, #0b0d12 48%, #090b10 100%);
+      min-height: 100vh;
     }
-    .shell { width:min(1180px, calc(100% - 24px)); margin:14px auto 28px; }
-    .top {
-      border:1px solid var(--line);
-      border-radius:14px;
-      background:rgba(10,20,38,.82);
-      padding:12px;
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:12px;
-      flex-wrap:wrap;
+    .wrap {
+      width: min(1240px, calc(100% - 24px));
+      margin: 10px auto 30px;
     }
-    .brand { font-size:1.15rem; font-weight:800; letter-spacing:.04em; }
-    .nav { display:flex; gap:8px; flex-wrap:wrap; }
+    .topbar {
+      position: sticky;
+      top: 8px;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(22, 27, 39, 0.94);
+      backdrop-filter: blur(8px);
+      padding: 10px 12px;
+    }
+    .brand {
+      font-weight: 900;
+      letter-spacing: .03em;
+      font-size: 1.05rem;
+    }
+    .nav {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
     .btn {
-      display:inline-block;
-      border:1px solid #4e78ad;
-      border-radius:10px;
-      padding:10px 13px;
-      text-decoration:none;
-      font-weight:700;
-      color:#051322;
-      background:linear-gradient(135deg, var(--accent), var(--accent2));
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
+      border: 1px solid #37405a;
+      border-radius: 8px;
+      padding: 8px 11px;
+      color: #e7edff;
+      background: #161d2c;
+      font-weight: 800;
+      font-size: .93rem;
     }
-    .btn.alt {
-      color:var(--text);
-      background:linear-gradient(140deg, #16305a, #173258);
-      border-color:#3c5f8f;
+    .btn.primary {
+      border: 0;
+      color: #fff;
+      background: linear-gradient(180deg, var(--accent), var(--accent-2));
     }
     .hero {
-      margin-top:12px;
-      border:1px solid var(--line);
-      border-radius:16px;
-      background:linear-gradient(145deg, rgba(18,31,58,.95), rgba(10,19,38,.95));
-      padding:18px;
+      margin-top: 12px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: linear-gradient(165deg, #171d2a, #121824);
+      padding: 22px;
+      display: grid;
+      gap: 14px;
     }
-    h1 { margin:0 0 8px; font-size:clamp(1.55rem, 4vw, 2.4rem); }
-    p { margin:0 0 10px; color:var(--muted); }
-    .grid { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:10px; margin-top:10px; }
+    .hero h1 {
+      margin: 0;
+      font-size: clamp(1.9rem, 5vw, 3rem);
+      line-height: 1.05;
+      letter-spacing: -.01em;
+    }
+    .hero p {
+      margin: 0;
+      color: var(--muted);
+      max-width: 760px;
+      font-size: 1rem;
+    }
+    .hero-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .badge {
+      border: 1px solid #36415a;
+      border-radius: 999px;
+      padding: 5px 10px;
+      color: #cad5ef;
+      font-size: .78rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      background: #131a2a;
+    }
+    .cta-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .hero-grid {
+      display: grid;
+      grid-template-columns: 1.3fr .9fr;
+      gap: 12px;
+      margin-top: 4px;
+    }
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #111623;
+      padding: 12px;
+    }
+    .panel h3 {
+      margin: 0 0 8px;
+      font-size: .95rem;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      color: #b9c5df;
+    }
+    .steps {
+      display: grid;
+      gap: 8px;
+    }
+    .step {
+      border: 1px solid #303a52;
+      border-radius: 10px;
+      background: #151c2b;
+      padding: 9px;
+    }
+    .step .n {
+      color: #ff86a0;
+      font-size: .72rem;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+    }
+    .step strong { display: block; margin-top: 2px; }
+    .step p {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: .9rem;
+      line-height: 1.35;
+    }
+    .join-box {
+      display: grid;
+      gap: 8px;
+    }
+    .join-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    input {
+      flex: 1;
+      min-width: 180px;
+      border-radius: 8px;
+      border: 1px solid #37405b;
+      background: #0f1420;
+      color: var(--text);
+      padding: 9px 10px;
+      font: inherit;
+    }
+    .section {
+      margin-top: 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #121826;
+      padding: 14px;
+    }
+    .section h2 {
+      margin: 0 0 8px;
+      font-size: 1.18rem;
+    }
+    .section p { margin: 0 0 10px; color: var(--muted); }
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
     .card {
-      border:1px solid var(--line);
-      border-radius:12px;
-      background:linear-gradient(150deg, rgba(19,35,63,.96), rgba(11,21,41,.95));
-      padding:12px;
+      border: 1px solid #2d3750;
+      border-radius: 10px;
+      background: #131b2a;
+      padding: 10px;
     }
-    .card h3 { margin:0 0 8px; font-size:1rem; }
-    .card p { margin:0 0 10px; font-size:.95rem; }
-    .row { display:flex; gap:8px; flex-wrap:wrap; }
-    .rooms { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:8px; margin-top:8px; }
+    .card h3 {
+      margin: 0 0 6px;
+      font-size: .95rem;
+      color: #e7eeff;
+    }
+    .card p { margin: 0; font-size: .9rem; }
+    .rooms {
+      margin-top: 10px;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
     .room {
-      border:1px solid #4c70a5;
-      border-radius:10px;
-      background:linear-gradient(150deg, rgba(23,39,68,.95), rgba(13,24,45,.95));
-      color:var(--text);
-      text-decoration:none;
-      padding:10px;
-      font-weight:700;
-      font-size:.9rem;
+      border: 1px solid #33405b;
+      border-radius: 8px;
+      padding: 9px;
+      text-decoration: none;
+      color: #e7edff;
+      background: #151d2d;
+      display: grid;
+      gap: 4px;
     }
-    .meta { color:var(--ok); font-size:.82rem; margin-top:4px; }
-    .verify {
-      margin-top:12px;
-      border:1px solid var(--line);
-      border-radius:12px;
-      background:rgba(11,21,41,.92);
-      padding:12px;
+    .room small { color: #9daccc; }
+    .plans {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 8px;
     }
-    pre {
-      margin:8px 0;
-      border:1px solid #365782;
-      border-radius:10px;
-      background:#0a172f;
-      color:#d9e8ff;
-      padding:10px;
-      overflow:auto;
-      font-size:.9rem;
+    .plan {
+      border: 1px solid #36415d;
+      border-radius: 10px;
+      background: #141c2c;
+      padding: 10px;
+      display: grid;
+      gap: 7px;
     }
-    .tag { display:inline-block; border:1px solid #41689a; border-radius:999px; padding:4px 8px; font-size:.78rem; color:#c7ddff; }
-    .hidden { display:none !important; }
+    .plan .price {
+      font-size: 1.15rem;
+      font-weight: 900;
+      color: #ff8ea7;
+    }
+    .faq {
+      display: grid;
+      gap: 8px;
+    }
     details {
-      border:1px solid #355782;
-      border-radius:10px;
-      padding:10px;
-      background:rgba(13,25,47,.92);
-      margin-bottom:8px;
+      border: 1px solid #32405f;
+      border-radius: 10px;
+      background: #141d2f;
+      padding: 10px;
     }
-    summary { cursor:pointer; font-weight:700; color:#d8e9ff; }
-    .request-item {
-      border:1px solid #395d8b;
-      border-radius:10px;
-      background:rgba(11,20,38,.9);
-      padding:8px;
-      margin-top:8px;
-      font-size:.9rem;
+    summary {
+      cursor: pointer;
+      font-weight: 800;
+      color: #e9efff;
     }
-    .kpi-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin-top:8px; }
-    .kpi {
-      border:1px solid #3d5f8f;
-      border-radius:10px;
-      background:rgba(12,24,45,.9);
-      padding:8px;
+    details p {
+      margin: 8px 0 0;
+      color: var(--muted);
+      line-height: 1.42;
     }
-    .kpi .n { font-weight:800; font-size:1.1rem; color:#e7f4ff; }
-    .kpi .k { font-size:.76rem; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
-    .spotlight {
-      border:1px solid #3b6192;
-      border-radius:10px;
-      background:linear-gradient(145deg, rgba(17,33,60,.95), rgba(12,23,44,.95));
-      padding:10px;
-      margin-top:8px;
+    .footer {
+      margin-top: 12px;
+      text-align: center;
+      color: #95a2bf;
+      font-size: .88rem;
+      padding: 8px;
     }
-    .room-tools { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px; }
+    .ok { color: var(--ok); font-weight: 700; }
+    .admin-only.hidden { display: none !important; }
     @media (max-width: 980px) {
-      .grid { grid-template-columns:1fr; }
-      .rooms { grid-template-columns:repeat(2,minmax(0,1fr)); }
-      .kpi-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .hero-grid { grid-template-columns: 1fr; }
+      .cards { grid-template-columns: 1fr 1fr; }
+      .rooms { grid-template-columns: 1fr 1fr; }
+      .plans { grid-template-columns: 1fr; }
     }
     @media (max-width: 640px) {
-      .shell { width:calc(100% - 16px); }
-      .rooms { grid-template-columns:1fr; }
-      .btn { width:100%; text-align:center; }
-      .row .btn { width:auto; }
+      .wrap { width: calc(100% - 14px); }
+      .cards { grid-template-columns: 1fr; }
+      .rooms { grid-template-columns: 1fr; }
+      .btn { width: 100%; }
+      .join-row .btn { width: auto; }
     }
   </style>
 </head>
 <body>
-  <div class="shell">
-    <div class="top">
-      <div class="brand">FrenzyNets Watch Party</div>
-      <div class="nav">
-        <a class="btn" href="/telewatch/">Watch Party</a>
-        <a class="btn" href="/telewatch/?mainEvent=1">Join Main Event</a>
-        <a class="btn alt admin-only hidden" href="/telewatch/admin/">Admin Panel</a>
-        <a class="btn alt admin-only hidden" href="/frenzynet-updates/">Desktop Downloads</a>
-        <a class="btn alt" href="https://discord.gg/4uRUSAN498" target="_blank" rel="noopener">Discord</a>
-      </div>
-    </div>
+  <div class="wrap">
+    <header class="topbar">
+      <div class="brand">Frenzy Telewatch</div>
+      <nav class="nav">
+        <a class="btn primary" href="/telewatch/">Open Watch Party</a>
+        <a class="btn" href="/setup/">How It Works</a>
+        <a class="btn" href="/telewatch/?mainEvent=1">Main Event</a>
+        <a class="btn" href="https://discord.gg/4uRUSAN498" target="_blank" rel="noopener">Discord</a>
+        <a class="btn admin-only hidden" href="/telewatch/admin/">Admin</a>
+      </nav>
+    </header>
 
     <section class="hero">
-      <span class="tag">Watch Party Only</span>
-      <h1>Host Major Movie Nights From One Place</h1>
-      <p>No VPN content on this page. FrenzyNets is now focused on Watch Party hosting, room controls, admin tools, and desktop panel downloads.</p>
-      <div class="row">
-        <a class="btn" href="/telewatch/">Open Watch Party</a>
-        <a class="btn" href="/telewatch/?mainEvent=1">Join Main Event (Public)</a>
-        <a class="btn alt" href="/telewatch/?mode=public">Browse Public Rooms</a>
-        <a class="btn alt admin-only hidden" href="/telewatch/?admin=1">Main Event Mode</a>
-        <a class="btn alt admin-only hidden" href="/telewatch/admin/">Room Moderation</a>
+      <div class="hero-badges">
+        <span class="badge">Extension-Style Flow</span>
+        <span class="badge">Synced Playback</span>
+        <span class="badge">Live Party Chat</span>
+      </div>
+      <h1>Watch Together In Seconds</h1>
+      <p>Frenzy Telewatch is designed like an extension-first watch party platform: start a room, share one link in Discord, and watch in sync with chat and host controls.</p>
+      <div class="cta-row">
+        <a class="btn primary" href="/telewatch/">Start Watching</a>
+        <a class="btn" href="/telewatch/?mode=public">Browse Public Rooms</a>
+        <a class="btn" href="https://discord.gg/4uRUSAN498" target="_blank" rel="noopener">Open Discord</a>
+      </div>
+
+      <div class="hero-grid">
+        <div class="panel">
+          <h3>How It Works</h3>
+          <div class="steps">
+            <div class="step">
+              <div class="n">Step 1</div>
+              <strong>Install / Open Telewatch</strong>
+              <p>Open Telewatch in your browser and sign in once. Keep it pinned for one-click party launches.</p>
+            </div>
+            <div class="step">
+              <div class="n">Step 2</div>
+              <strong>Create Or Join A Room</strong>
+              <p>Use room code or invite link. Hosts can run synchronized watch sessions with moderation controls.</p>
+            </div>
+            <div class="step">
+              <div class="n">Step 3</div>
+              <strong>Share Link, Watch In Sync</strong>
+              <p>Drop your room link in Discord and everyone joins the same synced stream + party chat.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h3>Quick Join</h3>
+          <div class="join-box">
+            <div class="join-row">
+              <input id="roomCode" type="text" maxlength="16" placeholder="Enter room code (e.g. WATCH01)" />
+              <a id="joinBtn" class="btn primary" href="/telewatch/">Join Room</a>
+            </div>
+            <a class="btn" href="/telewatch/?mainEvent=1">Join Main Event</a>
+            <div id="statusLine" class="ok">Ready to join a party.</div>
+          </div>
+        </div>
       </div>
     </section>
 
-    <section class="grid">
-      <article class="card">
-        <h3>Join By Room Code</h3>
-        <p>Enter a room code and jump directly into a watch room.</p>
-        <div class="row">
-          <input id="roomCode" type="text" placeholder="Room code" maxlength="12" style="flex:1;min-width:160px;border:1px solid #3d5f90;background:#0a1830;color:#ecf3ff;border-radius:10px;padding:10px;" />
-          <a id="joinBtn" class="btn" href="/telewatch/">Join Room</a>
-        </div>
-      </article>
-
-      <article class="card admin-only hidden">
-        <h3>Desktop App (All PC Types)</h3>
-        <p>Watch Party desktop panel downloads for x64, x86, and ARM64.</p>
-        <div class="row">
-          <a class="btn alt" href="/frenzynet-updates/FrenzyWatchPartyPanel-win-x64.zip">x64</a>
-          <a class="btn alt" href="/frenzynet-updates/FrenzyWatchPartyPanel-win-x86.zip">x86</a>
-          <a class="btn alt" href="/frenzynet-updates/FrenzyWatchPartyPanel-win-arm64.zip">ARM64</a>
-        </div>
-      </article>
-
-      <article class="card admin-only hidden">
-        <h3>Admin / Owner Tools</h3>
-        <p>Moderate rooms, run main event nights, and manage live sessions.</p>
-        <div class="row">
-          <a class="btn alt" href="/telewatch/admin/">Open Admin</a>
-          <a class="btn alt" href="/telewatch/?admin=1">Main Event Controls</a>
-          <a class="btn alt" href="/frenzynet-updates/">Updates Panel</a>
-        </div>
-      </article>
-    </section>
-
-    <section class="card" style="margin-top:10px">
-      <h3>Main Event Access</h3>
-      <p>When a major night is hosted, this public button jumps straight to it.</p>
-      <div class="row">
-        <a class="btn" href="/telewatch/?mainEvent=1">Join Main Event Now</a>
-      </div>
-      <div class="spotlight">
-        <div style="font-weight:700;color:#d9ecff">Event Spotlight</div>
-        <div id="spotlightText" class="meta">Loading event highlights...</div>
+    <section class="section">
+      <h2>Built For Easy Group Watching</h2>
+      <p>Everything is optimized for low-friction setup and extension-like flow so non-technical users can join fast.</p>
+      <div class="cards">
+        <article class="card">
+          <h3>One-Link Invites</h3>
+          <p>Create a room and share one invite in Discord. No complicated setup required for viewers.</p>
+        </article>
+        <article class="card">
+          <h3>Host Controls</h3>
+          <p>Hosts can coordinate playback, room access mode, and moderation from one dashboard.</p>
+        </article>
+        <article class="card">
+          <h3>Party Chat + Voice</h3>
+          <p>Use room chat with synced video while coordinating in your Discord voice channel.</p>
+        </article>
       </div>
     </section>
 
-    <section class="card" style="margin-top:10px">
-      <h3>Open Rooms</h3>
-      <p>Quick room links for active public watch party rooms.</p>
-      <div class="room-tools">
-        <input id="roomFilter" type="text" placeholder="Filter room code..." maxlength="12" style="flex:1;min-width:170px;border:1px solid #3d5f90;background:#0a1830;color:#ecf3ff;border-radius:10px;padding:9px;" />
-        <button id="randomRoomBtn" class="btn" type="button">Join Random Room</button>
-      </div>
+    <section class="section">
+      <h2>Live Public Rooms</h2>
+      <p>Jump into active rooms now. If no rooms are active, start one and share your invite.</p>
       <div id="rooms" class="rooms"></div>
-      <div class="kpi-grid">
-        <div class="kpi"><div id="kpiRooms" class="n">0</div><div class="k">Open Rooms</div></div>
-        <div class="kpi"><div id="kpiLive" class="n">0</div><div class="k">Live Rooms</div></div>
-        <div class="kpi"><div id="kpiWatchers" class="n">0</div><div class="k">Watchers</div></div>
-        <div class="kpi"><div id="kpiUpdated" class="n">--</div><div class="k">Updated</div></div>
+    </section>
+
+    <section class="section">
+      <h2>Pro Plans (Discord Purchase)</h2>
+      <p>For Pro access, message a Frenzy Owner or Frenzy Admin in Discord. Staff applies access in Discord and website account.</p>
+      <div class="plans">
+        <article class="plan">
+          <h3>Pro Monthly</h3>
+          <div class="price">$4.99 / month</div>
+          <a class="btn primary" href="https://discord.gg/4uRUSAN498" target="_blank" rel="noopener">Buy In Discord</a>
+        </article>
+        <article class="plan">
+          <h3>Pro Annual</h3>
+          <div class="price">$49.99 / year</div>
+          <a class="btn primary" href="https://discord.gg/4uRUSAN498" target="_blank" rel="noopener">Buy In Discord</a>
+        </article>
+        <article class="plan">
+          <h3>Pro Lifetime</h3>
+          <div class="price">$129 one-time</div>
+          <a class="btn primary" href="https://discord.gg/4uRUSAN498" target="_blank" rel="noopener">Buy In Discord</a>
+        </article>
       </div>
     </section>
 
-    <section class="card" style="margin-top:10px">
-      <h3>Live Interactions</h3>
-      <p>Public users can post requests for upcoming watch nights.</p>
-      <div class="row">
-        <input id="requestText" type="text" placeholder="Request a movie or event..." maxlength="120" style="flex:1;min-width:220px;border:1px solid #3d5f90;background:#0a1830;color:#ecf3ff;border-radius:10px;padding:10px;" />
-        <button id="requestBtn" class="btn" type="button">Submit Request</button>
-      </div>
-      <div id="requestList"></div>
-      <div style="margin-top:10px" class="meta">Next major night countdown: <span id="countdown">loading...</span></div>
-      <div class="row" style="margin-top:10px">
-        <button id="reactHype" class="btn" type="button">🔥 Hype</button>
-        <button id="reactReady" class="btn" type="button">✅ Ready</button>
-        <button id="reactInvite" class="btn" type="button">📣 Invite Friends</button>
-      </div>
-      <div id="reactionBoard" class="meta"></div>
-    </section>
-
-    <section class="card" style="margin-top:10px">
-      <h3>Community Voting</h3>
-      <p>All official polls and voting now happen in Discord only.</p>
-      <div class="row">
-        <a class="btn" href="https://discord.gg/4uRUSAN498" target="_blank" rel="noopener">Open Discord Voting</a>
+    <section class="section">
+      <h2>FAQ</h2>
+      <div class="faq">
+        <details>
+          <summary>Do users need the same streaming account?</summary>
+          <p>Yes. Telewatch syncs timing and playback controls. Each viewer uses their own streaming account/session.</p>
+        </details>
+        <details>
+          <summary>Can I host from browser without desktop app?</summary>
+          <p>Yes. Browser hosting works. Desktop app is optional for advanced usage and admin operations.</p>
+        </details>
+        <details>
+          <summary>Where do I get purchase/billing help?</summary>
+          <p>Open Discord and message a Frenzy Owner or Frenzy Admin for plan purchase, upgrades, and billing support.</p>
+        </details>
       </div>
     </section>
 
-    <section class="card" style="margin-top:10px">
-      <h3>How It Works</h3>
-      <details>
-        <summary>How do I join a watch party?</summary>
-        <p>Use a room code from your host, enter it above, then join from the Watch Party page.</p>
-      </details>
-      <details>
-        <summary>Do I need the desktop app to watch?</summary>
-        <p>No. Public users can join from web. Desktop panel is currently admin-only.</p>
-      </details>
-      <details>
-        <summary>Where do I report issues during events?</summary>
-        <p>Use the FrenzyNets Discord support channel while the event is live.</p>
-      </details>
-    </section>
-
-    <section class="verify admin-only hidden">
-      <h3 style="margin:0 0 6px">Verify Desktop Download</h3>
-      <pre>Get-FileHash .\FrenzyWatchPartyPanel-win-x64.zip -Algorithm SHA256
-# Compare with /frenzynet-updates/FrenzyWatchPartyPanel-win-x64.zip.sha256</pre>
-      <div class="row">
-        <a class="btn alt" href="/frenzynet-updates/FrenzyWatchPartyPanel-win-x64.zip.sha256">x64 SHA256</a>
-        <a class="btn alt" href="/frenzynet-updates/FrenzyWatchPartyPanel-win-x86.zip.sha256">x86 SHA256</a>
-        <a class="btn alt" href="/frenzynet-updates/FrenzyWatchPartyPanel-win-arm64.zip.sha256">ARM64 SHA256</a>
-      </div>
-    </section>
+    <footer class="footer">
+      Frenzy Telewatch • Watch Together • Powered by Discord-first support
+    </footer>
   </div>
 
   <script>
     (function() {
-      const input = document.getElementById('roomCode');
+      const roomInput = document.getElementById('roomCode');
       const joinBtn = document.getElementById('joinBtn');
       const roomsEl = document.getElementById('rooms');
-      const requestInput = document.getElementById('requestText');
-      const requestBtn = document.getElementById('requestBtn');
-      const requestList = document.getElementById('requestList');
-      const countdown = document.getElementById('countdown');
-      const roomFilter = document.getElementById('roomFilter');
-      const randomRoomBtn = document.getElementById('randomRoomBtn');
-      const kpiRooms = document.getElementById('kpiRooms');
-      const kpiLive = document.getElementById('kpiLive');
-      const kpiWatchers = document.getElementById('kpiWatchers');
-      const kpiUpdated = document.getElementById('kpiUpdated');
-      const spotlightText = document.getElementById('spotlightText');
-      const reactionBoard = document.getElementById('reactionBoard');
+      const statusLine = document.getElementById('statusLine');
       const isAdmin = !!localStorage.getItem('fn_admin_token');
+
       document.querySelectorAll('.admin-only').forEach((el) => {
         if (isAdmin) el.classList.remove('hidden');
       });
-      let roomCache = [];
 
       function cleanCode(v) {
-        return String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
+        return String(v || '').toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 16);
       }
 
-      function syncJoin() {
-        const code = cleanCode(input.value);
-        input.value = code;
+      function syncJoinHref() {
+        const code = cleanCode(roomInput.value);
+        roomInput.value = code;
         joinBtn.href = code ? `/telewatch/?room=${encodeURIComponent(code)}` : '/telewatch/';
       }
 
-      input.addEventListener('input', syncJoin);
-      syncJoin();
+      roomInput.addEventListener('input', syncJoinHref);
+      syncJoinHref();
 
-      const fallback = Array.from({ length: 10 }, (_, i) => {
+      const fallback = Array.from({ length: 8 }, (_, i) => {
         const code = `WATCH${String(i + 1).padStart(2, '0')}`;
-        return { roomCode: code, title: `Public Room ${String(i + 1).padStart(2, '0')}`, activeCount: 0, isLive: false, joinUrl: `/telewatch/?room=${code}` };
+        return {
+          roomCode: code,
+          title: `Public Room ${String(i + 1).padStart(2, '0')}`,
+          activeCount: 0,
+          joinUrl: `/telewatch/?room=${encodeURIComponent(code)}`
+        };
       });
 
-      function updateKpis(rooms) {
-        const rows = rooms || [];
-        const live = rows.filter((r) => !!r.isLive).length;
-        const watchers = rows.reduce((n, r) => n + Number(r.activeCount || 0), 0);
-        kpiRooms.textContent = String(rows.length);
-        kpiLive.textContent = String(live);
-        kpiWatchers.textContent = String(watchers);
-        const d = new Date();
-        kpiUpdated.textContent = d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
-      }
-
-      function draw(rooms) {
-        roomCache = Array.isArray(rooms) ? rooms.slice() : [];
-        const q = String(roomFilter.value || '').toUpperCase().trim();
-        const filtered = !q ? roomCache : roomCache.filter((r) => String(r.roomCode || '').toUpperCase().includes(q));
-        roomsEl.innerHTML = (rooms || []).slice(0, 10).map((r) => {
-          const code = String(r.roomCode || '').toUpperCase();
-          const viewers = Number(r.activeCount || 0);
-          const state = r.isLive ? `LIVE · ${viewers} watching` : 'Open';
-          const href = r.joinUrl || `/telewatch/?room=${encodeURIComponent(code)}`;
-          return `<a class="room" href="${href}">${code}<div class="meta">${state}</div></a>`;
-        }).join('');
-        if (q) {
-          roomsEl.innerHTML = filtered.slice(0, 10).map((r) => {
-            const code = String(r.roomCode || '').toUpperCase();
-            const viewers = Number(r.activeCount || 0);
-            const state = r.isLive ? `LIVE · ${viewers} watching` : 'Open';
-            const href = r.joinUrl || `/telewatch/?room=${encodeURIComponent(code)}`;
-            return `<a class="room" href="${href}">${code}<div class="meta">${state}</div></a>`;
-          }).join('') || '<div class="meta">No rooms match your filter.</div>';
+      function renderRooms(items) {
+        const rows = Array.isArray(items) && items.length ? items : fallback;
+        roomsEl.innerHTML = '';
+        for (const room of rows.slice(0, 12)) {
+          const code = cleanCode(room.roomCode || '');
+          if (!code) continue;
+          const title = String(room.title || 'Watch Party').slice(0, 64);
+          const viewers = Number(room.activeCount || 0);
+          const a = document.createElement('a');
+          a.className = 'room';
+          a.href = room.joinUrl || `/telewatch/?room=${encodeURIComponent(code)}`;
+          a.innerHTML = `<strong>${code}</strong><small>${title}</small><small>${viewers} watching</small>`;
+          roomsEl.appendChild(a);
         }
-        updateKpis(roomCache);
       }
 
-      draw(fallback);
-
-      fetch('https://api.frenzynets.com/api/telewatch/public-rooms', { cache: 'no-store' })
-        .then((r) => r.ok ? r.json() : null)
-        .then((j) => {
-          if (j && Array.isArray(j.rooms) && j.rooms.length) draw(j.rooms);
-        })
-        .catch(() => {});
-      roomFilter.addEventListener('input', () => draw(roomCache.length ? roomCache : fallback));
-      randomRoomBtn.addEventListener('click', () => {
-        const rows = roomCache.length ? roomCache : fallback;
-        const pick = rows[Math.floor(Math.random() * rows.length)];
-        if (!pick) return;
-        const code = String(pick.roomCode || '').toUpperCase();
-        window.location.href = `/telewatch/?room=${encodeURIComponent(code)}`;
-      });
-
-      function readRequests() {
-        try { return JSON.parse(localStorage.getItem('fn_public_requests') || '[]'); } catch (_) { return []; }
-      }
-      function writeRequests(rows) {
-        try { localStorage.setItem('fn_public_requests', JSON.stringify(rows.slice(0, 25))); } catch (_) {}
-      }
-      function renderRequests() {
-        const rows = readRequests();
-        requestList.innerHTML = rows.length ? rows.map((r) => `<div class="request-item">${r}</div>`).join('') : '<div class="meta">No requests yet.</div>';
-      }
-      requestBtn.addEventListener('click', () => {
-        const v = String(requestInput.value || '').trim();
-        if (!v) return;
-        const rows = readRequests();
-        rows.unshift(v);
-        writeRequests(rows);
-        requestInput.value = '';
-        renderRequests();
-      });
-      renderRequests();
-
-      function fallbackNextSaturdayMs() {
-        const now = new Date();
-        const target = new Date(now.getTime());
-        const days = (6 - target.getDay() + 7) % 7;
-        target.setDate(target.getDate() + days);
-        target.setHours(20, 0, 0, 0);
-        if (target.getTime() <= now.getTime()) target.setDate(target.getDate() + 7);
-        return target.getTime();
-      }
-      let nextEvent = fallbackNextSaturdayMs();
-      function tickCountdown() {
-        const diff = nextEvent - Date.now();
-        if (diff <= 0) {
-          countdown.textContent = 'LIVE now';
-          return;
+      async function loadRooms() {
+        const endpoints = [
+          '/api/telewatch/api/public-rooms',
+          '/api/telewatch/public-rooms'
+        ];
+        for (const url of endpoints) {
+          try {
+            const res = await fetch(url, { cache: 'no-store' });
+            if (!res.ok) continue;
+            const data = await res.json();
+            const rooms = Array.isArray(data && data.rooms) ? data.rooms : [];
+            renderRooms(rooms.map((r) => ({
+              roomCode: r.roomCode,
+              title: r.title,
+              activeCount: r.activeCount,
+              joinUrl: `/telewatch/?room=${encodeURIComponent(r.roomCode || '')}`
+            })));
+            statusLine.textContent = rooms.length
+              ? `Loaded ${rooms.length} active public room${rooms.length === 1 ? '' : 's'}.`
+              : 'No active rooms right now. Start one now.';
+            return;
+          } catch (_) {}
         }
-        const d = Math.floor(diff / 86400000);
-        const h = Math.floor((diff % 86400000) / 3600000);
-        const m = Math.floor((diff % 3600000) / 60000);
-        countdown.textContent = `${d}d ${h}h ${m}m`;
+        renderRooms([]);
+        statusLine.textContent = 'Live room feed unavailable. You can still join by room code.';
       }
-      tickCountdown();
-      setInterval(tickCountdown, 15000);
-      fetch('https://api.frenzynets.com/api/telewatch/public-settings', { cache: 'no-store' })
-        .then((r) => r.ok ? r.json() : null)
-        .then((j) => {
-          const iso = j && j.settings ? String(j.settings.mainEventCountdownIso || '') : '';
-          const ms = Date.parse(iso);
-          if (Number.isFinite(ms) && ms > 0) {
-            nextEvent = ms;
-            tickCountdown();
-          }
-        })
-        .catch(() => {});
 
-      const spotlightItems = [
-        'Main Event public lobby opens 15 minutes before showtime.',
-        'Hosts can enable invite-only rooms for private groups.',
-        'Public viewers can jump straight in with the Main Event button.',
-        'Live room list auto-updates as new parties open.'
-      ];
-      let sIdx = 0;
-      function rotateSpotlight() {
-        spotlightText.textContent = spotlightItems[sIdx % spotlightItems.length];
-        sIdx += 1;
-      }
-      rotateSpotlight();
-      setInterval(rotateSpotlight, 6000);
-
-      function readReactions() {
-        try { return JSON.parse(localStorage.getItem('fn_public_reactions') || '{"hype":0,"ready":0,"invite":0}'); } catch (_) { return { hype:0, ready:0, invite:0 }; }
-      }
-      function writeReactions(v) {
-        try { localStorage.setItem('fn_public_reactions', JSON.stringify(v)); } catch (_) {}
-      }
-      function renderReactions() {
-        const r = readReactions();
-        reactionBoard.textContent = `🔥 Hype: ${r.hype}  |  ✅ Ready: ${r.ready}  |  📣 Invite Friends: ${r.invite}`;
-      }
-      document.getElementById('reactHype').addEventListener('click', () => { const r = readReactions(); r.hype += 1; writeReactions(r); renderReactions(); });
-      document.getElementById('reactReady').addEventListener('click', () => { const r = readReactions(); r.ready += 1; writeReactions(r); renderReactions(); });
-      document.getElementById('reactInvite').addEventListener('click', () => { const r = readReactions(); r.invite += 1; writeReactions(r); renderReactions(); });
-      renderReactions();
-
+      loadRooms();
+      setInterval(loadRooms, 45000);
     })();
   </script>
 </body>
