@@ -36,10 +36,19 @@ try
 
   Open(extractPath);
 
-  // Open common Chromium extension manager pages.
-  foreach (var url in new[] { "chrome://extensions/", "edge://extensions/", "brave://extensions/", "opera://extensions/" })
+  // Chrome-only flow: explicitly launch Chrome extension manager.
+  try
   {
-    try { Open(url); } catch { }
+    Process.Start(new ProcessStartInfo
+    {
+      FileName = "chrome.exe",
+      Arguments = "chrome://extensions/",
+      UseShellExecute = true
+    });
+  }
+  catch
+  {
+    Console.WriteLine("Chrome not found in PATH. Open Chrome and go to chrome://extensions/ manually.");
   }
 
   Console.WriteLine("FlickFuse installer complete.");
