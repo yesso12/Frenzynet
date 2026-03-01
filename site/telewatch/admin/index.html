@@ -563,6 +563,41 @@
       </div>
       </div>
 
+      <div class="tool-section">
+      <h3 style="margin:0 0 8px">Quick Member Ops</h3>
+      <div class="muted">Simple staff workflow: enter member email, choose plan, click apply. This updates website tier and syncs Discord roles.</div>
+      <div class="row" style="margin-top:10px">
+        <div>
+          <label for="memberEmail">Member Email</label>
+          <input id="memberEmail" type="email" placeholder="member@email.com" />
+        </div>
+        <div>
+          <label for="memberPlan">Plan</label>
+          <select id="memberPlan">
+            <option value="pro">Pro</option>
+            <option value="supporter">Supporter</option>
+            <option value="free">Free</option>
+          </select>
+        </div>
+        <div>
+          <label for="memberDuration">Duration</label>
+          <select id="memberDuration">
+            <option value="30d">30 days</option>
+            <option value="7d">7 days</option>
+            <option value="90d">90 days</option>
+            <option value="365d">1 year</option>
+            <option value="lifetime">Lifetime</option>
+          </select>
+        </div>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="applyMemberPlanBtn">Apply Plan</button>
+        <button id="downgradeMemberBtn" class="secondary">Downgrade To Free</button>
+        <button id="lookupMemberBtn" class="secondary">Lookup Tier</button>
+      </div>
+      <div id="memberOpsStatus" class="muted" style="margin-top:8px">No member action yet.</div>
+      </div>
+
       <details class="tool-section">
       <summary>Other Admin Tools (optional)</summary>
       <div class="row" style="margin-top:10px">
@@ -697,6 +732,13 @@
       routerDiagStatus: document.getElementById('routerDiagStatus'),
       metricsSummary: document.getElementById('metricsSummary'),
       metricsGraph: document.getElementById('metricsGraph'),
+      memberEmail: document.getElementById('memberEmail'),
+      memberPlan: document.getElementById('memberPlan'),
+      memberDuration: document.getElementById('memberDuration'),
+      applyMemberPlanBtn: document.getElementById('applyMemberPlanBtn'),
+      downgradeMemberBtn: document.getElementById('downgradeMemberBtn'),
+      lookupMemberBtn: document.getElementById('lookupMemberBtn'),
+      memberOpsStatus: document.getElementById('memberOpsStatus'),
       newAdminUser: document.getElementById('newAdminUser'),
       newAdminPass: document.getElementById('newAdminPass'),
       adminList: document.getElementById('adminList'),
@@ -814,7 +856,40 @@
       if (msg === 'main_event_room_locked') return 'Main Event room is locked to another code.';
       if (msg === 'backup_participant_required') return 'Pick a backup co-host first.';
       if (msg === 'inviteToken_required') return 'Select an invite token first.';
+      if (msg === 'user_not_found') return 'User account not found. Ask them to register first.';
       return msg;
+    }
+    function cleanUsername(raw) {
+      return String(raw || '').trim().toLowerCase();
+    }
+    function isoAfterDays(days) {
+      const d = Number(days || 0);
+      if (!Number.isFinite(d) || d <= 0) return '';
+      return new Date(Date.now() + (d * 24 * 60 * 60 * 1000)).toISOString();
+    }
+    function memberEntitlementCode(plan, duration) {
+      const p = String(plan || '').trim().toLowerCase();
+      const d = String(duration || '').trim().toLowerCase();
+      if (p === 'free') return 'admin_free_override';
+      if (d === 'lifetime') return `manual_${p}_lifetime`;
+      return `manual_${p}_${d || '30d'}`;
+    }
+    function memberBillingMode(duration) {
+      const d = String(duration || '').trim().toLowerCase();
+      if (d === 'lifetime') return 'lifetime';
+      if (d === '365d') return 'annual';
+      return 'monthly';
+    }
+    function memberExpiresAt(duration) {
+      const d = String(duration || '').trim().toLowerCase();
+      if (d === 'lifetime') return '';
+      if (d === '7d') return isoAfterDays(7);
+      if (d === '90d') return isoAfterDays(90);
+      if (d === '365d') return isoAfterDays(365);
+      return isoAfterDays(30);
+    }
+    function setMemberOpsStatus(msg) {
+      if (els.memberOpsStatus) els.memberOpsStatus.textContent = String(msg || '');
     }
     function cleanCode(v) {
       return String(v || '').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 24);
@@ -2007,6 +2082,125 @@
         setStatus('Admin removed: ' + username);
       } catch (e) {
         setStatus('Remove failed: ' + describeApiError(e));
+      }
+    });
+
+    els.applyMemberPlanBtn.addEventListener('click', async () => {
+      try {
+        const adminCode = ensureAdminCode();
+        const username = cleanUsername(els.memberEmail.value);
+        const plan = String(els.memberPlan.value || 'pro').trim().toLowerCase();
+        const duration = String(els.memberDuration.value || '30d').trim().toLowerCase();
+        if (!username || username.indexOf('@') < 1) throw new Error('username_required');
+        if (plan === 'free') {
+          await api('/api/watch/admin/user-tier/set', {
+            adminToken: state.token,
+            adminCode,
+            username,
+            donationTier: 'free',
+          });
+          setMemberOpsStatus(`Applied free tier to ${username}.`);
+          setStatus(`Member updated: ${username} -> free`);
+          return;
+        }
+        const billingMode = memberBillingMode(duration);
+        const expiresAt = memberExpiresAt(duration);
+        const entitlementCode = memberEntitlementCode(plan, duration);
+        await api('/api/watch/admin/user-tier/set', {
+          adminToken: state.token,
+          adminCode,
+          username,
+          donationTier: plan,
+        });
+        await api('/api/watch/admin/user-entitlement/set', {
+          adminToken: state.token,
+          adminCode,
+          username,
+          entitlementCode,
+          title: `${plan.toUpperCase()} (${duration})`,
+          donationTier: plan,
+          billingMode,
+          amountUsd: 0,
+          currency: 'USD',
+          source: 'discord_manual',
+          status: 'active',
+          expiresAt,
+        });
+        setMemberOpsStatus(`Applied ${plan} (${duration}) to ${username}. Discord role sync requested.`);
+        setStatus(`Member updated: ${username} -> ${plan} (${duration})`);
+      } catch (e) {
+        const msg = describeApiError(e);
+        setMemberOpsStatus(`Apply failed: ${msg}`);
+        setStatus('Apply member plan failed: ' + msg);
+      }
+    });
+
+    els.downgradeMemberBtn.addEventListener('click', async () => {
+      try {
+        const adminCode = ensureAdminCode();
+        const username = cleanUsername(els.memberEmail.value);
+        if (!username || username.indexOf('@') < 1) throw new Error('username_required');
+        await api('/api/watch/admin/user-tier/set', {
+          adminToken: state.token,
+          adminCode,
+          username,
+            donationTier: 'free',
+        });
+        const revokeCodes = [
+          ['manual_pro_7d', 'PRO (7d)', 'monthly'],
+          ['manual_pro_30d', 'PRO (30d)', 'monthly'],
+          ['manual_pro_90d', 'PRO (90d)', 'monthly'],
+          ['manual_pro_365d', 'PRO (365d)', 'annual'],
+          ['manual_pro_lifetime', 'PRO (lifetime)', 'lifetime'],
+          ['manual_supporter_7d', 'Supporter (7d)', 'monthly'],
+          ['manual_supporter_30d', 'Supporter (30d)', 'monthly'],
+          ['manual_supporter_90d', 'Supporter (90d)', 'monthly'],
+          ['manual_supporter_365d', 'Supporter (365d)', 'annual'],
+          ['manual_supporter_lifetime', 'Supporter (lifetime)', 'lifetime'],
+        ];
+        for (const row of revokeCodes) {
+          const code = row[0];
+          const title = row[1];
+          const billingMode = row[2];
+          await api('/api/watch/admin/user-entitlement/set', {
+            adminToken: state.token,
+            adminCode,
+            username,
+            entitlementCode: code,
+            title,
+            donationTier: code.indexOf('supporter') >= 0 ? 'supporter' : 'pro',
+            billingMode,
+            amountUsd: 0,
+            currency: 'USD',
+            source: 'discord_manual',
+            status: 'revoked',
+            expiresAt: '',
+          });
+        }
+        setMemberOpsStatus(`Downgraded ${username} to free.`);
+        setStatus(`Member downgraded: ${username} -> free`);
+      } catch (e) {
+        const msg = describeApiError(e);
+        setMemberOpsStatus(`Downgrade failed: ${msg}`);
+        setStatus('Downgrade failed: ' + msg);
+      }
+    });
+
+    els.lookupMemberBtn.addEventListener('click', async () => {
+      try {
+        const username = cleanUsername(els.memberEmail.value);
+        if (!username || username.indexOf('@') < 1) throw new Error('username_required');
+        const data = await api('/api/watch/admin/user-tier/get', {
+          adminToken: state.token,
+          username,
+        });
+        const tier = String(data.donationTier || 'free');
+        setMemberOpsStatus(`Current tier for ${username}: ${tier}`);
+        setStatus(`Tier lookup complete for ${username}.`);
+      } catch (e) {
+        const msg = describeApiError(e);
+        setMemberOpsStatus(`Lookup failed: ${msg}`);
+        setStatus('Tier lookup failed: ' + msg);
       }
     });
 

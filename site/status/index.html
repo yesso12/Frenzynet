@@ -3,76 +3,192 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>FrenzyNets Status</title>
+  <title>FlickFuse Status | FrenzyNets</title>
   <style>
-    body { margin: 0; background: #070d1c; color: #e8f2ff; font-family: Segoe UI, Arial, sans-serif; }
-    .wrap { max-width: 980px; margin: 24px auto; padding: 0 14px; }
-    .card { border: 1px solid #2a4674; background: #101d38; border-radius: 12px; padding: 14px; margin-bottom: 10px; }
-    .ok { color: #72f5b8; }
-    .warn { color: #ffd166; }
-    .bad { color: #ff6f87; }
-    .muted { color: #9eb6dc; }
-    .list { max-height: 300px; overflow: auto; }
-    a { color: #38d8ff; }
+    :root {
+      --bg: #0a1324;
+      --panel: #111f3b;
+      --panel-soft: #17294b;
+      --line: #2a4674;
+      --text: #e8f2ff;
+      --muted: #9eb6dc;
+      --ok: #72f5b8;
+      --warn: #ffd166;
+      --bad: #ff6f87;
+      --accent: #41d8ff;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: radial-gradient(circle at 10% 0%, #101f3f, var(--bg)); color: var(--text); font-family: "Segoe UI", Arial, sans-serif; }
+    .wrap { width: min(1080px, calc(100% - 20px)); margin: 20px auto; display: grid; gap: 12px; }
+    .card { border: 1px solid var(--line); background: linear-gradient(180deg, var(--panel), var(--panel-soft)); border-radius: 12px; padding: 14px; }
+    .muted { color: var(--muted); }
+    .ok { color: var(--ok); }
+    .warn { color: var(--warn); }
+    .bad { color: var(--bad); }
+    .row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+    .tile { border: 1px solid #385c93; border-radius: 10px; padding: 10px; background: rgba(7, 15, 31, 0.35); }
+    .label { color: #b6caeb; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+    .value { margin-top: 6px; font-size: 17px; font-weight: 700; }
+    .list { max-height: 320px; overflow: auto; border: 1px solid #355685; border-radius: 10px; background: rgba(6,12,24,.45); }
+    .list-item { padding: 8px 10px; border-bottom: 1px solid #233d65; color: #d7e8ff; }
+    .list-item:last-child { border-bottom: 0; }
+    .pulse { display: inline-block; width: 10px; height: 10px; border-radius: 999px; margin-right: 6px; vertical-align: middle; }
+    a { color: var(--accent); }
+    @media (max-width: 760px) {
+      .row { grid-template-columns: 1fr; }
+      .wrap { width: calc(100% - 14px); margin: 10px auto; }
+    }
   </style>
 </head>
 <body>
   <div class="wrap">
     <div class="card">
-      <h1 style="margin:0 0 8px">FrenzyNets Live Status</h1>
-      <div id="summary" class="muted">Checking API...</div>
-      <div style="margin-top:8px"><a href="/">Back to site</a></div>
+      <h1 style="margin:0 0 8px">FlickFuse Live Status</h1>
+      <div id="summary" class="muted">Checking API health...</div>
+      <div style="margin-top:8px">
+        <a href="/FlickFuse/">Open FlickFuse</a>
+        <span class="muted"> | </span>
+        <a href="https://discord.gg/4uRUSAN498" target="_blank" rel="noopener">Support Discord</a>
+      </div>
     </div>
-    <div class="card">
-      <h3 style="margin-top:0">Incident Mode</h3>
-      <div id="incident" class="muted">None</div>
+
+    <div class="row">
+      <div class="tile">
+        <div class="label">API Service</div>
+        <div id="apiState" class="value muted">Checking...</div>
+      </div>
+      <div class="tile">
+        <div class="label">Rooms / Participants</div>
+        <div id="capacityState" class="value muted">-- / --</div>
+      </div>
+      <div class="tile">
+        <div class="label">Requests / Errors</div>
+        <div id="requestState" class="value muted">-- / --</div>
+      </div>
     </div>
+
     <div class="card">
-      <h3 style="margin-top:0">Recent Activity</h3>
-      <div id="timeline" class="list muted"></div>
+      <h3 style="margin-top:0">Service Checks</h3>
+      <div id="checks" class="list"></div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0">Activity Snapshot</h3>
+      <div id="timeline" class="list"></div>
     </div>
   </div>
+
   <script>
-    async function load() {
-      const endpoints = [
-        'https://api.frenzynets.com/api/public/status',
-        'https://api.frenzynets.com/api/frenzynet/api/public/status'
-      ];
-      let data = null;
-      for (const ep of endpoints) {
+    const HEALTH_ENDPOINTS = [
+      'https://api.frenzynets.com/api/telewatch/api/healthz',
+      'https://api.frenzynets.com/api/healthz'
+    ];
+
+    function setText(id, text, cls) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.textContent = String(text || '');
+      if (cls) el.className = `value ${cls}`;
+    }
+
+    function healthClass(ok) {
+      return ok ? 'ok' : 'bad';
+    }
+
+    function pushCheck(rows, label, ok, detail) {
+      const color = ok ? 'ok' : 'bad';
+      rows.push(
+        `<div class="list-item"><span class="pulse" style="background:${ok ? '#72f5b8' : '#ff6f87'}"></span><strong>${label}</strong> ` +
+        `<span class="${color}">${ok ? 'OK' : 'FAIL'}</span> <span class="muted">${detail || ''}</span></div>`
+      );
+    }
+
+    async function fetchFirstOkJson(urls) {
+      let lastErr = null;
+      for (const url of urls) {
         try {
-          const r = await fetch(ep, { cache: 'no-store' });
-          if (r.ok) {
-            data = await r.json();
-            break;
+          const res = await fetch(url, { cache: 'no-store' });
+          if (!res.ok) {
+            lastErr = new Error(`HTTP ${res.status}`);
+            continue;
           }
-        } catch (_) {}
+          return await res.json();
+        } catch (err) {
+          lastErr = err;
+        }
       }
-      const s = document.getElementById('summary');
-      const i = document.getElementById('incident');
-      const t = document.getElementById('timeline');
-      if (!data) {
-        s.textContent = 'API unreachable';
-        s.className = 'bad';
+      throw lastErr || new Error('request_failed');
+    }
+
+    function renderTimeline(health) {
+      const rows = [];
+      rows.push(`Heartbeat: ${(health && health.ok) ? 'online' : 'offline'} @ ${String((health && health.ts) || new Date().toISOString())}`);
+      const m = (health && health.metrics) || {};
+      const byStatus = m.by_status || {};
+      const topStatus = Object.keys(byStatus).slice(0, 6).map((k) => `${k}:${byStatus[k]}`).join(' | ');
+      if (topStatus) rows.push(`HTTP status mix: ${topStatus}`);
+      rows.push(`Total requests: ${Number(m.total_requests || 0)} | Total errors: ${Number(m.total_errors || 0)}`);
+      rows.push('Presented by Frenzy Nets.');
+      const el = document.getElementById('timeline');
+      el.innerHTML = rows.map((r) => `<div class="list-item">${r}</div>`).join('');
+    }
+
+    function renderChecks(health, errorText) {
+      const rows = [];
+      if (errorText) {
+        pushCheck(rows, 'API Reachability', false, errorText);
+      } else {
+        pushCheck(rows, 'API Reachability', true, 'telewatch health endpoint responded');
+      }
+      const rooms = Number((health && health.rooms) || 0);
+      const participants = Number((health && health.participants) || 0);
+      pushCheck(rows, 'Room Engine', participants >= 0, `${rooms} rooms, ${participants} participants`);
+      const m = (health && health.metrics) || {};
+      const totalReq = Number(m.total_requests || 0);
+      const totalErr = Number(m.total_errors || 0);
+      const errorRate = totalReq > 0 ? (totalErr / totalReq) : 0;
+      pushCheck(rows, 'Error Rate', errorRate < 0.05, `${(errorRate * 100).toFixed(2)}%`);
+      const el = document.getElementById('checks');
+      el.innerHTML = rows.join('');
+    }
+
+    async function load() {
+      const summary = document.getElementById('summary');
+      let health = null;
+      let errText = '';
+      try {
+        health = await fetchFirstOkJson(HEALTH_ENDPOINTS);
+      } catch (err) {
+        errText = String(err && err.message ? err.message : err || 'health check failed');
+      }
+
+      if (!health) {
+        summary.innerHTML = `<span class="pulse" style="background:#ff6f87"></span><span class="bad">Service appears offline</span> <span class="muted">${errText}</span>`;
+        setText('apiState', 'Offline', 'bad');
+        setText('capacityState', '-- / --', 'muted');
+        setText('requestState', '-- / --', 'muted');
+        renderChecks(null, errText);
+        renderTimeline(null);
         return;
       }
-      s.innerHTML = `Service: <span class="${data.ok ? 'ok' : 'warn'}">${data.ok ? 'ONLINE' : 'DEGRADED'}</span> | Users: ${data.users || 0} | Active sessions: ${data.activeSessions || 0} | Updated: ${data.timestamp || 'n/a'}`;
-      const ws = data.siteConfig?.websiteSettings || {};
-      const mode = String(ws.incident?.mode || 'off').toLowerCase();
-      if (mode === 'off') {
-        i.textContent = 'No active incident.';
-      } else {
-        i.className = 'warn';
-        i.textContent = `${mode.toUpperCase()}: ${ws.incident?.text || 'Incident active'}`;
-      }
-      const rows = [];
-      rows.push(`Heartbeat: ${data.ok ? 'online' : 'degraded'} (${data.timestamp || 'n/a'})`);
-      if (ws.bannerSchedule && ws.bannerSchedule.length) rows.push(`Scheduled promos: ${ws.bannerSchedule.length}`);
-      if (ws.changeLog && ws.changeLog.length) {
-        ws.changeLog.slice(-20).reverse().forEach((r) => rows.push(`${r.at || ''} | ${r.action || ''} | ${r.actor || ''}`));
-      }
-      t.innerHTML = rows.map((r) => `<div style="padding:6px;border-bottom:1px solid #223f6b">${r}</div>`).join('') || '<div>No timeline entries.</div>';
+
+      const ok = !!health.ok;
+      const rooms = Number(health.rooms || 0);
+      const participants = Number(health.participants || 0);
+      const metrics = health.metrics || {};
+      const totalReq = Number(metrics.total_requests || 0);
+      const totalErr = Number(metrics.total_errors || 0);
+      const updatedAt = String(health.ts || new Date().toISOString());
+
+      summary.innerHTML = `<span class="pulse" style="background:${ok ? '#72f5b8' : '#ffd166'}"></span>` +
+        `FlickFuse API <span class="${ok ? 'ok' : 'warn'}">${ok ? 'ONLINE' : 'DEGRADED'}</span> · Updated ${updatedAt}`;
+      setText('apiState', ok ? 'Online' : 'Degraded', healthClass(ok));
+      setText('capacityState', `${rooms} / ${participants}`, 'ok');
+      setText('requestState', `${totalReq} / ${totalErr}`, totalErr > 0 ? 'warn' : 'ok');
+      renderChecks(health, '');
+      renderTimeline(health);
     }
+
     load();
     setInterval(load, 10000);
   </script>
