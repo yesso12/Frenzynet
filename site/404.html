@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FlickFuse Redirect</title>
+  <style>
+    body { margin: 0; font: 600 15px/1.5 "Segoe UI", Arial, sans-serif; background:#0d1320; color:#e9f0ff; display:grid; min-height:100vh; place-items:center; }
+    .card { max-width: 700px; margin: 20px; border:1px solid #2f3b55; border-radius: 12px; padding: 16px; background:#151d2d; }
+    a { color:#73d8ff; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Redirecting to FlickFuse...</h1>
+    <p>If this page does not move automatically, use <a id="fallbackLink" href="/telewatch/">Open FlickFuse</a>.</p>
+  </div>
+  <script>
+    (function () {
+      var path = window.location.pathname || "/";
+      var search = window.location.search || "";
+      var hash = window.location.hash || "";
+      var target = "/";
+
+      if (/^\/FlickFuse(?:\/|$)/i.test(path)) {
+        var suffix = path.replace(/^\/FlickFuse/i, "") || "/";
+        target = "/telewatch" + suffix + search + hash;
+      } else if (/^\/frenzynet-updates\//i.test(path)) {
+        target = "/frenzynet-updates/" + search + hash;
+      } else {
+        target = "/" + search + hash;
+      }
+
+      document.getElementById("fallbackLink").setAttribute("href", target);
+      window.location.replace(target);
+    })();
+  </script>
+</body>
+</html>
