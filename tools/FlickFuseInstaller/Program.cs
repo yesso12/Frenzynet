@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO.Compression;
+using System.Text.Json;
 using System.Windows.Forms;
 
 namespace FlickFuseInstaller;
@@ -16,8 +17,16 @@ internal static class Program
 
 internal sealed class InstallerForm : Form
 {
-  private const string ChromiumZipUrl = "https://raw.githubusercontent.com/yesso12/Frenzynet/main/site/frenzynet-updates/flickfuse-extension-chromium-latest.zip";
-  private const string FirefoxZipUrl = "https://raw.githubusercontent.com/yesso12/Frenzynet/main/site/frenzynet-updates/flickfuse-extension-firefox-latest.zip";
+  private static readonly string[] ChromiumZipUrls =
+  [
+    "https://raw.githubusercontent.com/yesso12/Frenzynet/main/site/frenzynet-updates/flickfuse-extension-chromium-latest.zip",
+    "https://frenzynets.com/frenzynet-updates/flickfuse-extension-chromium-latest.zip"
+  ];
+  private static readonly string[] FirefoxZipUrls =
+  [
+    "https://raw.githubusercontent.com/yesso12/Frenzynet/main/site/frenzynet-updates/flickfuse-extension-firefox-latest.zip",
+    "https://frenzynets.com/frenzynet-updates/flickfuse-extension-firefox-latest.zip"
+  ];
 
   private readonly CheckBox _chrome = new() { Text = "Chrome", Checked = true, AutoSize = true };
   private readonly CheckBox _edge = new() { Text = "Edge", Checked = true, AutoSize = true };
@@ -41,7 +50,7 @@ internal sealed class InstallerForm : Form
 
   internal InstallerForm()
   {
-    Text = "FlickFuse Installer v7";
+    Text = "FlickFuse Installer v8";
     Width = 740;
     Height = 520;
     FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -127,8 +136,7 @@ internal sealed class InstallerForm : Form
       if (needsChromium)
       {
         Log("Downloading Chromium package...");
-        await DownloadFileAsync(ChromiumZipUrl, chromiumZipPath);
-        ExtractZip(chromiumZipPath, chromiumExtractPath);
+        await DownloadAndExtractValidatedAsync(ChromiumZipUrls, chromiumZipPath, chromiumExtractPath);
 
         if (selected.Contains(BrowserKind.Chrome)) CopyDirectory(chromiumExtractPath, Path.Combine(_installRoot, "chrome"));
         if (selected.Contains(BrowserKind.Edge)) CopyDirectory(chromiumExtractPath, Path.Combine(_installRoot, "edge"));
@@ -139,8 +147,7 @@ internal sealed class InstallerForm : Form
       if (needsFirefox)
       {
         Log("Downloading Firefox package...");
-        await DownloadFileAsync(FirefoxZipUrl, firefoxZipPath);
-        ExtractZip(firefoxZipPath, firefoxExtractPath);
+        await DownloadAndExtractValidatedAsync(FirefoxZipUrls, firefoxZipPath, firefoxExtractPath);
         CopyDirectory(firefoxExtractPath, Path.Combine(_installRoot, "firefox"));
       }
 
@@ -213,6 +220,49 @@ internal sealed class InstallerForm : Form
     using var client = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
     var bytes = await client.GetByteArrayAsync(url);
     await File.WriteAllBytesAsync(outPath, bytes);
+  }
+
+  private async Task DownloadAndExtractValidatedAsync(string[] urls, string zipPath, string extractPath)
+  {
+    Exception? lastErr = null;
+    foreach (var baseUrl in urls)
+    {
+      try
+      {
+        var sep = baseUrl.Contains('?') ? "&" : "?";
+        var url = $"{baseUrl}{sep}cb={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
+        Log($"Trying source: {baseUrl}");
+        await DownloadFileAsync(url, zipPath);
+        ExtractZip(zipPath, extractPath);
+        ValidateManifest(extractPath);
+        Log("Package validated.");
+        return;
+      }
+      catch (Exception ex)
+      {
+        lastErr = ex;
+        Log($"Source failed: {ex.Message}");
+      }
+    }
+    throw new InvalidOperationException("Could not download a valid extension package.", lastErr);
+  }
+
+  private static void ValidateManifest(string extractPath)
+  {
+    var manifestPath = Path.Combine(extractPath, "manifest.json");
+    if (!File.Exists(manifestPath))
+    {
+      throw new InvalidOperationException("manifest.json missing after extraction.");
+    }
+    var content = File.ReadAllText(manifestPath);
+    try
+    {
+      JsonDocument.Parse(content);
+    }
+    catch (Exception ex)
+    {
+      throw new InvalidOperationException($"manifest.json invalid: {ex.Message}", ex);
+    }
   }
 
   private static void ExtractZip(string zipPath, string extractPath)
