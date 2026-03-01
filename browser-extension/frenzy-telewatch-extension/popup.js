@@ -50,6 +50,29 @@ async function refreshLast() {
   }
 }
 
+async function refreshAdblockState() {
+  const data = await chrome.runtime.sendMessage({ type: "adblock:get_state" });
+  const stateEl = document.getElementById("adblockState");
+  const toggleBtn = document.getElementById("adblockToggleBtn");
+  if (!data || !data.ok) {
+    stateEl.textContent = "Ad Shield: unavailable";
+    toggleBtn.textContent = "Enable Ad Shield";
+    return;
+  }
+  stateEl.textContent = `Ad Shield: ${data.enabled ? "enabled" : "disabled"} (${Number(data.ruleCount || 0)} rules)`;
+  toggleBtn.textContent = data.enabled ? "Disable Ad Shield" : "Enable Ad Shield";
+}
+
+async function toggleAdblock() {
+  const data = await chrome.runtime.sendMessage({ type: "adblock:get_state" });
+  const next = !(data && data.ok && data.enabled);
+  const setRes = await chrome.runtime.sendMessage({ type: "adblock:set_enabled", enabled: next });
+  if (!setRes || !setRes.ok) {
+    throw new Error(setRes && setRes.error ? setRes.error : "adblock_toggle_failed");
+  }
+  await refreshAdblockState();
+}
+
 async function boot() {
   const roomInput = document.getElementById("roomCode");
   roomInput.addEventListener("input", () => {
@@ -96,7 +119,22 @@ async function boot() {
     }
   });
 
+  document.getElementById("adblockToggleBtn").addEventListener("click", async () => {
+    try {
+      await toggleAdblock();
+      setStatus("Ad Shield updated.");
+    } catch (err) {
+      setStatus(String(err && err.message ? err.message : err), true);
+    }
+  });
+
+  document.getElementById("adblockRefreshBtn").addEventListener("click", async () => {
+    await refreshAdblockState();
+    setStatus("Ad Shield status refreshed.");
+  });
+
   await refreshLast();
+  await refreshAdblockState();
 }
 
 boot();

@@ -15,6 +15,31 @@
     return `WATCH-${base.slice(0, 8)}`;
   }
 
+  function codeFromUrl(urlText = "") {
+    try {
+      const u = new URL(urlText, location.href);
+      const parts = u.pathname.split("/").filter(Boolean);
+      const tail = parts.slice(-1)[0] || parts.slice(-2).join("") || u.hostname;
+      const base = cleanRoomCode(tail);
+      if (!base || base.length < 4) return detectSuggestedCode();
+      return `WATCH-${base.slice(0, 8)}`;
+    } catch {
+      return detectSuggestedCode();
+    }
+  }
+
+  function isLikelyWatchLink(a) {
+    if (!a || !a.href) return false;
+    const href = String(a.href || "").toLowerCase();
+    const text = String(a.textContent || "").toLowerCase().trim();
+    if (!href.startsWith("http")) return false;
+    if (href.includes("/telewatch/")) return false;
+    if (href.includes("/watch/") || href.includes("/title/") || href.includes("/video/")) return true;
+    if (href.includes("netflix.com/title/") || href.includes("youtube.com/watch") || href.includes("primevideo.com/detail") || href.includes("disneyplus.com/video")) return true;
+    if (text.includes("watch") || text.includes("play") || text.includes("trailer")) return true;
+    return false;
+  }
+
   async function send(type, payload = {}) {
     return chrome.runtime.sendMessage({ type, ...payload });
   }
@@ -57,20 +82,26 @@
     return input.value;
   }
 
+  async function startPartyForUrl(sourceUrl, explicitCode = "") {
+    const code = cleanRoomCode(explicitCode || codeFromUrl(sourceUrl));
+    const res = await send("telewatch:start_party", {
+      roomCode: code,
+      sourceUrl
+    });
+    if (res && res.ok) {
+      setStatus(`Started ${res.roomCode}`);
+      return res;
+    }
+    setStatus(`Failed: ${res && res.error ? res.error : "unknown"}`);
+    return res;
+  }
+
   fab.addEventListener("click", () => {
     panel.classList.toggle("hidden");
   });
 
   panel.querySelector("#frenzy-start").addEventListener("click", async () => {
-    const res = await send("telewatch:start_party", {
-      roomCode: roomCode(),
-      sourceUrl: location.href
-    });
-    if (res && res.ok) {
-      setStatus(`Started ${res.roomCode}`);
-    } else {
-      setStatus(`Failed: ${res && res.error ? res.error : "unknown"}`);
-    }
+    await startPartyForUrl(location.href, roomCode());
   });
 
   panel.querySelector("#frenzy-join").addEventListener("click", async () => {
@@ -85,7 +116,7 @@
   });
 
   panel.querySelector("#frenzy-open").addEventListener("click", async () => {
-    await send("telewatch:start_party", { roomCode: roomCode(), sourceUrl: "" });
+    await startPartyForUrl("", roomCode());
     setStatus("Opened FlickFuse.");
   });
 
@@ -103,4 +134,35 @@
       setStatus(url);
     }
   });
+
+  function injectPartyButtons() {
+    const links = document.querySelectorAll("a[href]");
+    for (const a of links) {
+      if (!isLikelyWatchLink(a)) continue;
+      if (a.dataset.flickfusePartyInjected === "1") continue;
+      a.dataset.flickfusePartyInjected = "1";
+
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "frenzy-link-party";
+      btn.textContent = "Start Party";
+      btn.title = "Start FlickFuse party for this title";
+      btn.addEventListener("click", async (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const target = a.href || location.href;
+        input.value = codeFromUrl(target);
+        await startPartyForUrl(target, input.value);
+      });
+
+      const wrap = document.createElement("span");
+      wrap.className = "frenzy-link-party-wrap";
+      wrap.appendChild(btn);
+      if (a.parentElement) a.insertAdjacentElement("afterend", wrap);
+    }
+  }
+
+  injectPartyButtons();
+  const mo = new MutationObserver(() => injectPartyButtons());
+  mo.observe(document.documentElement, { childList: true, subtree: true });
 })();

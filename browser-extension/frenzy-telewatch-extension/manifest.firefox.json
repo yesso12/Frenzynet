@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "FlickFuse Party",
+  "name": "FlickFuse Party (Presented by Frenzy Nets)",
   "description": "Start or join synced watch parties from your browser, extension-style.",
   "version": "1.1.0",
   "action": {
@@ -14,7 +14,9 @@
     "storage",
     "tabs",
     "activeTab",
-    "scripting"
+    "scripting",
+    "declarativeNetRequest",
+    "declarativeNetRequestWithHostAccess"
   ],
   "host_permissions": [
     "https://*.netflix.com/*",
@@ -38,6 +40,15 @@
       "run_at": "document_idle"
     }
   ],
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "adblock_rules",
+        "enabled": false,
+        "path": "rules/adblock-rules.json"
+      }
+    ]
+  },
   "browser_specific_settings": {
     "gecko": {
       "id": "flickfuse@frenzynets.com",
