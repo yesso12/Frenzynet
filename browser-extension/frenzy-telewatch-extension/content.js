@@ -53,46 +53,52 @@
     </div>
     <div class="ff-shell">
       <header class="ff-top">
-        <div class="ff-brand"><span class="ff-dot"></span>FF</div>
-        <button id="ff-upgrade" class="ff-upgrade" type="button">Upgrade</button>
+        <div class="ff-brand"><span class="ff-dot"></span>FlickFuse</div>
+        <button id="ff-upgrade" class="ff-upgrade" type="button">Premium</button>
         <div class="ff-icons">
-          <button id="ff-users" type="button" title="Members">1</button>
-          <button id="ff-share" type="button" title="Share">+</button>
-          <button id="ff-close" type="button" title="Close">x</button>
+          <button id="ff-share" type="button" title="Copy Invite">Share</button>
+          <button id="ff-close" type="button" title="Close">Close</button>
         </div>
       </header>
-      <section class="ff-ann">
+      <section class="ff-ann ff-block">
         <h3>Announcements</h3>
-        <div class="ff-ann-card">Premium members get ad shield, voice priority, and AI bot access.</div>
+        <div class="ff-ann-card">Use <strong>Set a party</strong> on this page, then share the invite.</div>
       </section>
-      <section class="ff-feed-wrap">
+      <section class="ff-controls ff-block">
+        <h3>Party Controls</h3>
+        <input id="frenzy-room-code" maxlength="24" placeholder="WATCH-AB12CD34" />
+        <div class="ff-row">
+          <button id="frenzy-start" class="primary" type="button">Set a party</button>
+          <button id="frenzy-join" type="button">Join</button>
+        </div>
+        <div class="ff-row">
+          <button id="frenzy-copy" type="button">Copy invite</button>
+          <button id="frenzy-open" type="button">Open app</button>
+        </div>
+        <div class="ff-row">
+          <button id="ff-mic" type="button">Mic</button>
+          <button id="ff-cam" type="button">Cam</button>
+        </div>
+        <div id="frenzy-status" class="ff-muted">Ready. Start a party from this page.</div>
+      </section>
+      <section class="ff-feed-wrap ff-block">
+        <h3>Party Chat</h3>
         <div id="ff-feed" class="ff-feed"></div>
+        <div class="ff-reactions">
+          <button type="button">😍</button>
+          <button type="button">😮</button>
+          <button type="button">😭</button>
+          <button type="button">😂</button>
+          <button type="button">🔥</button>
+        </div>
+        <form id="ff-compose" class="ff-compose">
+          <input id="ff-msg" maxlength="180" placeholder="Type a message..." />
+          <button id="ff-send" type="submit">Send</button>
+        </form>
       </section>
-      <div class="ff-reactions">
-        <button type="button">😍</button>
-        <button type="button">😮</button>
-        <button type="button">😭</button>
-        <button type="button">😂</button>
-        <button type="button">🔥</button>
+      <div class="ff-footnote">
+        Presented by Frenzy Nets
       </div>
-      <form id="ff-compose" class="ff-compose">
-        <input id="ff-msg" maxlength="180" placeholder="Type a message..." />
-        <button id="ff-send" type="submit">Send</button>
-      </form>
-      <div class="ff-row">
-        <button id="ff-mic" type="button">Mic</button>
-        <button id="ff-cam" type="button">Cam</button>
-      </div>
-      <input id="frenzy-room-code" maxlength="24" placeholder="WATCH-AB12CD34" />
-      <div class="ff-row">
-        <button id="frenzy-start" class="primary" type="button">Set a party</button>
-        <button id="frenzy-join" type="button">Join</button>
-      </div>
-      <div class="ff-row">
-        <button id="frenzy-copy" type="button">Copy invite</button>
-        <button id="frenzy-open" type="button">Open app</button>
-      </div>
-      <div id="frenzy-status" class="ff-muted">Use this page as your synced source.</div>
     </div>
   `;
 

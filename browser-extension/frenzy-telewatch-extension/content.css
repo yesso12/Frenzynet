@@ -34,7 +34,7 @@
   background: #18191f;
   box-shadow: -14px 0 26px rgba(0, 0, 0, 0.45);
   display: grid;
-  grid-template-rows: auto auto 1fr auto auto auto auto auto auto;
+  grid-template-rows: auto auto auto 1fr auto;
 }
 #frenzy-telewatch-rail .ff-top {
   display: grid;
@@ -74,7 +74,7 @@
 .ff-icons button {
   border: 1px solid #333845;
   border-radius: 6px;
-  min-width: 28px;
+  min-width: 44px;
   height: 24px;
   background: #1f222b;
   color: #cad3ea;
@@ -82,30 +82,42 @@
   cursor: pointer;
 }
 .ff-ann {
-  padding: 10px;
+  padding: 8px 10px 0;
 }
 .ff-ann h3 {
   margin: 0 0 8px;
   font-size: 12px;
   color: #b4bfd9;
 }
+.ff-controls h3,
+.ff-feed-wrap h3 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: #b4bfd9;
+}
+.ff-block {
+  border-bottom: 1px solid #2a2d36;
+}
 .ff-ann-card {
   border: 1px solid #5b4369;
   border-radius: 8px;
-  background: linear-gradient(135deg, #2a1834, #4b234a);
-  color: #ffdef0;
+  background: linear-gradient(135deg, #1f2533, #2a3144);
+  color: #eaf0ff;
   font-size: 12px;
   line-height: 1.4;
-  padding: 9px;
+  padding: 8px;
+}
+.ff-controls {
+  padding: 10px;
 }
 .ff-feed-wrap {
   min-height: 120px;
-  padding: 0 10px 8px;
+  padding: 10px;
 }
 .ff-feed {
-  height: 100%;
+  height: 260px;
   min-height: 120px;
-  max-height: 100%;
+  max-height: 320px;
   overflow: auto;
   border: 1px solid #2d313c;
   border-radius: 8px;
@@ -128,7 +140,7 @@
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 6px;
-  padding: 0 10px 8px;
+  padding: 8px 0;
 }
 .ff-reactions button {
   border: 1px solid #333847;
@@ -142,7 +154,7 @@
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 6px;
-  padding: 0 10px 8px;
+  padding: 0;
 }
 .ff-compose input,
 #frenzy-room-code {
@@ -167,7 +179,7 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
-  padding: 0 10px 8px;
+  padding: 0 0 8px;
 }
 .ff-row button {
   border: 1px solid #3a4051;
@@ -188,13 +200,18 @@
   color: #f8c714;
 }
 #frenzy-room-code {
-  margin: 0 10px 8px;
-  width: calc(100% - 20px);
+  margin: 0 0 8px;
+  width: 100%;
 }
 .ff-muted {
   color: #9aa9ca;
   font-size: 12px;
-  padding: 0 10px 10px;
+  padding: 0;
+}
+.ff-footnote {
+  color: #7f8ba6;
+  font-size: 11px;
+  padding: 8px 10px;
 }
 
 .frenzy-link-party-wrap {
