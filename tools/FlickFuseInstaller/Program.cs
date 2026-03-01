@@ -41,7 +41,7 @@ internal sealed class InstallerForm : Form
 
   internal InstallerForm()
   {
-    Text = "FlickFuse Installer";
+    Text = "FlickFuse Installer v6";
     Width = 740;
     Height = 520;
     FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -111,7 +111,7 @@ internal sealed class InstallerForm : Form
     {
       var downloads = ExpandPath("%USERPROFILE%\\Downloads");
       var tempRoot = Path.Combine(downloads, "FlickFuse-Extension-Temp");
-      _installRoot = Path.Combine(ExpandPath("%USERPROFILE%"), "Desktop", "FlickFuse Extensions");
+      _installRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "FlickFuse Extensions");
 
       Directory.CreateDirectory(tempRoot);
       Directory.CreateDirectory(_installRoot);
