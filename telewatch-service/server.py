@@ -8,6 +8,7 @@ import hmac
 import base64
 import datetime as dt
 import time
+import re
 import smtplib
 import threading
 import traceback
@@ -85,6 +86,10 @@ DISCORD_GUILD_ID = os.getenv('TELEWATCH_DISCORD_GUILD_ID', '').strip()
 DISCORD_ROLE_SUPPORTER = os.getenv('TELEWATCH_DISCORD_ROLE_SUPPORTER', '').strip()
 DISCORD_ROLE_PRO = os.getenv('TELEWATCH_DISCORD_ROLE_PRO', '').strip()
 DISCORD_ROLE_LIFETIME = os.getenv('TELEWATCH_DISCORD_ROLE_LIFETIME', '').strip()
+DISCORD_WATCH_CATEGORY_ID = os.getenv('TELEWATCH_DISCORD_WATCH_CATEGORY_ID', '').strip()
+DISCORD_WATCH_CHANNEL_PREFIX = (os.getenv('TELEWATCH_DISCORD_WATCH_CHANNEL_PREFIX', 'flickfuse').strip().lower() or 'flickfuse')[:24]
+DISCORD_WATCH_INVITE_MAX_AGE_SEC = max(300, min(604800, int(os.getenv('TELEWATCH_DISCORD_WATCH_INVITE_MAX_AGE_SEC', '86400'))))
+DISCORD_AI_BOT_URL = os.getenv('TELEWATCH_DISCORD_AI_BOT_URL', 'https://discord.gg/4uRUSAN498').strip()
 TELEWATCH_SMTP_HOST = os.getenv('TELEWATCH_SMTP_HOST', '').strip()
 TELEWATCH_SMTP_PORT = int(str(os.getenv('TELEWATCH_SMTP_PORT', '587')).strip() or '587')
 TELEWATCH_SMTP_USER = os.getenv('TELEWATCH_SMTP_USER', '').strip()
@@ -103,6 +108,9 @@ _request_metrics = {
     'by_path': {},
     'by_status': {},
 }
+_membership_reconcile_lock = threading.Lock()
+_last_membership_reconcile_ts = 0.0
+MEMBERSHIP_RECONCILE_INTERVAL_SEC = max(30, min(1800, int(os.getenv('TELEWATCH_MEMBERSHIP_RECONCILE_INTERVAL_SEC', '90'))))
 
 
 def utc_iso() -> str:
@@ -282,6 +290,120 @@ def json_get(url: str, headers: dict | None = None, timeout_sec: int = 12) -> di
     with urlopen(req, timeout=timeout_sec) as resp:
         raw = resp.read().decode('utf-8', errors='replace')
         return json.loads(raw or '{}')
+
+
+def clean_discord_channel_name(raw: str, fallback: str = 'flickfuse-room') -> str:
+    base = str(raw or '').strip().lower()
+    base = re.sub(r'[^a-z0-9-]+', '-', base)
+    base = re.sub(r'-{2,}', '-', base).strip('-')
+    if not base:
+        base = str(fallback or 'flickfuse-room').strip().lower()
+    return base[:90]
+
+
+def build_discord_watch_room_name(room_code_val: str, title: str = '') -> str:
+    root = clean_discord_channel_name(f'{DISCORD_WATCH_CHANNEL_PREFIX}-{room_code_val}', f'{DISCORD_WATCH_CHANNEL_PREFIX}-room')
+    if title:
+        suffix = clean_discord_channel_name(title, '')[:18]
+        if suffix:
+            return clean_discord_channel_name(f'{root}-{suffix}', root)
+    return root
+
+
+def get_room_discord_payload(conn: sqlite3.Connection, room_code_val: str) -> dict | None:
+    row = conn.execute(
+        '''
+        SELECT text_channel_id, voice_channel_id, invite_url, channel_name, status, updated_at
+        FROM watch_room_discord
+        WHERE room_code=?
+        LIMIT 1
+        ''',
+        (normalize_room_code(room_code_val, ''),),
+    ).fetchone()
+    if row is None:
+        return None
+    return {
+        'channelName': str(row['channel_name'] or ''),
+        'textChannelId': str(row['text_channel_id'] or ''),
+        'voiceChannelId': str(row['voice_channel_id'] or ''),
+        'inviteUrl': str(row['invite_url'] or ''),
+        'status': str(row['status'] or ''),
+        'updatedAt': str(row['updated_at'] or ''),
+    }
+
+
+def create_discord_watch_room(room_code_val: str, title: str, host_name: str, max_users: int = 0) -> tuple[bool, str, dict]:
+    if not (DISCORD_BOT_TOKEN and DISCORD_GUILD_ID):
+        return False, 'discord_bot_not_configured', {}
+    room_code_clean = normalize_room_code(room_code_val, '')
+    if not room_code_clean:
+        return False, 'roomCode_required', {}
+    channel_name = build_discord_watch_room_name(room_code_clean, title)
+    topic = f'FlickFuse Room {room_code_clean} | Host: {clean_name(host_name, "Host")} | Presented by Frenzy Nets'
+    auth = {'Authorization': f'Bot {DISCORD_BOT_TOKEN}'}
+    text_payload = {
+        'name': channel_name,
+        'type': 0,
+        'topic': topic[:1024],
+        'reason': f'FlickFuse watch room {room_code_clean}',
+    }
+    if DISCORD_WATCH_CATEGORY_ID:
+        text_payload['parent_id'] = DISCORD_WATCH_CATEGORY_ID
+    text_channel_id = ''
+    voice_channel_id = ''
+    invite_url = ''
+    try:
+        text_channel = json_post(
+            f'https://discord.com/api/v10/guilds/{DISCORD_GUILD_ID}/channels',
+            text_payload,
+            headers=auth,
+            timeout_sec=12,
+        )
+        text_channel_id = str(text_channel.get('id') or '').strip()
+        if not text_channel_id:
+            return False, 'discord_text_channel_create_failed', {}
+    except HTTPError as ex:
+        return False, f'discord_text_channel_http_{getattr(ex, "code", 0)}', {}
+    except Exception as ex:
+        return False, f'discord_text_channel_create_failed:{ex}', {}
+    try:
+        voice_payload = {
+            'name': clean_discord_channel_name(f'{channel_name}-voice', channel_name)[:90],
+            'type': 2,
+            'reason': f'FlickFuse watch voice room {room_code_clean}',
+        }
+        max_u = int(max_users or 0)
+        if max_u > 0:
+            voice_payload['user_limit'] = max(2, min(99, max_u))
+        if DISCORD_WATCH_CATEGORY_ID:
+            voice_payload['parent_id'] = DISCORD_WATCH_CATEGORY_ID
+        voice_channel = json_post(
+            f'https://discord.com/api/v10/guilds/{DISCORD_GUILD_ID}/channels',
+            voice_payload,
+            headers=auth,
+            timeout_sec=12,
+        )
+        voice_channel_id = str(voice_channel.get('id') or '').strip()
+    except Exception:
+        voice_channel_id = ''
+    try:
+        invite = json_post(
+            f'https://discord.com/api/v10/channels/{text_channel_id}/invites',
+            {'max_age': DISCORD_WATCH_INVITE_MAX_AGE_SEC, 'max_uses': 0, 'temporary': False},
+            headers=auth,
+            timeout_sec=12,
+        )
+        code = str(invite.get('code') or '').strip()
+        if code:
+            invite_url = f'https://discord.gg/{code}'
+    except Exception:
+        invite_url = ''
+    return True, 'ok', {
+        'channelName': channel_name,
+        'textChannelId': text_channel_id,
+        'voiceChannelId': voice_channel_id,
+        'inviteUrl': invite_url,
+    }
 
 
 def clean_username(raw: str) -> str:
@@ -497,6 +619,7 @@ def ensure_schema() -> None:
               cohost_can_pin INTEGER NOT NULL DEFAULT 1,
               media_mode TEXT NOT NULL DEFAULT 'webrtc',
               access_mode TEXT NOT NULL DEFAULT 'public',
+              max_participants INTEGER NOT NULL DEFAULT 50,
               is_private INTEGER NOT NULL DEFAULT 0,
               delete_on_host_leave INTEGER NOT NULL DEFAULT 1,
               playback_sec REAL NOT NULL DEFAULT 0,
@@ -553,6 +676,17 @@ def ensure_schema() -> None:
               display_name_norm TEXT NOT NULL,
               created_at TEXT NOT NULL DEFAULT (datetime('now')),
               expires_at TEXT NOT NULL,
+              FOREIGN KEY (room_code) REFERENCES watch_rooms(room_code) ON DELETE CASCADE
+            );
+            CREATE TABLE IF NOT EXISTS watch_room_discord (
+              room_code TEXT PRIMARY KEY,
+              channel_name TEXT NOT NULL DEFAULT '',
+              text_channel_id TEXT NOT NULL DEFAULT '',
+              voice_channel_id TEXT NOT NULL DEFAULT '',
+              invite_url TEXT NOT NULL DEFAULT '',
+              status TEXT NOT NULL DEFAULT 'active',
+              created_at TEXT NOT NULL DEFAULT (datetime('now')),
+              updated_at TEXT NOT NULL DEFAULT (datetime('now')),
               FOREIGN KEY (room_code) REFERENCES watch_rooms(room_code) ON DELETE CASCADE
             );
             CREATE TABLE IF NOT EXISTS watch_admins (
@@ -678,6 +812,7 @@ def ensure_schema() -> None:
             CREATE INDEX IF NOT EXISTS idx_watch_join_requests_room_status ON watch_join_requests(room_code, status, created_at);
             CREATE INDEX IF NOT EXISTS idx_watch_room_invites_room_expires ON watch_room_invites(room_code, expires_at);
             CREATE INDEX IF NOT EXISTS idx_watch_room_bans_room_name ON watch_room_bans(room_code, display_name_norm, expires_at);
+            CREATE INDEX IF NOT EXISTS idx_watch_room_discord_status ON watch_room_discord(status, updated_at);
             CREATE INDEX IF NOT EXISTS idx_watch_admin_sessions_last_seen ON watch_admin_sessions(last_seen_at);
             CREATE INDEX IF NOT EXISTS idx_watch_user_sessions_last_seen ON watch_user_sessions(last_seen_at);
             CREATE INDEX IF NOT EXISTS idx_watch_user_saved_rooms_user ON watch_user_saved_rooms(username, updated_at);
@@ -740,6 +875,10 @@ def ensure_schema() -> None:
         except sqlite3.OperationalError:
             pass
         try:
+            conn.execute(f"ALTER TABLE watch_rooms ADD COLUMN max_participants INTEGER NOT NULL DEFAULT {MAX_PARTICIPANTS_PER_ROOM}")
+        except sqlite3.OperationalError:
+            pass
+        try:
             conn.execute("ALTER TABLE watch_users ADD COLUMN donation_tier TEXT NOT NULL DEFAULT 'free'")
         except sqlite3.OperationalError:
             pass
@@ -792,6 +931,14 @@ def ensure_schema() -> None:
             WHERE media_mode IS NULL OR trim(media_mode)='' OR lower(media_mode) NOT IN ('webrtc','sfu','broadcast')
             ''',
             (clean_media_mode(TELEWATCH_SFU_DEFAULT_MODE, 'webrtc'),),
+        )
+        conn.execute(
+            '''
+            UPDATE watch_rooms
+            SET max_participants=?
+            WHERE max_participants IS NULL OR max_participants < 2 OR max_participants > 500
+            ''',
+            (int(MAX_PARTICIPANTS_PER_ROOM),),
         )
         conn.execute(
             '''
@@ -960,6 +1107,7 @@ def cleanup_rooms(conn: sqlite3.Connection) -> None:
             )
             conn.execute("DELETE FROM watch_room_bans WHERE expires_at <= datetime('now')")
             conn.execute("DELETE FROM watch_room_invites WHERE expires_at <= datetime('now') OR (max_uses > 0 AND used_count >= max_uses)")
+            maybe_reconcile_memberships(conn)
             return
         except sqlite3.OperationalError as exc:
             if 'locked' not in str(exc).lower():
@@ -995,6 +1143,7 @@ def room_payload(room_row: sqlite3.Row) -> dict:
             'pin': bool(room_row['cohost_can_pin']) if 'cohost_can_pin' in room_row.keys() else True,
         },
         'accessMode': access_mode,
+        'maxParticipants': int(room_row['max_participants']) if 'max_participants' in room_row.keys() else int(MAX_PARTICIPANTS_PER_ROOM),
         'isPrivate': bool(room_row['is_private']),
         'deleteOnHostLeave': bool(room_row['delete_on_host_leave']),
         'playbackSec': float(room_row['playback_sec'] or 0.0),
@@ -1209,6 +1358,8 @@ def upsert_user_entitlement(
     if bmode not in {'monthly', 'annual', 'lifetime'}:
         bmode = 'monthly'
     stat = str(status or 'active').strip().lower()
+    if stat == 'revoked':
+        stat = 'canceled'
     if stat not in {'active', 'canceled', 'expired', 'paused'}:
         stat = 'active'
     exp = str(expires_at or '').strip()
@@ -1338,6 +1489,67 @@ def sync_discord_roles(conn: sqlite3.Connection, username: str) -> tuple[bool, s
     except Exception as ex:
         return False, f'discord_role_sync_failed:{ex}'
     return True, 'ok'
+
+
+def reconcile_membership_tiers(conn: sqlite3.Connection, max_users: int = 400, max_role_sync: int = 6) -> dict:
+    rows = conn.execute(
+        '''
+        SELECT username, donation_tier
+        FROM watch_users
+        ORDER BY updated_at DESC
+        LIMIT ?
+        ''',
+        (max(20, min(4000, int(max_users or 400))),),
+    ).fetchall()
+    changed: list[tuple[str, str, str]] = []
+    for row in rows:
+        username = clean_username(row['username'] if 'username' in row.keys() else '')
+        if not username or username == clean_username(TELEWATCH_OWNER_USERNAME):
+            continue
+        base_tier = clean_donation_tier(row['donation_tier'] if 'donation_tier' in row.keys() else 'free', 'free')
+        effective_tier, _ = compute_effective_tier(conn, username, base_tier)
+        if effective_tier == base_tier:
+            continue
+        conn.execute(
+            '''
+            UPDATE watch_users
+            SET donation_tier=?, updated_at=datetime('now')
+            WHERE username=?
+            ''',
+            (effective_tier, username),
+        )
+        conn.execute('DELETE FROM watch_user_sessions WHERE username=?', (username,))
+        changed.append((username, base_tier, effective_tier))
+    synced = 0
+    for username, _, _ in changed[:max(0, int(max_role_sync or 0))]:
+        try:
+            ok, _reason = sync_discord_roles(conn, username)
+            if ok:
+                synced += 1
+        except Exception:
+            continue
+    return {
+        'checked': len(rows),
+        'changed': len(changed),
+        'synced': synced,
+        'changes': [{'username': u, 'fromTier': f, 'toTier': t} for u, f, t in changed[:80]],
+    }
+
+
+def maybe_reconcile_memberships(conn: sqlite3.Connection) -> None:
+    global _last_membership_reconcile_ts
+    now = time.monotonic()
+    if (now - float(_last_membership_reconcile_ts or 0.0)) < MEMBERSHIP_RECONCILE_INTERVAL_SEC:
+        return
+    with _membership_reconcile_lock:
+        now2 = time.monotonic()
+        if (now2 - float(_last_membership_reconcile_ts or 0.0)) < MEMBERSHIP_RECONCILE_INTERVAL_SEC:
+            return
+        _last_membership_reconcile_ts = now2
+        try:
+            reconcile_membership_tiers(conn, max_users=500, max_role_sync=3)
+        except Exception:
+            return
 
 
 def audit_event(conn: sqlite3.Connection, event_type: str, username: str = '', session_token: str = '', ip_addr: str = '', detail: dict | None = None) -> None:
@@ -1529,9 +1741,21 @@ class TelewatchHandler(BaseHTTPRequestHandler):
         state_paths = {'/watch/state', '/api/watch/state', '/api/telewatch/watch/state', '/api/telewatch/api/watch/state'}
         if path in health_paths:
             db_ok = True
+            room_count = 0
+            participant_count = 0
             try:
                 with get_db() as conn:
                     conn.execute('SELECT 1').fetchone()
+                    room_count = int(conn.execute('SELECT COUNT(*) FROM watch_rooms').fetchone()[0])
+                    participant_count = int(
+                        conn.execute(
+                            '''
+                            SELECT COUNT(*)
+                            FROM watch_participants
+                            WHERE last_seen_at >= datetime('now', '-30 minutes')
+                            '''
+                        ).fetchone()[0]
+                    )
                     conn.commit()
             except Exception:
                 db_ok = False
@@ -1540,6 +1764,8 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                 'service': 'telewatch',
                 'dbOk': bool(db_ok),
                 'serverNow': utc_iso(),
+                'rooms': int(room_count),
+                'participants': int(participant_count),
                 'metrics': metrics_snapshot(),
             }
             self._json(HTTPStatus.OK if db_ok else HTTPStatus.SERVICE_UNAVAILABLE, payload)
@@ -1723,7 +1949,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             conn.execute("UPDATE watch_participants SET last_seen_at=datetime('now') WHERE participant_token=?", (participant_token,))
 
             room = conn.execute(
-                'SELECT room_code, title, media_url, theme_key, allow_webcam, cohost_can_kick, cohost_can_mute, cohost_can_access, cohost_can_pin, media_mode, access_mode, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
+                'SELECT room_code, title, media_url, theme_key, allow_webcam, cohost_can_kick, cohost_can_mute, cohost_can_access, cohost_can_pin, media_mode, access_mode, max_participants, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
                 (room_code_val,),
             ).fetchone()
             if room is None:
@@ -1940,6 +2166,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             room_out = room_payload(room)
             room_out['audienceMode'] = bool(get_room_audience_mode(conn, room_code_val))
             room_out['slowmodeSec'] = int(get_room_slowmode_sec(conn, room_code_val))
+            room_out['discordRoom'] = get_room_discord_payload(conn, room_code_val)
             conn.commit()
 
         self._json(
@@ -2040,6 +2267,12 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             '/api/watch/admin/settings',
             '/api/telewatch/watch/admin/settings',
             '/api/telewatch/api/watch/admin/settings',
+        }
+        admin_membership_reconcile_paths = {
+            '/watch/admin/membership/reconcile',
+            '/api/watch/admin/membership/reconcile',
+            '/api/telewatch/watch/admin/membership/reconcile',
+            '/api/telewatch/api/watch/admin/membership/reconcile',
         }
         user_register_paths = {
             '/watch/user/register',
@@ -2148,6 +2381,12 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             '/api/watch/user/discord/unlink',
             '/api/telewatch/watch/user/discord/unlink',
             '/api/telewatch/api/watch/user/discord/unlink',
+        }
+        user_ai_access_paths = {
+            '/watch/user/ai/access',
+            '/api/watch/user/ai/access',
+            '/api/telewatch/watch/user/ai/access',
+            '/api/telewatch/api/watch/user/ai/access',
         }
         donation_catalog_paths = {
             '/watch/donations/catalog',
@@ -3132,6 +3371,42 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             )
             return
 
+        if path in user_ai_access_paths:
+            user_token = user_token_from_request()
+            with get_db() as conn:
+                user, auth_state = user_auth(conn, user_token)
+                if user is None:
+                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'user_auth_ip_changed' if auth_state == 'ip_changed' else 'user_auth_invalid'})
+                    return
+                row = conn.execute(
+                    'SELECT discord_user_id, donation_tier FROM watch_users WHERE username=? LIMIT 1',
+                    (str(user['username'] or ''),),
+                ).fetchone()
+                effective_tier, active_items = compute_effective_tier(
+                    conn,
+                    str(user['username'] or ''),
+                    clean_donation_tier(row['donation_tier'] if row and 'donation_tier' in row.keys() else 'free', 'free'),
+                )
+                discord_linked = bool(str(row['discord_user_id'] if row and 'discord_user_id' in row.keys() else '').strip())
+                sync_discord_roles(conn, str(user['username'] or ''))
+                conn.commit()
+            allowed = (effective_tier == 'pro') and discord_linked
+            reason = 'ok' if allowed else ('discord_link_required' if effective_tier == 'pro' else 'pro_required')
+            self._json(
+                HTTPStatus.OK,
+                {
+                    'ok': True,
+                    'allowed': bool(allowed),
+                    'reason': reason,
+                    'donationTier': effective_tier,
+                    'discordLinked': discord_linked,
+                    'entitlements': active_items,
+                    'aiBotUrl': DISCORD_AI_BOT_URL,
+                    'supportUrl': TELEWATCH_BILLING_SUPPORT_URL,
+                },
+            )
+            return
+
         if path in user_discord_unlink_paths:
             user_token = user_token_from_request()
             with get_db() as conn:
@@ -3552,6 +3827,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     (donation_tier, username),
                 )
                 conn.execute('DELETE FROM watch_user_sessions WHERE username=?', (username,))
+                sync_discord_roles(conn, username)
                 conn.commit()
             self._json(HTTPStatus.OK, {'ok': True, 'username': username, 'donationTier': donation_tier})
             return
@@ -3985,6 +4261,35 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             )
             return
 
+        if path in admin_membership_reconcile_paths:
+            admin_token = str(payload.get('adminToken', '')).strip()
+            admin_code = str(payload.get('adminCode', '')).strip()
+            if not admin_token:
+                self._json(HTTPStatus.UNAUTHORIZED, {'error': 'admin_auth_required'})
+                return
+            if TELEWATCH_ADMIN_CODE and admin_code != TELEWATCH_ADMIN_CODE:
+                self._json(HTTPStatus.FORBIDDEN, {'error': 'admin_code_invalid'})
+                return
+            with get_db() as conn:
+                ensure_public_rooms(conn)
+                cleanup_rooms(conn)
+                actor = validate_admin_session(conn, admin_token)
+                if actor is None:
+                    self._json(HTTPStatus.UNAUTHORIZED, {'error': 'admin_auth_invalid'})
+                    return
+                result = reconcile_membership_tiers(conn, max_users=2000, max_role_sync=60)
+                audit_event(
+                    conn,
+                    'admin_membership_reconcile',
+                    username=str(actor['username'] or ''),
+                    session_token=admin_token,
+                    ip_addr=client_ip,
+                    detail={'changed': int(result.get('changed') or 0), 'synced': int(result.get('synced') or 0)},
+                )
+                conn.commit()
+            self._json(HTTPStatus.OK, {'ok': True, 'result': result})
+            return
+
         if path in delete_paths:
             room_code_val = normalize_room_code(payload.get('roomCode', ''), '')
             provided_admin_key = str(payload.get('adminKey', '')).strip()
@@ -4019,16 +4324,17 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     conn.execute(
                         '''
                         UPDATE watch_rooms
-                        SET title=?, media_url='', theme_key='clean', host_ip='', media_mode=?, allow_webcam=1, cohost_can_kick=1, cohost_can_mute=1, cohost_can_access=1, cohost_can_pin=1, access_mode='public', is_private=0, delete_on_host_leave=1, playback_sec=0, is_playing=0, updated_at=datetime('now')
+                        SET title=?, media_url='', theme_key='clean', host_ip='', media_mode=?, allow_webcam=1, cohost_can_kick=1, cohost_can_mute=1, cohost_can_access=1, cohost_can_pin=1, access_mode='public', max_participants=?, is_private=0, delete_on_host_leave=1, playback_sec=0, is_playing=0, updated_at=datetime('now')
                         WHERE room_code=?
                         ''',
-                        (f'Public Room {room_code_val[-2:]}', clean_media_mode(TELEWATCH_SFU_DEFAULT_MODE, 'webrtc'), room_code_val),
+                        (f'Public Room {room_code_val[-2:]}', clean_media_mode(TELEWATCH_SFU_DEFAULT_MODE, 'webrtc'), int(MAX_PARTICIPANTS_PER_ROOM), room_code_val),
                     )
                     conn.execute('DELETE FROM watch_participants WHERE room_code=?', (room_code_val,))
                     conn.execute('DELETE FROM watch_events WHERE room_code=?', (room_code_val,))
                     conn.execute('DELETE FROM watch_join_requests WHERE room_code=?', (room_code_val,))
                     conn.execute('DELETE FROM watch_room_invites WHERE room_code=?', (room_code_val,))
                     conn.execute('DELETE FROM watch_room_bans WHERE room_code=?', (room_code_val,))
+                    conn.execute('DELETE FROM watch_room_discord WHERE room_code=?', (room_code_val,))
                     conn.execute(
                         '''
                         INSERT INTO watch_events(room_code, actor_name, event_type, payload_json, created_at)
@@ -4053,6 +4359,8 @@ class TelewatchHandler(BaseHTTPRequestHandler):
             requested_admin_token = str(payload.get('adminToken', '')).strip()
             requested_access_mode = str(payload.get('accessMode', 'public')).strip().lower()
             access_mode = requested_access_mode if requested_access_mode in {'public', 'invite', 'closed'} else 'public'
+            requested_max_participants = payload.get('maxParticipants')
+            create_discord_room = bool(payload.get('createDiscordRoom', False))
             requested_code = normalize_room_code(payload.get('roomCode', ''), '')
             with get_db() as conn:
                 ensure_public_rooms(conn)
@@ -4129,12 +4437,17 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     return
                 host_token = secrets.token_urlsafe(32)
                 participant_id = secrets.token_hex(6)
+                try:
+                    max_participants = int(str(requested_max_participants).strip()) if requested_max_participants is not None else int(MAX_PARTICIPANTS_PER_ROOM)
+                except Exception:
+                    max_participants = int(MAX_PARTICIPANTS_PER_ROOM)
+                max_participants = max(2, min(int(MAX_PARTICIPANTS_PER_ROOM), max_participants))
                 conn.execute(
                     '''
-                    INSERT INTO watch_rooms(room_code, host_token, host_ip, title, media_url, theme_key, media_mode, access_mode, is_private, delete_on_host_leave, playback_sec, is_playing, created_at, updated_at)
-                    VALUES(?,?,?,?,?,?,?,?,?,1,0,0,datetime('now'),datetime('now'))
+                    INSERT INTO watch_rooms(room_code, host_token, host_ip, title, media_url, theme_key, media_mode, access_mode, max_participants, is_private, delete_on_host_leave, playback_sec, is_playing, created_at, updated_at)
+                    VALUES(?,?,?,?,?,?,?,?,?,?,1,0,0,datetime('now'),datetime('now'))
                     ''',
-                    (code, host_token, host_ip, title, media_url, theme_key, media_mode, access_mode, 1 if access_mode == 'invite' else 0),
+                    (code, host_token, host_ip, title, media_url, theme_key, media_mode, access_mode, max_participants, 1 if access_mode == 'invite' else 0),
                 )
                 conn.execute(
                     '''
@@ -4154,6 +4467,33 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     set_setting(conn, 'main_event_room_code', code)
                     set_setting(conn, f'room:{code}:audience_mode', '1')
                     set_setting(conn, f'room:{code}:slowmode_sec', '8')
+                discord_room_payload = None
+                if create_discord_room:
+                    ok, reason, discord_room = create_discord_watch_room(code, title, display_name, max_participants)
+                    if ok:
+                        conn.execute(
+                            '''
+                            INSERT INTO watch_room_discord(room_code, channel_name, text_channel_id, voice_channel_id, invite_url, status, created_at, updated_at)
+                            VALUES(?,?,?,?,?,'active',datetime('now'),datetime('now'))
+                            ON CONFLICT(room_code) DO UPDATE SET
+                              channel_name=excluded.channel_name,
+                              text_channel_id=excluded.text_channel_id,
+                              voice_channel_id=excluded.voice_channel_id,
+                              invite_url=excluded.invite_url,
+                              status='active',
+                              updated_at=datetime('now')
+                            ''',
+                            (
+                                code,
+                                str(discord_room.get('channelName') or ''),
+                                str(discord_room.get('textChannelId') or ''),
+                                str(discord_room.get('voiceChannelId') or ''),
+                                str(discord_room.get('inviteUrl') or ''),
+                            ),
+                        )
+                        discord_room_payload = get_room_discord_payload(conn, code)
+                    else:
+                        discord_room_payload = {'status': 'error', 'reason': str(reason)}
                 conn.commit()
             self._json(
                 HTTPStatus.OK,
@@ -4165,6 +4505,8 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     'participantId': participant_id,
                     'isHost': True,
                     'joinUrl': f'/telewatch/?room={code}',
+                    'maxParticipants': int(max_participants),
+                    'discordRoom': discord_room_payload,
                 },
             )
             return
@@ -4185,7 +4527,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     self._json(HTTPStatus.FORBIDDEN, {'error': 'ip_blocked'})
                     return
                 room = conn.execute(
-                    'SELECT room_code, title, media_url, theme_key, allow_webcam, cohost_can_kick, cohost_can_mute, cohost_can_access, cohost_can_pin, media_mode, access_mode, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
+                    'SELECT room_code, title, media_url, theme_key, allow_webcam, cohost_can_kick, cohost_can_mute, cohost_can_access, cohost_can_pin, media_mode, access_mode, max_participants, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
                     (room_code_val,),
                 ).fetchone()
                 if room is None:
@@ -4202,10 +4544,12 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     ''',
                     (room_code_val,),
                 ).fetchone()[0]
-                if int(participant_count or 0) >= MAX_PARTICIPANTS_PER_ROOM:
+                room_max_participants = int(room['max_participants']) if ('max_participants' in room.keys() and room['max_participants'] is not None) else int(MAX_PARTICIPANTS_PER_ROOM)
+                room_max_participants = max(2, min(int(MAX_PARTICIPANTS_PER_ROOM), int(room_max_participants)))
+                if int(participant_count or 0) >= room_max_participants:
                     self._json(
                         HTTPStatus.CONFLICT,
-                        {'error': 'room_full', 'maxParticipants': MAX_PARTICIPANTS_PER_ROOM},
+                        {'error': 'room_full', 'maxParticipants': room_max_participants},
                     )
                     return
 
@@ -4268,7 +4612,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                                     'participantToken': req['participant_token'],
                                     'participantId': req['participant_id'],
                                     'isHost': False,
-                                    'room': room_payload(room),
+                                    'room': dict(room_payload(room), discordRoom=get_room_discord_payload(conn, room_code_val)),
                                 },
                             )
                             return
@@ -4350,6 +4694,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                         ''',
                         (room_code_val, display_name, 'host_claimed', stable_json({'publicRoom': True})),
                     )
+                room_join_payload = dict(room_payload(room), discordRoom=get_room_discord_payload(conn, room_code_val))
                 conn.commit()
 
             self._json(
@@ -4359,7 +4704,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     'participantToken': participant_token,
                     'participantId': participant_id,
                     'isHost': bool(join_is_host),
-                    'room': room_payload(room),
+                    'room': room_join_payload,
                 },
             )
             return
@@ -4385,7 +4730,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
 
                 conn.execute("UPDATE watch_participants SET last_seen_at=datetime('now') WHERE participant_token=?", (participant_token,))
                 room = conn.execute(
-                    'SELECT room_code, title, media_url, theme_key, allow_webcam, cohost_can_kick, cohost_can_mute, cohost_can_access, cohost_can_pin, media_mode, access_mode, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
+                    'SELECT room_code, title, media_url, theme_key, allow_webcam, cohost_can_kick, cohost_can_mute, cohost_can_access, cohost_can_pin, media_mode, access_mode, max_participants, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
                     (room_code_val,),
                 ).fetchone()
                 if room is None:
@@ -4398,7 +4743,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                 cohost_can_mute = bool(room['cohost_can_mute']) if 'cohost_can_mute' in room.keys() else True
                 cohost_can_access = bool(room['cohost_can_access']) if 'cohost_can_access' in room.keys() else True
                 cohost_can_pin = bool(room['cohost_can_pin']) if 'cohost_can_pin' in room.keys() else True
-                if action in {'play', 'pause', 'seek', 'set_media', 'set_title', 'set_theme', 'set_media_mode', 'set_webcam_policy', 'delete_room', 'reset_room', 'resolve_request', 'create_invite', 'set_cohost', 'set_cohost_perms'} and not is_host:
+                if action in {'play', 'pause', 'seek', 'set_media', 'set_title', 'set_theme', 'set_media_mode', 'set_webcam_policy', 'delete_room', 'reset_room', 'resolve_request', 'create_invite', 'set_cohost', 'set_cohost_perms', 'set_max_participants', 'create_discord_room'} and not is_host:
                     self._json(HTTPStatus.FORBIDDEN, {'error': 'host_required'})
                     return
                 if action == 'set_access_mode' and not (is_host or (is_cohost and cohost_can_access)):
@@ -4541,6 +4886,65 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                         (access_mode, 1 if access_mode == 'invite' else 0, room_code_val),
                     )
                     event_payload['accessMode'] = access_mode
+                elif action == 'set_max_participants':
+                    raw_max = payload.get('maxParticipants')
+                    try:
+                        max_participants = int(str(raw_max).strip())
+                    except Exception:
+                        self._json(HTTPStatus.BAD_REQUEST, {'error': 'maxParticipants_invalid'})
+                        return
+                    max_participants = max(2, min(int(MAX_PARTICIPANTS_PER_ROOM), max_participants))
+                    conn.execute(
+                        '''
+                        UPDATE watch_rooms
+                        SET max_participants=?, updated_at=datetime('now')
+                        WHERE room_code=?
+                        ''',
+                        (max_participants, room_code_val),
+                    )
+                    event_payload['maxParticipants'] = int(max_participants)
+                elif action == 'create_discord_room':
+                    raw_max = payload.get('maxUsers')
+                    try:
+                        max_users = int(str(raw_max).strip()) if raw_max is not None else int(room['max_participants'] if 'max_participants' in room.keys() else MAX_PARTICIPANTS_PER_ROOM)
+                    except Exception:
+                        max_users = int(MAX_PARTICIPANTS_PER_ROOM)
+                    max_users = max(2, min(99, max_users))
+                    existing = get_room_discord_payload(conn, room_code_val)
+                    force_recreate = bool(payload.get('forceRecreate', False))
+                    if existing is not None and not force_recreate:
+                        event_payload['discordRoom'] = existing
+                    else:
+                        ok, reason, discord_room = create_discord_watch_room(
+                            room_code_val,
+                            str(room['title'] or ''),
+                            str(part['display_name'] or 'Host'),
+                            max_users,
+                        )
+                        if not ok:
+                            self._json(HTTPStatus.BAD_GATEWAY, {'error': 'discord_room_create_failed', 'reason': str(reason)})
+                            return
+                        conn.execute(
+                            '''
+                            INSERT INTO watch_room_discord(room_code, channel_name, text_channel_id, voice_channel_id, invite_url, status, created_at, updated_at)
+                            VALUES(?,?,?,?,?,'active',datetime('now'),datetime('now'))
+                            ON CONFLICT(room_code) DO UPDATE SET
+                              channel_name=excluded.channel_name,
+                              text_channel_id=excluded.text_channel_id,
+                              voice_channel_id=excluded.voice_channel_id,
+                              invite_url=excluded.invite_url,
+                              status='active',
+                              updated_at=datetime('now')
+                            ''',
+                            (
+                                room_code_val,
+                                str(discord_room.get('channelName') or ''),
+                                str(discord_room.get('textChannelId') or ''),
+                                str(discord_room.get('voiceChannelId') or ''),
+                                str(discord_room.get('inviteUrl') or ''),
+                            ),
+                        )
+                        event_payload['discordRoom'] = get_room_discord_payload(conn, room_code_val)
                 elif action == 'reset_room':
                     title = str(payload.get('title', '')).strip()[:160]
                     if not title:
@@ -4548,10 +4952,10 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     conn.execute(
                         '''
                         UPDATE watch_rooms
-                        SET media_url='', playback_sec=0, is_playing=0, title=?, updated_at=datetime('now')
+                        SET media_url='', playback_sec=0, is_playing=0, title=?, max_participants=?, updated_at=datetime('now')
                         WHERE room_code=?
                         ''',
-                        (title, room_code_val),
+                        (title, int(MAX_PARTICIPANTS_PER_ROOM), room_code_val),
                     )
                     event_payload['title'] = title
                 elif action == 'mute_user':
@@ -4737,17 +5141,18 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     if is_public_room(room_code_val):
                         conn.execute(
                             '''
-                            UPDATE watch_rooms
-                            SET title=?, media_url='', theme_key='clean', media_mode=?, allow_webcam=1, cohost_can_kick=1, cohost_can_mute=1, cohost_can_access=1, cohost_can_pin=1, access_mode='public', is_private=0, delete_on_host_leave=1, playback_sec=0, is_playing=0, updated_at=datetime('now')
+                        UPDATE watch_rooms
+                            SET title=?, media_url='', theme_key='clean', media_mode=?, allow_webcam=1, cohost_can_kick=1, cohost_can_mute=1, cohost_can_access=1, cohost_can_pin=1, access_mode='public', max_participants=?, is_private=0, delete_on_host_leave=1, playback_sec=0, is_playing=0, updated_at=datetime('now')
                             WHERE room_code=?
                             ''',
-                            (f'Public Room {room_code_val[-2:]}', clean_media_mode(TELEWATCH_SFU_DEFAULT_MODE, 'webrtc'), room_code_val),
+                            (f'Public Room {room_code_val[-2:]}', clean_media_mode(TELEWATCH_SFU_DEFAULT_MODE, 'webrtc'), int(MAX_PARTICIPANTS_PER_ROOM), room_code_val),
                         )
                         conn.execute('DELETE FROM watch_participants WHERE room_code=?', (room_code_val,))
                         conn.execute('DELETE FROM watch_events WHERE room_code=?', (room_code_val,))
                         conn.execute('DELETE FROM watch_join_requests WHERE room_code=?', (room_code_val,))
                         conn.execute('DELETE FROM watch_room_invites WHERE room_code=?', (room_code_val,))
                         conn.execute('DELETE FROM watch_room_bans WHERE room_code=?', (room_code_val,))
+                        conn.execute('DELETE FROM watch_room_discord WHERE room_code=?', (room_code_val,))
                         conn.execute(
                             '''
                             INSERT INTO watch_events(room_code, actor_name, event_type, payload_json, created_at)
@@ -4759,6 +5164,7 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                         self._json(HTTPStatus.OK, {'ok': True, 'deleted': True, 'publicReset': True, 'roomCode': room_code_val})
                         return
                     conn.execute('DELETE FROM watch_rooms WHERE room_code=?', (room_code_val,))
+                    conn.execute('DELETE FROM watch_room_discord WHERE room_code=?', (room_code_val,))
                     conn.commit()
                     self._json(HTTPStatus.OK, {'ok': True, 'deleted': True, 'roomCode': room_code_val})
                     return
@@ -4777,12 +5183,15 @@ class TelewatchHandler(BaseHTTPRequestHandler):
                     event_id = int(cur.lastrowid or 0)
 
                 room_after = conn.execute(
-                    'SELECT room_code, title, media_url, theme_key, allow_webcam, cohost_can_kick, cohost_can_mute, cohost_can_access, cohost_can_pin, media_mode, access_mode, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
+                    'SELECT room_code, title, media_url, theme_key, allow_webcam, cohost_can_kick, cohost_can_mute, cohost_can_access, cohost_can_pin, media_mode, access_mode, max_participants, is_private, delete_on_host_leave, playback_sec, is_playing, updated_at FROM watch_rooms WHERE room_code=?',
                     (room_code_val,),
                 ).fetchone()
+                discord_room_after = get_room_discord_payload(conn, room_code_val)
                 conn.commit()
 
-            self._json(HTTPStatus.OK, {'ok': True, 'eventId': event_id, 'room': room_payload(room_after), 'actionPayload': event_payload})
+            room_after_payload = room_payload(room_after)
+            room_after_payload['discordRoom'] = discord_room_after
+            self._json(HTTPStatus.OK, {'ok': True, 'eventId': event_id, 'room': room_after_payload, 'actionPayload': event_payload})
             return
 
         self._json(HTTPStatus.NOT_FOUND, {'error': 'not_found'})
