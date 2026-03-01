@@ -1,5 +1,5 @@
 (() => {
-  if (document.getElementById("frenzy-telewatch-fab")) return;
+  if (document.getElementById("frenzy-telewatch-rail")) return;
 
   function cleanRoomCode(raw = "") {
     return String(raw).toUpperCase().replace(/[^A-Z0-9_-]/g, "").slice(0, 24);
@@ -33,7 +33,7 @@
     const href = String(a.href || "").toLowerCase();
     const text = String(a.textContent || "").toLowerCase().trim();
     if (!href.startsWith("http")) return false;
-    if (href.includes("/telewatch/")) return false;
+    if (href.includes("/flickfuse/")) return false;
     if (href.includes("/watch/") || href.includes("/title/") || href.includes("/video/")) return true;
     if (href.includes("netflix.com/title/") || href.includes("youtube.com/watch") || href.includes("primevideo.com/detail") || href.includes("disneyplus.com/video")) return true;
     if (text.includes("watch") || text.includes("play") || text.includes("trailer")) return true;
@@ -44,37 +44,81 @@
     return chrome.runtime.sendMessage({ type, ...payload });
   }
 
-  const fab = document.createElement("button");
-  fab.id = "frenzy-telewatch-fab";
-  fab.type = "button";
-  fab.textContent = "Start Watch Party";
-
-  const panel = document.createElement("div");
-  panel.id = "frenzy-telewatch-panel";
-  panel.className = "hidden";
-  panel.innerHTML = `
-    <div class="title">FlickFuse</div>
-    <input id="frenzy-room-code" maxlength="24" placeholder="WATCH-AB12CD34" />
-    <div class="row">
-      <button id="frenzy-start" class="primary">Start Party</button>
-      <button id="frenzy-join">Join Party</button>
+  const rail = document.createElement("aside");
+  rail.id = "frenzy-telewatch-rail";
+  rail.className = "ff-open";
+  rail.innerHTML = `
+    <div class="ff-edge">
+      <button id="ff-toggle" type="button" title="Toggle FlickFuse rail">FF</button>
     </div>
-    <div class="row">
-      <button id="frenzy-copy">Copy Invite</button>
-      <button id="frenzy-open">Open FlickFuse</button>
+    <div class="ff-shell">
+      <header class="ff-top">
+        <div class="ff-brand"><span class="ff-dot"></span>FF</div>
+        <button id="ff-upgrade" class="ff-upgrade" type="button">Upgrade</button>
+        <div class="ff-icons">
+          <button id="ff-users" type="button" title="Members">1</button>
+          <button id="ff-share" type="button" title="Share">+</button>
+          <button id="ff-close" type="button" title="Close">x</button>
+        </div>
+      </header>
+      <section class="ff-ann">
+        <h3>Announcements</h3>
+        <div class="ff-ann-card">Premium members get ad shield, voice priority, and AI bot access.</div>
+      </section>
+      <section class="ff-feed-wrap">
+        <div id="ff-feed" class="ff-feed"></div>
+      </section>
+      <div class="ff-reactions">
+        <button type="button">😍</button>
+        <button type="button">😮</button>
+        <button type="button">😭</button>
+        <button type="button">😂</button>
+        <button type="button">🔥</button>
+      </div>
+      <form id="ff-compose" class="ff-compose">
+        <input id="ff-msg" maxlength="180" placeholder="Type a message..." />
+        <button id="ff-send" type="submit">Send</button>
+      </form>
+      <div class="ff-row">
+        <button id="ff-mic" type="button">Mic</button>
+        <button id="ff-cam" type="button">Cam</button>
+      </div>
+      <input id="frenzy-room-code" maxlength="24" placeholder="WATCH-AB12CD34" />
+      <div class="ff-row">
+        <button id="frenzy-start" class="primary" type="button">Set a party</button>
+        <button id="frenzy-join" type="button">Join</button>
+      </div>
+      <div class="ff-row">
+        <button id="frenzy-copy" type="button">Copy invite</button>
+        <button id="frenzy-open" type="button">Open app</button>
+      </div>
+      <div id="frenzy-status" class="ff-muted">Use this page as your synced source.</div>
     </div>
-    <div id="frenzy-status" class="muted">Use your current page as the party source.</div>
   `;
 
-  document.documentElement.appendChild(fab);
-  document.documentElement.appendChild(panel);
+  document.documentElement.appendChild(rail);
 
-  const input = panel.querySelector("#frenzy-room-code");
-  const status = panel.querySelector("#frenzy-status");
+  const input = rail.querySelector("#frenzy-room-code");
+  const status = rail.querySelector("#frenzy-status");
+  const feed = rail.querySelector("#ff-feed");
+  const compose = rail.querySelector("#ff-compose");
+  const msgInput = rail.querySelector("#ff-msg");
+
+  function addFeedLine(message, type = "system") {
+    const line = document.createElement("div");
+    line.className = `ff-line ${type}`;
+    line.textContent = message;
+    feed.appendChild(line);
+    feed.scrollTop = feed.scrollHeight;
+  }
+
+  addFeedLine("created the party.", "system");
+  addFeedLine("started playing the video at 00:00", "system");
   input.value = detectSuggestedCode();
 
   function setStatus(text) {
     status.textContent = text;
+    addFeedLine(text, "system");
   }
 
   function roomCode() {
@@ -96,15 +140,38 @@
     return res;
   }
 
-  fab.addEventListener("click", () => {
-    panel.classList.toggle("hidden");
+  rail.querySelector("#ff-toggle").addEventListener("click", () => {
+    rail.classList.toggle("ff-open");
   });
 
-  panel.querySelector("#frenzy-start").addEventListener("click", async () => {
+  rail.querySelector("#ff-close").addEventListener("click", () => {
+    rail.classList.remove("ff-open");
+  });
+
+  rail.querySelector("#ff-share").addEventListener("click", async () => {
+    const code = roomCode();
+    const url = `https://frenzynets.com/FlickFuse/?room=${encodeURIComponent(code)}&source=extension`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setStatus("Invite copied.");
+    } catch {
+      setStatus(url);
+    }
+  });
+
+  compose.addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const text = String(msgInput.value || "").trim();
+    if (!text) return;
+    addFeedLine(text, "user");
+    msgInput.value = "";
+  });
+
+  rail.querySelector("#frenzy-start").addEventListener("click", async () => {
     await startPartyForUrl(location.href, roomCode());
   });
 
-  panel.querySelector("#frenzy-join").addEventListener("click", async () => {
+  rail.querySelector("#frenzy-join").addEventListener("click", async () => {
     const res = await send("telewatch:join_party", {
       roomCode: roomCode()
     });
@@ -115,18 +182,18 @@
     }
   });
 
-  panel.querySelector("#frenzy-open").addEventListener("click", async () => {
+  rail.querySelector("#frenzy-open").addEventListener("click", async () => {
     await startPartyForUrl("", roomCode());
     setStatus("Opened FlickFuse.");
   });
 
-  panel.querySelector("#frenzy-copy").addEventListener("click", async () => {
+  rail.querySelector("#frenzy-copy").addEventListener("click", async () => {
     const code = roomCode();
     if (!code) {
       setStatus("Enter a room code first.");
       return;
     }
-    const url = `https://frenzynets.com/telewatch/?room=${encodeURIComponent(code)}&source=extension`;
+    const url = `https://frenzynets.com/FlickFuse/?room=${encodeURIComponent(code)}&source=extension`;
     try {
       await navigator.clipboard.writeText(url);
       setStatus("Invite copied.");
@@ -134,6 +201,20 @@
       setStatus(url);
     }
   });
+
+  for (const id of ["ff-mic", "ff-cam", "ff-upgrade"]) {
+    const button = rail.querySelector(`#${id}`);
+    if (!button) continue;
+    button.addEventListener("click", () => {
+      if (id === "ff-upgrade") {
+        window.open("https://frenzynets.com/FlickFuse/#plans", "_blank", "noopener");
+        return;
+      }
+      button.classList.toggle("active");
+      const label = id === "ff-mic" ? "Mic" : "Cam";
+      setStatus(`${label} ${button.classList.contains("active") ? "on" : "off"}.`);
+    });
+  }
 
   function injectPartyButtons() {
     const links = document.querySelectorAll("a[href]");
@@ -145,7 +226,7 @@
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "frenzy-link-party";
-      btn.textContent = "Start Party";
+      btn.textContent = "Set a party";
       btn.title = "Start FlickFuse party for this title";
       btn.addEventListener("click", async (ev) => {
         ev.preventDefault();

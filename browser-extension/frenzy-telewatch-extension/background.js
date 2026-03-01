@@ -1,4 +1,4 @@
-const TELEWATCH_BASE = "https://frenzynets.com/telewatch/";
+const TELEWATCH_BASE = "https://frenzynets.com/FlickFuse/";
 const ADBLOCK_RULESET_ID = "adblock_rules";
 
 async function applyAdblockState(enabled) {

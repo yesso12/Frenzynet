@@ -24,7 +24,7 @@ Manifest V3 extension that gives Frenzy an extension-style watch-party workflow 
 ## Core flow
 
 - Click extension icon -> `Start Party`
-- Extension opens: `https://frenzynets.com/telewatch/?room=...&source=extension&media=...`
+- Extension opens: `https://frenzynets.com/FlickFuse/?room=...&source=extension&media=...`
 - Share copied invite URL with friends
 
 ## Notes

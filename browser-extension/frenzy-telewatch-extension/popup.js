@@ -30,14 +30,14 @@ async function joinParty() {
 }
 
 async function openFlickFuse() {
-  await chrome.tabs.create({ url: "https://frenzynets.com/telewatch/?source=extension" });
+  await chrome.tabs.create({ url: "https://frenzynets.com/FlickFuse/?source=extension" });
   return { ok: true };
 }
 
 async function copyInvite() {
   const roomCode = cleanRoomCode(document.getElementById("roomCode").value);
   if (!roomCode) throw new Error("Enter a room code first.");
-  const url = `https://frenzynets.com/telewatch/?room=${encodeURIComponent(roomCode)}&source=extension`;
+  const url = `https://frenzynets.com/FlickFuse/?room=${encodeURIComponent(roomCode)}&source=extension`;
   await navigator.clipboard.writeText(url);
   return url;
 }
