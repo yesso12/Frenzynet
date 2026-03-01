@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Frenzy Telewatch | Watch Together</title>
-  <meta name="description" content="Frenzy Telewatch is an extension-style watch party platform. Start or join a room in seconds, sync playback, and chat live with friends." />
+  <title>FlickFuse | Watch Together</title>
+  <meta name="description" content="FlickFuse is an extension-style watch party platform. Start or join a room in seconds, sync playback, and chat live with friends." />
   <style>
     :root {
       --bg: #0b0d12;
@@ -49,9 +49,21 @@
       padding: 10px 12px;
     }
     .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+      color: inherit;
+    }
+    .brand img {
+      height: 34px;
+      width: auto;
+      display: block;
+    }
+    .brand .word {
       font-weight: 900;
       letter-spacing: .03em;
-      font-size: 1.05rem;
+      font-size: 1rem;
     }
     .nav {
       display: flex;
@@ -292,10 +304,14 @@
 <body>
   <div class="wrap">
     <header class="topbar">
-      <div class="brand">Frenzy Telewatch</div>
+      <a class="brand" href="/" aria-label="FlickFuse Home">
+        <img src="/assets/frenzy-telewatch-logo.svg" alt="FlickFuse" />
+        <span class="word">FlickFuse</span>
+      </a>
       <nav class="nav">
         <a class="btn primary" href="/telewatch/">Open Watch Party</a>
         <a class="btn" href="/setup/">How It Works</a>
+        <a class="btn" href="https://github.com/yesso12/Frenzynet/tree/main/browser-extension/frenzy-telewatch-extension" target="_blank" rel="noopener">Install Extension</a>
         <a class="btn" href="/telewatch/?mainEvent=1">Main Event</a>
         <a class="btn" href="https://discord.gg/4uRUSAN498" target="_blank" rel="noopener">Discord</a>
         <a class="btn admin-only hidden" href="/telewatch/admin/">Admin</a>
@@ -309,10 +325,11 @@
         <span class="badge">Live Party Chat</span>
       </div>
       <h1>Watch Together In Seconds</h1>
-      <p>Frenzy Telewatch is designed like an extension-first watch party platform: start a room, share one link in Discord, and watch in sync with chat and host controls.</p>
+      <p>FlickFuse is designed like an extension-first watch party platform: start a room, share one link in Discord, and watch in sync with chat and host controls.</p>
       <div class="cta-row">
         <a class="btn primary" href="/telewatch/">Start Watching</a>
         <a class="btn" href="/telewatch/?mode=public">Browse Public Rooms</a>
+        <a class="btn" href="https://github.com/yesso12/Frenzynet/tree/main/browser-extension/frenzy-telewatch-extension" target="_blank" rel="noopener">Load Browser Extension</a>
         <a class="btn" href="https://discord.gg/4uRUSAN498" target="_blank" rel="noopener">Open Discord</a>
       </div>
 
@@ -322,8 +339,8 @@
           <div class="steps">
             <div class="step">
               <div class="n">Step 1</div>
-              <strong>Install / Open Telewatch</strong>
-              <p>Open Telewatch in your browser and sign in once. Keep it pinned for one-click party launches.</p>
+              <strong>Install / Open FlickFuse</strong>
+              <p>Open FlickFuse in your browser and sign in once. Keep it pinned for one-click party launches.</p>
             </div>
             <div class="step">
               <div class="n">Step 2</div>
@@ -349,6 +366,15 @@
             <div id="statusLine" class="ok">Ready to join a party.</div>
           </div>
         </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Install The Frenzy Extension</h2>
+      <p>Use the browser extension for the fastest Teleparty-style flow: open a streaming tab, click extension, start party, share invite.</p>
+      <div class="cta-row">
+        <a class="btn primary" href="https://github.com/yesso12/Frenzynet/tree/main/browser-extension/frenzy-telewatch-extension" target="_blank" rel="noopener">Open Extension Files</a>
+        <a class="btn" href="https://github.com/yesso12/Frenzynet" target="_blank" rel="noopener">View GitHub Repo</a>
       </div>
     </section>
 
@@ -404,7 +430,7 @@
       <div class="faq">
         <details>
           <summary>Do users need the same streaming account?</summary>
-          <p>Yes. Telewatch syncs timing and playback controls. Each viewer uses their own streaming account/session.</p>
+          <p>Yes. FlickFuse syncs timing and playback controls. Each viewer uses their own streaming account/session.</p>
         </details>
         <details>
           <summary>Can I host from browser without desktop app?</summary>
@@ -418,7 +444,7 @@
     </section>
 
     <footer class="footer">
-      Frenzy Telewatch • Watch Together • Powered by Discord-first support
+      © 2026 FrenzyNets. FlickFuse is a FrenzyNets product. All rights reserved.
     </footer>
   </div>
 

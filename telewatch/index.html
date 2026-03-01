@@ -6,7 +6,7 @@
   <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0" />
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
-  <title>Frenzy Telewatch | Synced Watch Rooms</title>
+  <title>FlickFuse | Synced Watch Rooms</title>
   <style>
     :root {
       --bg: #0f1116;
@@ -1104,7 +1104,7 @@
   <div class="wrap">
     <div class="top">
       <div class="hero">
-        <h1>Frenzy Telewatch</h1>
+        <h1>FlickFuse</h1>
         <p>Start a watch party, share one link, and sync playback with your crew.</p>
         <div class="wizard">
           <span id="stepSession" class="wizard-step active">1. Sign In</span>
@@ -1129,7 +1129,7 @@
             <div class="how-step-card">
               <div class="how-step-num">Step 1</div>
               <div class="how-step-title">Install + Sign In</div>
-              <div class="how-step-copy">Open Telewatch in your browser and sign in once. Keep this tab pinned for fast party access.</div>
+              <div class="how-step-copy">Open FlickFuse in your browser and sign in once. Keep this tab pinned for fast party access.</div>
             </div>
             <div class="how-step-card">
               <div class="how-step-num">Step 2</div>
@@ -5720,7 +5720,7 @@
     async function startScreenShare() {
       if (!state.isHost) return;
       if (!window.isSecureContext) {
-        throw new Error('Open Telewatch over HTTPS to share your screen.');
+        throw new Error('Open FlickFuse over HTTPS to share your screen.');
       }
       if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
         throw new Error('Browser screen-share API unavailable. Use latest Chrome/Edge/Firefox.');
