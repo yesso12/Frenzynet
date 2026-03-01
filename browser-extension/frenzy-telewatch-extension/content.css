@@ -1,11 +1,11 @@
 #frenzy-telewatch-rail {
   position: fixed;
-  top: 64px;
+  top: 58px;
   right: 0;
-  bottom: 22px;
-  width: 350px;
+  bottom: 14px;
+  width: 334px;
   z-index: 2147483646;
-  font: 600 13px/1.35 "Nunito Sans", "Segoe UI", sans-serif;
+  font: 600 12px/1.35 "Nunito Sans", "Segoe UI", sans-serif;
   color: #e8edff;
   transform: translateX(0);
   transition: transform 180ms ease;
@@ -41,7 +41,7 @@
   grid-template-columns: auto auto 1fr;
   gap: 8px;
   align-items: center;
-  padding: 10px 10px 8px;
+  padding: 10px 10px 7px;
   border-bottom: 1px solid #2a2d36;
 }
 .ff-brand {
@@ -63,7 +63,8 @@
   padding: 5px 8px;
   background: #f9cb13;
   color: #141820;
-  font: 800 11px/1 "Nunito Sans", sans-serif;
+  font: 900 10px/1 "Nunito Sans", sans-serif;
+  letter-spacing: .02em;
   cursor: pointer;
 }
 .ff-icons {
@@ -74,12 +75,18 @@
 .ff-icons button {
   border: 1px solid #333845;
   border-radius: 6px;
-  min-width: 44px;
-  height: 24px;
+  min-width: 48px;
+  height: 25px;
   background: #1f222b;
   color: #cad3ea;
-  font: 800 11px/1 "Nunito Sans", sans-serif;
+  font: 800 10px/1 "Nunito Sans", sans-serif;
   cursor: pointer;
+}
+.ff-subhead {
+  padding: 6px 10px;
+  color: #9facc9;
+  font-size: 11px;
+  border-bottom: 1px solid #2a2d36;
 }
 .ff-ann {
   padding: 8px 10px 0;
@@ -92,7 +99,9 @@
 .ff-controls h3,
 .ff-feed-wrap h3 {
   margin: 0 0 8px;
-  font-size: 12px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
   color: #b4bfd9;
 }
 .ff-block {
@@ -103,7 +112,7 @@
   border-radius: 8px;
   background: linear-gradient(135deg, #1f2533, #2a3144);
   color: #eaf0ff;
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.4;
   padding: 8px;
 }
@@ -115,9 +124,9 @@
   padding: 10px;
 }
 .ff-feed {
-  height: 260px;
+  height: 248px;
   min-height: 120px;
-  max-height: 320px;
+  max-height: 300px;
   overflow: auto;
   border: 1px solid #2d313c;
   border-radius: 8px;
@@ -126,12 +135,29 @@
 }
 .ff-line {
   border-bottom: 1px solid #2a2e3a;
-  padding: 7px 2px;
+  padding: 6px 2px;
   color: #d7deef;
-  font-size: 12px;
+  font-size: 11px;
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  gap: 7px;
+  align-items: start;
 }
 .ff-line:last-child {
   border-bottom: 0;
+}
+.ff-line-avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 1px solid #40465a;
+  object-fit: cover;
+  background: #131825;
+}
+.ff-line-text {
+  min-height: 22px;
+  display: flex;
+  align-items: center;
 }
 .ff-line.user {
   color: #ffe6a2;
@@ -147,8 +173,8 @@
   border-radius: 8px;
   background: #1a1e29;
   cursor: pointer;
-  font-size: 15px;
-  padding: 6px 0;
+  font-size: 14px;
+  padding: 5px 0;
 }
 .ff-compose {
   display: grid;
@@ -163,7 +189,7 @@
   border-radius: 8px;
   background: #111621;
   color: #e5edff;
-  padding: 8px 9px;
+  padding: 8px 8px;
   font: inherit;
 }
 .ff-compose button {
@@ -171,7 +197,7 @@
   border-radius: 8px;
   background: #242a3a;
   color: #e7efff;
-  font: 800 11px/1 "Nunito Sans", sans-serif;
+  font: 800 10px/1 "Nunito Sans", sans-serif;
   padding: 0 10px;
   cursor: pointer;
 }
@@ -186,8 +212,8 @@
   border-radius: 8px;
   background: #202736;
   color: #dce6ff;
-  padding: 8px;
-  font: 800 11px/1 "Nunito Sans", sans-serif;
+  padding: 8px 6px;
+  font: 800 10px/1 "Nunito Sans", sans-serif;
   cursor: pointer;
 }
 .ff-row .primary {
@@ -205,13 +231,29 @@
 }
 .ff-muted {
   color: #9aa9ca;
-  font-size: 12px;
+  font-size: 11px;
   padding: 0;
 }
 .ff-footnote {
   color: #7f8ba6;
   font-size: 11px;
   padding: 8px 10px;
+}
+.ff-avatar-preview-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: #9aa9ca;
+  padding: 0 0 8px;
+}
+.ff-avatar-preview {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  border: 1px solid #464d61;
+  object-fit: cover;
+  background: #141826;
 }
 
 .frenzy-link-party-wrap {

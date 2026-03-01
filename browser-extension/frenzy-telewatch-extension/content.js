@@ -60,13 +60,14 @@
           <button id="ff-close" type="button" title="Close">Close</button>
         </div>
       </header>
+      <div class="ff-subhead">Synced Watch Party</div>
       <section class="ff-ann ff-block">
         <h3>Announcements</h3>
         <div class="ff-ann-card">Use <strong>Set a party</strong> on this page, then share the invite.</div>
       </section>
       <section class="ff-controls ff-block">
         <h3>Party Controls</h3>
-        <input id="frenzy-room-code" maxlength="24" placeholder="WATCH-AB12CD34" />
+        <input id="frenzy-room-code" maxlength="24" placeholder="Room Code (WATCH-AB12CD34)" />
         <div class="ff-row">
           <button id="frenzy-start" class="primary" type="button">Set a party</button>
           <button id="frenzy-join" type="button">Join</button>
@@ -78,6 +79,15 @@
         <div class="ff-row">
           <button id="ff-mic" type="button">Mic</button>
           <button id="ff-cam" type="button">Cam</button>
+        </div>
+        <div class="ff-row">
+          <button id="ff-avatar-btn" type="button">Set Avatar</button>
+          <button id="ff-avatar-clear" type="button">Clear Avatar</button>
+        </div>
+        <input id="ff-avatar-file" type="file" accept="image/*" hidden />
+        <div class="ff-avatar-preview-wrap">
+          <img id="ff-avatar-preview" class="ff-avatar-preview" alt="Avatar preview" />
+          <span>Your avatar in chat</span>
         </div>
         <div id="frenzy-status" class="ff-muted">Ready. Start a party from this page.</div>
       </section>
@@ -109,11 +119,45 @@
   const feed = rail.querySelector("#ff-feed");
   const compose = rail.querySelector("#ff-compose");
   const msgInput = rail.querySelector("#ff-msg");
+  const avatarBtn = rail.querySelector("#ff-avatar-btn");
+  const avatarClearBtn = rail.querySelector("#ff-avatar-clear");
+  const avatarFileInput = rail.querySelector("#ff-avatar-file");
+  const avatarPreview = rail.querySelector("#ff-avatar-preview");
+  let userAvatar = "";
+
+  async function loadAvatar() {
+    try {
+      const data = await chrome.storage.local.get(["ffUserAvatar"]);
+      userAvatar = String(data && data.ffUserAvatar ? data.ffUserAvatar : "");
+      avatarPreview.src = userAvatar || "https://frenzynets.com/assets/frenzy-telewatch-logo.svg";
+    } catch {
+      userAvatar = "";
+      avatarPreview.src = "https://frenzynets.com/assets/frenzy-telewatch-logo.svg";
+    }
+  }
+
+  async function saveAvatar(dataUrl) {
+    userAvatar = dataUrl || "";
+    avatarPreview.src = userAvatar || "https://frenzynets.com/assets/frenzy-telewatch-logo.svg";
+    try {
+      await chrome.storage.local.set({ ffUserAvatar: userAvatar });
+    } catch {}
+  }
 
   function addFeedLine(message, type = "system") {
     const line = document.createElement("div");
     line.className = `ff-line ${type}`;
-    line.textContent = message;
+    const avatar = document.createElement("img");
+    avatar.className = "ff-line-avatar";
+    avatar.alt = "";
+    avatar.src = type === "user"
+      ? (userAvatar || "https://frenzynets.com/assets/frenzy-telewatch-logo.svg")
+      : "https://frenzynets.com/assets/frenzy-telewatch-logo.svg";
+    const txt = document.createElement("div");
+    txt.className = "ff-line-text";
+    txt.textContent = message;
+    line.appendChild(avatar);
+    line.appendChild(txt);
     feed.appendChild(line);
     feed.scrollTop = feed.scrollHeight;
   }
@@ -121,6 +165,7 @@
   addFeedLine("created the party.", "system");
   addFeedLine("started playing the video at 00:00", "system");
   input.value = detectSuggestedCode();
+  loadAvatar();
 
   function setStatus(text) {
     status.textContent = text;
@@ -171,6 +216,31 @@
     if (!text) return;
     addFeedLine(text, "user");
     msgInput.value = "";
+  });
+
+  avatarBtn.addEventListener("click", () => avatarFileInput.click());
+  avatarClearBtn.addEventListener("click", async () => {
+    await saveAvatar("");
+    setStatus("Avatar cleared.");
+  });
+  avatarFileInput.addEventListener("change", async () => {
+    const file = avatarFileInput.files && avatarFileInput.files[0];
+    if (!file) return;
+    if (!String(file.type || "").startsWith("image/")) {
+      setStatus("Please select an image file.");
+      return;
+    }
+    if (Number(file.size || 0) > 2 * 1024 * 1024) {
+      setStatus("Avatar must be under 2MB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = async () => {
+      await saveAvatar(String(reader.result || ""));
+      setStatus("Avatar updated.");
+    };
+    reader.onerror = () => setStatus("Avatar upload failed.");
+    reader.readAsDataURL(file);
   });
 
   rail.querySelector("#frenzy-start").addEventListener("click", async () => {
