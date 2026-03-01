@@ -268,8 +268,8 @@
         <span>FlickFuse</span>
       </a>
       <nav class="nav">
-        <a href="/telewatch/">Launch</a>
-        <a href="/telewatch/?mainEvent=1">Main Event</a>
+        <a href="/FlickFuse/">Launch</a>
+        <a href="/FlickFuse/?mainEvent=1">Main Event</a>
         <a href="/setup/">How It Works</a>
         <a href="https://discord.gg/4uRUSAN498" target="_blank" rel="noopener">Discord</a>
         <a class="btn primary" href="https://chromewebstore.google.com/search/flickfuse%20party" target="_blank" rel="noopener">Install Extension</a>
@@ -287,7 +287,7 @@
           <a class="btn primary" href="https://chromewebstore.google.com/search/flickfuse%20party" target="_blank" rel="noopener">Install on Chrome</a>
           <a class="btn" href="https://microsoftedge.microsoft.com/addons/search/flickfuse" target="_blank" rel="noopener">Install on Edge</a>
           <a class="btn" href="https://addons.mozilla.org/en-US/firefox/search/?q=flickfuse" target="_blank" rel="noopener">Install on Firefox</a>
-          <a class="btn" href="/telewatch/">Open Web App</a>
+          <a class="btn" href="/FlickFuse/">Open Web App</a>
         </div>
         <div class="browsers">
           <span class="browser-pill">Chrome</span>
@@ -303,9 +303,9 @@
         <div class="join-box">
           <div class="join-row">
             <input id="roomCode" maxlength="16" placeholder="Enter room code (WATCH01)" />
-            <a id="joinBtn" class="btn primary" href="/telewatch/">Join</a>
+            <a id="joinBtn" class="btn primary" href="/FlickFuse/">Join</a>
           </div>
-          <a class="btn" href="/telewatch/?mainEvent=1">Join Main Event</a>
+          <a class="btn" href="/FlickFuse/?mainEvent=1">Join Main Event</a>
           <div id="statusLine" class="hint">Ready to start a party.</div>
         </div>
       </aside>
@@ -342,12 +342,15 @@
           <small>Official Chrome extension page</small>
           <a class="btn primary" href="https://chromewebstore.google.com/search/flickfuse%20party" target="_blank" rel="noopener">Open Chrome Store Page</a>
           <a class="btn" href="/frenzynet-updates/flickfuse-extension-chromium-latest.zip">Manual ZIP (Chromium)</a>
+          <a class="btn" href="/frenzynet-updates/install-flickfuse-windows.ps1">Easy Installer (Windows)</a>
         </article>
         <article class="dl">
           <h3>Firefox Add-ons</h3>
           <small>Official Firefox extension page</small>
           <a class="btn primary" href="https://addons.mozilla.org/en-US/firefox/search/?q=flickfuse" target="_blank" rel="noopener">Open Firefox Add-ons Page</a>
           <a class="btn" href="/frenzynet-updates/flickfuse-extension-firefox-latest.zip">Manual ZIP (Firefox)</a>
+          <a class="btn" href="/frenzynet-updates/install-flickfuse-macos.command">Easy Installer (macOS)</a>
+          <a class="btn" href="/frenzynet-updates/install-flickfuse-linux.sh">Easy Installer (Linux)</a>
         </article>
       </div>
       <div class="downloads" style="margin-top:10px">
@@ -379,7 +382,7 @@
         </details>
         <details>
           <summary>Can we use browser without extension?</summary>
-          <p>Yes, `/telewatch` works directly. The extension just makes setup much easier and faster.</p>
+          <p>Yes, `/FlickFuse` works directly. The extension just makes setup much easier and faster.</p>
         </details>
         <details>
           <summary>Where do I get purchase help?</summary>
@@ -406,7 +409,7 @@
       function syncJoin() {
         const code = cleanCode(roomInput.value);
         roomInput.value = code;
-        joinBtn.href = code ? `/telewatch/?room=${encodeURIComponent(code)}` : '/telewatch/';
+        joinBtn.href = code ? `/FlickFuse/?room=${encodeURIComponent(code)}` : '/FlickFuse/';
       }
       roomInput.addEventListener('input', syncJoin);
       syncJoin();
@@ -424,7 +427,7 @@
           if (!code) continue;
           const a = document.createElement('a');
           a.className = 'room';
-          a.href = `/telewatch/?room=${encodeURIComponent(code)}`;
+          a.href = `/FlickFuse/?room=${encodeURIComponent(code)}`;
           a.innerHTML = `<strong>${code}</strong><small>${String(r.title || 'Watch Party').slice(0, 64)}</small><small>${Number(r.activeCount || 0)} watching</small>`;
           roomsEl.appendChild(a);
         }
