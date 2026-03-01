@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FlickFuse Universal Installer</title>
+  <style>
+    body { margin:0; font:600 15px/1.5 "Segoe UI", Arial, sans-serif; background:#0d1527; color:#eaf1ff; display:grid; min-height:100vh; place-items:center; }
+    .card { max-width:760px; margin:16px; border:1px solid #324667; border-radius:12px; padding:16px; background:#16233d; }
+    a { color:#7ddfff; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; }
+    .btn { display:inline-block; border:1px solid #4e6e9d; border-radius:10px; padding:8px 12px; color:#fff; text-decoration:none; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>FlickFuse Universal Installer</h1>
+    <p id="status">Detecting your computer and preparing download...</p>
+    <div class="row">
+      <a class="btn" href="/frenzynet-updates/FlickFuseInstaller.exe">Windows .exe</a>
+      <a class="btn" href="/frenzynet-updates/install-flickfuse-macos.command">macOS installer</a>
+      <a class="btn" href="/frenzynet-updates/install-flickfuse-linux.sh">Linux installer</a>
+      <a class="btn" href="/frenzynet-updates/flickfuse-extension-chromium-latest.zip">Chromium ZIP</a>
+      <a class="btn" href="/frenzynet-updates/flickfuse-extension-firefox-latest.zip">Firefox ZIP</a>
+    </div>
+  </div>
+  <script>
+    (function () {
+      const p = (navigator.platform || '').toLowerCase();
+      const ua = (navigator.userAgent || '').toLowerCase();
+      const s = document.getElementById('status');
+      let target = '/frenzynet-updates/FlickFuseInstaller.exe';
+      if (p.includes('mac') || ua.includes('mac os')) target = '/frenzynet-updates/install-flickfuse-macos.command';
+      if (p.includes('linux') || ua.includes('linux')) target = '/frenzynet-updates/install-flickfuse-linux.sh';
+      s.textContent = 'Redirecting to your installer...';
+      window.location.href = target;
+    })();
+  </script>
+</body>
+</html>
