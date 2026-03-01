@@ -1,0 +1,103 @@
+:root {
+  --bg: #11141c;
+  --panel: #191f2c;
+  --line: #313a4f;
+  --text: #ecf2ff;
+  --muted: #a5b1ca;
+  --accent: #f54d74;
+  --accent2: #d82b54;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  width: 330px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Nunito Sans", "Segoe UI", sans-serif;
+}
+.wrap {
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+}
+.head {
+  display: grid;
+  grid-template-columns: 42px 1fr;
+  gap: 9px;
+  align-items: center;
+}
+.head img {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  background: #131a28;
+  border: 1px solid #343e57;
+  padding: 4px;
+}
+h1 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+.sub {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: .88rem;
+}
+.pills {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.pills span {
+  border: 1px solid #3a4460;
+  border-radius: 999px;
+  background: #141b2a;
+  color: #cfdaf2;
+  font-size: .72rem;
+  font-weight: 800;
+  letter-spacing: .04em;
+  padding: 3px 8px;
+}
+label {
+  font-size: .75rem;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: #b4c0d9;
+  font-weight: 700;
+}
+input, button {
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  padding: 8px 10px;
+  font: inherit;
+}
+.row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+button {
+  font-weight: 800;
+  cursor: pointer;
+}
+button.primary {
+  border: 0;
+  background: linear-gradient(180deg, var(--accent), var(--accent2));
+  color: white;
+}
+.muted {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: .82rem;
+}
+.status {
+  margin: 2px 0 0;
+  font-size: .82rem;
+  min-height: 1.2em;
+  color: #8ee8b9;
+}
+.status.err {
+  color: #ff8a9e;
+}

@@ -1,0 +1,42 @@
+{
+  "manifest_version": 3,
+  "name": "FlickFuse Party",
+  "description": "Start or join synced watch parties from your browser, extension-style.",
+  "version": "1.0.0",
+  "action": {
+    "default_title": "FlickFuse",
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "permissions": [
+    "storage",
+    "tabs",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://*.netflix.com/*",
+    "https://*.youtube.com/*",
+    "https://*.disneyplus.com/*",
+    "https://*.hulu.com/*",
+    "https://*.primevideo.com/*",
+    "https://*.frenzynets.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.netflix.com/*",
+        "https://*.youtube.com/*",
+        "https://*.disneyplus.com/*",
+        "https://*.hulu.com/*",
+        "https://*.primevideo.com/*"
+      ],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}

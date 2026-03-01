@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FlickFuse</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <main class="wrap">
+    <div class="head">
+      <img src="logo.svg" alt="FlickFuse" />
+      <div>
+        <h1>FlickFuse</h1>
+        <p class="sub">Watch together from your current tab.</p>
+      </div>
+    </div>
+    <div class="pills">
+      <span>1. Start</span>
+      <span>2. Invite</span>
+      <span>3. Sync</span>
+    </div>
+
+    <label for="roomCode">Room Code</label>
+    <input id="roomCode" placeholder="WATCH-AB12CD34" maxlength="24" />
+
+    <div class="row">
+      <button id="startBtn" class="primary">Start Party</button>
+      <button id="joinBtn">Join Party</button>
+    </div>
+
+    <div class="row">
+      <button id="openBtn">Open FlickFuse</button>
+      <button id="copyBtn">Copy Invite</button>
+    </div>
+
+    <p id="lastRoom" class="muted">Last room: none</p>
+    <p id="status" class="status"></p>
+  </main>
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="76" viewBox="0 0 360 76" role="img" aria-label="FlickFuse by FrenzyNets">
+  <defs>
+    <linearGradient id="g" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#ff5f86"/>
+      <stop offset="100%" stop-color="#d9234d"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="8" width="58" height="58" rx="16" fill="#151b28" stroke="#303a52"/>
+  <circle cx="31" cy="37" r="17" fill="url(#g)"/>
+  <path d="M26 27l15 10-15 10z" fill="#fff"/>
+  <text x="72" y="34" fill="#ecf2ff" font-family="Nunito Sans,Segoe UI,sans-serif" font-size="29" font-weight="900" letter-spacing="0.8">FLICKFUSE</text>
+  <text x="72" y="58" fill="#aeb8d1" font-family="Nunito Sans,Segoe UI,sans-serif" font-size="14" font-weight="700" letter-spacing="1">BY FRENZYNETS</text>
+</svg>

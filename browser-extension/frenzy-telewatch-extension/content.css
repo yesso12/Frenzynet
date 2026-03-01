@@ -1,0 +1,55 @@
+#frenzy-telewatch-fab {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 2147483646;
+  border: 0;
+  border-radius: 999px;
+  padding: 10px 14px;
+  font: 700 13px/1 "Nunito Sans", "Segoe UI", sans-serif;
+  color: #fff;
+  background: linear-gradient(180deg, #f54d74, #d82b54);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+}
+#frenzy-telewatch-panel {
+  position: fixed;
+  right: 18px;
+  bottom: 66px;
+  z-index: 2147483646;
+  width: 320px;
+  border: 1px solid #323b52;
+  border-radius: 12px;
+  background: #171d2a;
+  color: #edf3ff;
+  padding: 10px;
+  font: 600 13px/1.3 "Nunito Sans", "Segoe UI", sans-serif;
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.45);
+}
+#frenzy-telewatch-panel.hidden { display: none; }
+#frenzy-telewatch-panel .title { font-size: 14px; font-weight: 900; margin-bottom: 8px; }
+#frenzy-telewatch-panel .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+#frenzy-telewatch-panel input {
+  width: 100%;
+  border-radius: 8px;
+  border: 1px solid #3a4461;
+  background: #111723;
+  color: #edf3ff;
+  padding: 8px 9px;
+  font: inherit;
+}
+#frenzy-telewatch-panel button {
+  border-radius: 8px;
+  border: 1px solid #3b4665;
+  background: #1d2638;
+  color: #edf3ff;
+  padding: 8px 9px;
+  font: 800 12px/1 "Nunito Sans", "Segoe UI", sans-serif;
+  cursor: pointer;
+}
+#frenzy-telewatch-panel button.primary {
+  border: 0;
+  color: white;
+  background: linear-gradient(180deg, #f54d74, #d82b54);
+}
+#frenzy-telewatch-panel .muted { color: #a9b5cf; font-size: 12px; margin-top: 8px; }
