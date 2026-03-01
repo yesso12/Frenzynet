@@ -24,11 +24,15 @@ static HashSet<int> ReadBrowserSelection()
   Console.WriteLine("3) Brave");
   Console.WriteLine("4) Opera");
   Console.WriteLine("5) Firefox");
-  Console.WriteLine("Enter numbers separated by commas (default: 1)");
+  Console.WriteLine("Enter numbers separated by commas, or A for all (default: all)");
   Console.Write("Selection: ");
 
   var raw = Console.ReadLine() ?? "";
-  if (string.IsNullOrWhiteSpace(raw)) return new HashSet<int> { 1 };
+  if (string.IsNullOrWhiteSpace(raw)) return new HashSet<int> { 1, 2, 3, 4, 5 };
+  if (string.Equals(raw.Trim(), "A", StringComparison.OrdinalIgnoreCase))
+  {
+    return new HashSet<int> { 1, 2, 3, 4, 5 };
+  }
 
   var selected = new HashSet<int>();
   var parts = raw.Split([',', ' ', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -39,7 +43,7 @@ static HashSet<int> ReadBrowserSelection()
     selected.Add(n);
   }
 
-  if (selected.Count == 0) selected.Add(1);
+  if (selected.Count == 0) return new HashSet<int> { 1, 2, 3, 4, 5 };
   return selected;
 }
 
@@ -56,17 +60,33 @@ static void ExtractZip(string zipPath, string extractPath)
   ZipFile.ExtractToDirectory(zipPath, extractPath, true);
 }
 
+static void CopyDirectory(string sourceDir, string destDir)
+{
+  if (Directory.Exists(destDir)) Directory.Delete(destDir, true);
+  Directory.CreateDirectory(destDir);
+  foreach (var dirPath in Directory.GetDirectories(sourceDir, "*", SearchOption.AllDirectories))
+  {
+    Directory.CreateDirectory(dirPath.Replace(sourceDir, destDir));
+  }
+  foreach (var filePath in Directory.GetFiles(sourceDir, "*", SearchOption.AllDirectories))
+  {
+    var target = filePath.Replace(sourceDir, destDir);
+    Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+    File.Copy(filePath, target, true);
+  }
+}
+
 static void OpenBrowserExtensionsPage(int browser)
 {
   try
   {
     var info = browser switch
     {
-      1 => new ProcessStartInfo { FileName = "chrome.exe", UseShellExecute = true },
-      2 => new ProcessStartInfo { FileName = "msedge.exe", UseShellExecute = true },
-      3 => new ProcessStartInfo { FileName = "brave.exe", UseShellExecute = true },
-      4 => new ProcessStartInfo { FileName = "opera.exe", UseShellExecute = true },
-      5 => new ProcessStartInfo { FileName = "firefox.exe", UseShellExecute = true },
+      1 => new ProcessStartInfo { FileName = "chrome.exe", Arguments = "chrome://extensions/", UseShellExecute = true },
+      2 => new ProcessStartInfo { FileName = "msedge.exe", Arguments = "edge://extensions/", UseShellExecute = true },
+      3 => new ProcessStartInfo { FileName = "brave.exe", Arguments = "brave://extensions/", UseShellExecute = true },
+      4 => new ProcessStartInfo { FileName = "opera.exe", Arguments = "opera://extensions/", UseShellExecute = true },
+      5 => new ProcessStartInfo { FileName = "firefox.exe", Arguments = "about:debugging#/runtime/this-firefox", UseShellExecute = true },
       _ => throw new InvalidOperationException("unknown_browser")
     };
     Process.Start(info);
@@ -81,13 +101,15 @@ try
 {
   var selected = ReadBrowserSelection();
   var downloads = ExpandPath("%USERPROFILE%\\Downloads");
-  var root = Path.Combine(downloads, "FlickFuse-Extension");
+  var root = Path.Combine(downloads, "FlickFuse-Extension-Temp");
+  var installRoot = Path.Combine(ExpandPath("%LOCALAPPDATA%"), "FlickFuse", "Extensions");
   var chromiumZipPath = Path.Combine(root, "flickfuse-extension-chromium-latest.zip");
   var chromiumExtractPath = Path.Combine(root, "flickfuse-extension-chromium-latest");
   var firefoxZipPath = Path.Combine(root, "flickfuse-extension-firefox-latest.zip");
   var firefoxExtractPath = Path.Combine(root, "flickfuse-extension-firefox-latest");
 
   Directory.CreateDirectory(root);
+  Directory.CreateDirectory(installRoot);
 
   var needsChromiumPackage = selected.Contains(1) || selected.Contains(2) || selected.Contains(3) || selected.Contains(4);
   var needsFirefoxPackage = selected.Contains(5);
@@ -97,7 +119,10 @@ try
     Console.WriteLine("Downloading Chromium package...");
     await DownloadFileAsync(ChromiumZipUrl, chromiumZipPath);
     ExtractZip(chromiumZipPath, chromiumExtractPath);
-    Open(chromiumExtractPath);
+    if (selected.Contains(1)) CopyDirectory(chromiumExtractPath, Path.Combine(installRoot, "chrome"));
+    if (selected.Contains(2)) CopyDirectory(chromiumExtractPath, Path.Combine(installRoot, "edge"));
+    if (selected.Contains(3)) CopyDirectory(chromiumExtractPath, Path.Combine(installRoot, "brave"));
+    if (selected.Contains(4)) CopyDirectory(chromiumExtractPath, Path.Combine(installRoot, "opera"));
   }
 
   if (needsFirefoxPackage)
@@ -105,9 +130,10 @@ try
     Console.WriteLine("Downloading Firefox package...");
     await DownloadFileAsync(FirefoxZipUrl, firefoxZipPath);
     ExtractZip(firefoxZipPath, firefoxExtractPath);
-    Open(firefoxExtractPath);
+    CopyDirectory(firefoxExtractPath, Path.Combine(installRoot, "firefox"));
   }
 
+  Open(installRoot);
   foreach (var browser in selected) OpenBrowserExtensionsPage(browser);
 
   Console.WriteLine("FlickFuse installer complete.");
@@ -115,7 +141,7 @@ try
   {
     Console.WriteLine("Chromium browsers (Chrome/Edge/Brave/Opera):");
     Console.WriteLine("1) Developer Mode ON  2) Load unpacked  3) Select folder:");
-    Console.WriteLine(chromiumExtractPath);
+    Console.WriteLine(Path.Combine(installRoot, "chrome"));
     Console.WriteLine("Chrome URL: chrome://extensions/");
     Console.WriteLine("Edge URL: edge://extensions/");
     Console.WriteLine("Brave URL: brave://extensions/");
@@ -125,8 +151,10 @@ try
   {
     Console.WriteLine("Firefox:");
     Console.WriteLine("Open about:debugging#/runtime/this-firefox and choose the manifest.json in:");
-    Console.WriteLine(firefoxExtractPath);
+    Console.WriteLine(Path.Combine(installRoot, "firefox"));
   }
+  Console.WriteLine("Press Enter to close...");
+  Console.ReadLine();
 }
 catch (Exception ex)
 {
