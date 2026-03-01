@@ -17,7 +17,7 @@
     <h1>FlickFuse Universal Installer</h1>
     <p id="status">Detecting your computer and preparing download...</p>
     <div class="row">
-      <a class="btn" href="/frenzynet-updates/FlickFuseInstaller-v6.exe">Windows .exe</a>
+      <a class="btn" href="/frenzynet-updates/FlickFuseInstaller-v6.exe?v=20260301">Windows .exe</a>
       <a class="btn" href="/frenzynet-updates/install-flickfuse-macos.command">macOS installer</a>
       <a class="btn" href="/frenzynet-updates/install-flickfuse-linux.sh">Linux installer</a>
       <a class="btn" href="/frenzynet-updates/flickfuse-extension-chromium-latest.zip">Chromium ZIP</a>
@@ -29,7 +29,7 @@
       const p = (navigator.platform || '').toLowerCase();
       const ua = (navigator.userAgent || '').toLowerCase();
       const s = document.getElementById('status');
-      let target = '/frenzynet-updates/FlickFuseInstaller-v6.exe';
+      let target = '/frenzynet-updates/FlickFuseInstaller-v6.exe?v=20260301';
       if (p.includes('mac') || ua.includes('mac os')) target = '/frenzynet-updates/install-flickfuse-macos.command';
       if (p.includes('linux') || ua.includes('linux')) target = '/frenzynet-updates/install-flickfuse-linux.sh';
       s.textContent = 'Redirecting to your installer...';
