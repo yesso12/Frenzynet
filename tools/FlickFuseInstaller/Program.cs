@@ -16,8 +16,8 @@ internal static class Program
 
 internal sealed class InstallerForm : Form
 {
-  private const string ChromiumZipUrl = "https://frenzynets.com/frenzynet-updates/flickfuse-extension-chromium-latest.zip";
-  private const string FirefoxZipUrl = "https://frenzynets.com/frenzynet-updates/flickfuse-extension-firefox-latest.zip";
+  private const string ChromiumZipUrl = "https://raw.githubusercontent.com/yesso12/Frenzynet/main/site/frenzynet-updates/flickfuse-extension-chromium-latest.zip";
+  private const string FirefoxZipUrl = "https://raw.githubusercontent.com/yesso12/Frenzynet/main/site/frenzynet-updates/flickfuse-extension-firefox-latest.zip";
 
   private readonly CheckBox _chrome = new() { Text = "Chrome", Checked = true, AutoSize = true };
   private readonly CheckBox _edge = new() { Text = "Edge", Checked = true, AutoSize = true };
@@ -41,7 +41,7 @@ internal sealed class InstallerForm : Form
 
   internal InstallerForm()
   {
-    Text = "FlickFuse Installer v6";
+    Text = "FlickFuse Installer v7";
     Width = 740;
     Height = 520;
     FormBorderStyle = FormBorderStyle.FixedDialog;
