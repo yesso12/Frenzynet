@@ -505,6 +505,40 @@
       display: grid;
       gap: 10px;
     }
+    .tp-room-shell {
+      display: grid;
+      grid-template-columns: minmax(520px, 1fr) 360px;
+      gap: 10px;
+      align-items: start;
+    }
+    .tp-main {
+      display: grid;
+      gap: 8px;
+    }
+    .tp-rail {
+      border: 1px solid #32435f;
+      border-radius: 10px;
+      background: linear-gradient(180deg, #141c29, #101621);
+      padding: 8px;
+      display: grid;
+      gap: 8px;
+      max-height: 78vh;
+      overflow: auto;
+    }
+    .tp-voice-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .tp-voice-row .muted {
+      border: 1px solid #2e405d;
+      background: #182436;
+      border-radius: 8px;
+      padding: 6px 8px;
+      color: #cfd8eb;
+      margin: 0;
+      font-size: 12px;
+    }
     .family-lounge {
       border: 1px solid var(--line-soft);
       border-radius: 8px;
@@ -513,6 +547,20 @@
       display: grid;
       gap: 8px;
     }
+    .tp-rail .family-lounge {
+      border-color: #2f3f5a;
+      background: #121b2a;
+      border-radius: 8px;
+      padding: 8px;
+      gap: 6px;
+    }
+    .tp-rail .family-lounge h3 {
+      margin: 0;
+      font-size: 12px;
+      color: #dbe7ff;
+      text-transform: none;
+      letter-spacing: .02em;
+    }
     .movie-chat-dock {
       border: 1px solid #3a4f6f;
       border-radius: 8px;
@@ -520,6 +568,10 @@
       padding: 8px;
       display: grid;
       gap: 8px;
+    }
+    .tp-rail .movie-chat-dock {
+      border-color: #31445f;
+      background: #111b2a;
     }
     .movie-chat-head {
       display: flex;
@@ -547,8 +599,8 @@
       display: none;
     }
     .movie-chat-feed {
-      max-height: 230px;
-      min-height: 170px;
+      max-height: 280px;
+      min-height: 190px;
       overflow: auto;
       border: 1px solid #334761;
       border-radius: 10px;
@@ -865,6 +917,10 @@
       grid-template-columns: minmax(220px, 340px) minmax(0, 1fr);
       align-items: start;
     }
+    .tp-rail .webcam-stage {
+      grid-template-columns: 1fr;
+      gap: 8px;
+    }
     .webcam-stage-box {
       border: 1px solid var(--line-soft);
       border-radius: 10px;
@@ -1075,6 +1131,7 @@
           "sidebar";
       }
       .duo { grid-template-columns: 1fr; }
+      .tp-room-shell { grid-template-columns: 1fr; }
       .row > * { min-width: 100px; }
       .host-grid { grid-template-columns: 1fr; }
       .sidebar { max-height: none; position: static; top: auto; }
@@ -1606,11 +1663,15 @@
           <div class="scene-card" data-scene-card="stage" draggable="true">
             <div class="scene-head">Stage <span class="drag-handle">Drag</span></div>
             <div class="stage">
-              <div style="position:relative">
-                <video id="player" controls playsinline></video>
-                <div id="reactionOverlay" class="reaction-overlay"></div>
-              </div>
-              <video id="screenView" controls autoplay playsinline muted></video>
+              <div class="tp-room-shell">
+                <div class="tp-main">
+                  <div style="position:relative">
+                    <video id="player" controls playsinline></video>
+                    <div id="reactionOverlay" class="reaction-overlay"></div>
+                  </div>
+                  <video id="screenView" controls autoplay playsinline muted></video>
+                </div>
+                <div class="tp-rail">
               <div class="movie-chat-dock">
                 <div class="movie-chat-head">
                   <h3>Movie Chat</h3>
@@ -1627,8 +1688,10 @@
               </div>
               <div class="family-lounge">
                 <h3 style="margin:0">Family Lounge Voice + Webcam</h3>
-                <div id="voiceStatus" class="muted">Voice: off</div>
-                <div id="webcamStatus" class="muted">Webcam: off</div>
+                <div class="tp-voice-row">
+                  <div id="voiceStatus" class="muted">Voice: off</div>
+                  <div id="webcamStatus" class="muted">Webcam: off</div>
+                </div>
                 <div id="shareSourceInfo" class="muted">Selected share source: none</div>
                 <div id="shareAudioInfo" class="muted">Selected share audio: none</div>
                 <div class="row">
@@ -1733,6 +1796,8 @@
                 <div class="row" data-host-only="true">
                   <select id="kickTargetSelect"></select>
                   <button id="kickTargetBtn" class="danger-btn">Kick User</button>
+                </div>
+              </div>
                 </div>
               </div>
               <div class="reaction-bar">
