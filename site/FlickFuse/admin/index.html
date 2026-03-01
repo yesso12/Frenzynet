@@ -6,7 +6,7 @@
   <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0" />
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
-  <title>Telewatch Admin | FrenzyNets</title>
+  <title>FlickFuse Admin | FrenzyNets</title>
   <link rel="icon" type="image/svg+xml" href="/assets/frenzynet-logo.svg" />
   <style>
     :root {
@@ -25,6 +25,22 @@
     body { margin: 0; background: radial-gradient(circle at 12% 8%, #ffffff, var(--bg)); color: var(--text); font-family: "Segoe UI", Inter, Arial, sans-serif; }
     .wrap { width: min(1160px, calc(100% - 20px)); margin: 18px auto; display: grid; gap: 12px; }
     .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; box-shadow: var(--shadow); }
+    .quick-steps {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .step-pill {
+      border: 1px solid #cfd9e8;
+      border-radius: 10px;
+      background: #f8fbff;
+      padding: 10px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #31465f;
+      text-align: center;
+    }
     .tool-section {
       margin-top: 12px;
       border: 1px solid var(--line);
@@ -195,14 +211,20 @@
       .row > * { min-width: 100%; flex-basis: 100%; }
       .stream-frame { min-height: 420px; }
       button { padding: 11px; }
+      .quick-steps { grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body>
   <div class="wrap">
     <div class="card">
-      <h1 style="margin:0 0 8px">Telewatch Admin Console</h1>
-      <div class="muted">Dedicated admin route. Sign in first, then manage admins and rooms.</div>
+      <h1 style="margin:0 0 8px">FlickFuse Admin Console</h1>
+      <div class="muted">Clean admin workspace for live events, room controls, and moderation.</div>
+      <div class="quick-steps">
+        <div class="step-pill">1. Sign In</div>
+        <div class="step-pill">2. Enter Admin Code</div>
+        <div class="step-pill">3. Use Quick Main Event Controls</div>
+      </div>
       <div id="status" class="status" style="margin-top:8px">Not signed in</div>
       <div class="muted"><a href="/FlickFuse/">Back to FlickFuse</a></div>
     </div>
@@ -576,8 +598,6 @@
 
   <script>
     const API_PREFIXES = [
-      'https://api.frenzynets.com',
-      '/api/telewatch',
       'https://api.frenzynets.com/api/telewatch'
     ];
     const KEY = 'telewatch_admin_session';
@@ -705,19 +725,20 @@
       prevViewerTs: 0,
     };
 
-    async function api(path, body) {
+    async function api(path, body, method = 'POST') {
       if (state.adminCodeLockUntil && Date.now() < state.adminCodeLockUntil) {
         throw new Error('admin_code_temporarily_locked');
       }
       let lastErr = null;
       for (const prefix of API_PREFIXES) {
         try {
-          const res = await fetch(prefix + path, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body || {}),
-            cache: 'no-store'
-          });
+          const target = prefix + path;
+          const opts = { method, cache: 'no-store', headers: {} };
+          if (method !== 'GET') {
+            opts.headers['Content-Type'] = 'application/json';
+            opts.body = JSON.stringify(body || {});
+          }
+          const res = await fetch(target, opts);
           const txt = await res.text();
           let data = {};
           try { data = txt ? JSON.parse(txt) : {}; } catch (_) {}
@@ -742,6 +763,16 @@
         }
       }
       throw lastErr || new Error('request_failed');
+    }
+
+    async function apiGet(path, query) {
+      const q = new URLSearchParams();
+      Object.entries(query || {}).forEach(([k, v]) => {
+        if (v === null || typeof v === 'undefined' || v === '') return;
+        q.set(k, String(v));
+      });
+      const url = q.toString() ? `${path}?${q.toString()}` : path;
+      return api(url, null, 'GET');
     }
 
     function setStatus(msg) { els.status.textContent = msg; }
@@ -1025,7 +1056,7 @@
         const roomCode = selectedMainRoomCode();
         const token = String(state.mainHostToken || '').trim();
         if (!roomCode || !token) throw new Error('host_controls_not_attached');
-        const data = await api('/api/watch/state', { roomCode, participantToken: token, sinceEventId: 0 });
+        const data = await apiGet('/api/watch/state', { roomCode, participantToken: token, sinceEventId: 0 });
         const participants = Array.isArray(data.participants) ? data.participants : [];
         const rows = participants.filter((p) => !p.isHost);
         for (const p of rows) {
@@ -1088,7 +1119,7 @@
         const roomCode = selectedMainRoomCode();
         const token = String(state.mainHostToken || '').trim();
         if (!roomCode || !token) return;
-        const data = await api('/api/watch/state', { roomCode, participantToken: token, sinceEventId: 0 });
+        const data = await apiGet('/api/watch/state', { roomCode, participantToken: token, sinceEventId: 0 });
         const viewers = Array.isArray(data.participants) ? data.participants.length : 0;
         const now = Date.now();
         let joinRate = 0;
@@ -1498,7 +1529,7 @@
         const roomCode = selectedMainRoomCode();
         const token = String(state.mainHostToken || '').trim();
         if (!roomCode || !token) throw new Error('host_controls_not_attached');
-        const data = await api('/api/watch/state', { roomCode, participantToken: token, sinceEventId: 0 });
+        const data = await apiGet('/api/watch/state', { roomCode, participantToken: token, sinceEventId: 0 });
         const viewers = Array.isArray(data.participants) ? data.participants.length : 0;
         const threshold = Math.max(20, Number(els.qualityHighThreshold.value || 80));
         const target = viewers >= threshold ? 'broadcast' : 'sfu';
@@ -1526,7 +1557,7 @@
         const roomCode = selectedMainRoomCode();
         const token = String(state.mainHostToken || '').trim();
         if (!roomCode || !token) throw new Error('host_controls_not_attached');
-        const data = await api('/api/watch/state', { roomCode, participantToken: token, sinceEventId: 0 });
+        const data = await apiGet('/api/watch/state', { roomCode, participantToken: token, sinceEventId: 0 });
         const participants = Array.isArray(data.participants) ? data.participants : [];
         for (const p of participants) {
           const id = String(p.participantId || '').trim().toLowerCase();
