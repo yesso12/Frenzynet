@@ -181,6 +181,50 @@
       background: #fff;
       padding: 16px;
     }
+    .osint-note {
+      margin-top: 18px;
+      border: 1px solid #dce3f1;
+      border-radius: 14px;
+      background: linear-gradient(180deg, #ffffff, #f8fbff);
+      padding: 16px;
+    }
+    .osint-note h2 {
+      margin: 0;
+      font-size: 1.1rem;
+      color: #162034;
+    }
+    .osint-note p {
+      margin: 8px 0 0;
+      color: var(--muted);
+    }
+    .examples {
+      margin-top: 12px;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .example {
+      border: 1px solid #dbe3f1;
+      border-radius: 12px;
+      background: #fff;
+      padding: 12px;
+    }
+    .example strong {
+      display: block;
+      margin-bottom: 6px;
+      color: #22314c;
+      font-size: .94rem;
+    }
+    .example code {
+      display: block;
+      font: 700 .88rem/1.45 "SFMono-Regular", Consolas, monospace;
+      color: #17325c;
+      background: #f2f6fd;
+      border: 1px solid #d9e3f4;
+      border-radius: 8px;
+      padding: 8px 10px;
+      overflow-wrap: anywhere;
+    }
     .section h2 {
       margin: 0;
       font-size: 1.4rem;
@@ -262,6 +306,7 @@
     }
     @media (max-width: 980px) {
       .hero { grid-template-columns: 1fr; }
+      .examples { grid-template-columns: 1fr; }
       .steps { grid-template-columns: 1fr; }
       .downloads { grid-template-columns: 1fr; }
       .rooms { grid-template-columns: 1fr 1fr; }
@@ -330,6 +375,29 @@
           <div id="statusLine" class="hint">Ready to start a party.</div>
         </div>
       </aside>
+    </section>
+
+    <section class="osint-note">
+      <h2>OSINT Quick Targets</h2>
+      <p>Use the OSINT button for SpiderFoot. Social identifiers work best when entered with a platform prefix.</p>
+      <div class="examples">
+        <article class="example">
+          <strong>Discord snowflake ID</strong>
+          <code>discord:175928847299117063</code>
+        </article>
+        <article class="example">
+          <strong>Snapchat username</strong>
+          <code>snapchat:testuser</code>
+        </article>
+        <article class="example">
+          <strong>Facebook username</strong>
+          <code>facebook:zuck</code>
+        </article>
+        <article class="example">
+          <strong>Other supported prefixes</strong>
+          <code>instagram:user x:handle tiktok:user reddit:user telegram:user github:user linkedin:user</code>
+        </article>
+      </div>
     </section>
 
     <section class="section">
